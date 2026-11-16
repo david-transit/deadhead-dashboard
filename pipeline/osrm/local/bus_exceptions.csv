@@ -1,0 +1,5 @@
+# Approved exceptions to the bus-strict profile (pipeline/osrm/README.md). One row per OSM way or node whose listed tags do
+# NOT block a bus. Only dimension tags: maxweight, maxheight, maxwidth, width, maxlength, narrow (several: "maxweight;width").
+# Every row needs David's approval. A change rebuilds the graph (it is part of the graph cache key).
+# type,id,ignore,reason,approved_by,date
+way,314079121,maxweight,"חכם יצחק עמדי, מנהרה מתחת לכביש 1 (maxweight=4.6): שירות קיים עובר - קווים 154/152/59 של דרך אגד, GPS 15.11",David,2026-11-16

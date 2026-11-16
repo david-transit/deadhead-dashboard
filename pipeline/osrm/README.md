@@ -16,6 +16,11 @@ files with bus-strict, bus-relaxed and the public car server, uploads the result
   `bus-strict` = bus/psv access rules (bus lanes and bus-only roads allowed, bus traps passable) and no way below the bus
   dimensions in `bus_dimensions.lua`; it wraps `/opt/car.lua` of the pinned image. `bus-relaxed` is built only by
   bus-compare (it marks the ways the strict profile blocks).
+- `local/` — ours: `deadhead-bus-strict.lua` (what the nightly and bus-compare build) = transit-studio's bus-strict
+  unchanged + `local/bus_exceptions.csv`, the **approved exceptions**: an OSM way/node whose listed dimension tags
+  (maxweight, maxheight, maxwidth, width, maxlength, narrow) do not block a bus — e.g. a city weight sign meant for
+  trucks on a street buses already use. One row per approval (type, id, tags, reason with the evidence, approved by,
+  date); only David approves. Changing the file rebuilds the graph (cache key). Answers are still labelled bus-strict.
 - Image: `ghcr.io/project-osrm/osrm-backend:v26.10.0-debian`, the same pinned tag as transit-studio's
   `infra/osrm/compose.yaml`.
 - Map data: Geofabrik `israel-and-palestine-latest.osm.pbf` (© OpenStreetMap contributors, ODbL).

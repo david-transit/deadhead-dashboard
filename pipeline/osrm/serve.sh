@@ -10,11 +10,13 @@ DIR=$1; PROFILE=${2:-bus-strict}; PORT=${3:-5000}
 IMAGE=ghcr.io/project-osrm/osrm-backend:v26.10.0-debian   # same pinned image as transit-studio infra/osrm/compose.yaml
 PBF_URL=https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf
 PROFILES=$(cd "$(dirname "$0")/profiles" && pwd)
+LOCAL=$(cd "$(dirname "$0")/local" && pwd)   # our wrapper profile + approved exceptions (bus_exceptions.csv)
+if [ -f "$LOCAL/$PROFILE.lua" ]; then PFILE=/local/$PROFILE.lua; else PFILE=/profiles/$PROFILE.lua; fi
 OUT=${GITHUB_OUTPUT:-/dev/null}
 fail() { echo "::warning::OSRM bus: $* (falling back to the public car server)"; echo "osrm=down" >> "$OUT"; exit 0; }
 t0=$(date +%s)
 mkdir -p "$DIR"
-run() { docker run --rm --user "$(id -u):$(id -g)" -v "$DIR:/data" -v "$PROFILES:/profiles:ro" "$IMAGE" "$@"; }
+run() { docker run --rm --user "$(id -u):$(id -g)" -v "$DIR:/data" -v "$PROFILES:/profiles:ro" -v "$LOCAL:/local:ro" "$IMAGE" "$@"; }
 
 if [ -f "$DIR/israel.osrm.mldgr" ] && [ -f "$DIR/israel.osrm.cell_metrics" ]; then
   echo "graph from cache: $(cat "$DIR/extract.txt" 2>/dev/null)"
@@ -22,9 +24,9 @@ else
   rm -rf "${DIR:?}"/*
   curl -fsSL --retry 3 -o "$DIR/israel.osm.pbf" "$PBF_URL" || fail "extract download failed"
   { echo "source=$PBF_URL"; curl -fsSI "$PBF_URL" | grep -i '^last-modified' | tr -d '\r'; echo "built=$(date -u +%FT%TZ)"; echo "image=$IMAGE";
-    echo "profile=$PROFILE ($(sha256sum "$PROFILES"/*.lua | sha256sum | cut -c1-12))"; } > "$DIR/extract.txt"
+    echo "profile=$PROFILE ($(cat "$PROFILES"/*.lua "$LOCAL"/* | sha256sum | cut -c1-12))"; } > "$DIR/extract.txt"
   cat "$DIR/extract.txt"
-  run osrm-extract -p /profiles/$PROFILE.lua /data/israel.osm.pbf || fail "osrm-extract failed"
+  run osrm-extract -p "$PFILE" /data/israel.osm.pbf || fail "osrm-extract failed"
   run osrm-partition /data/israel.osrm || fail "osrm-partition failed"
   run osrm-customize /data/israel.osrm || fail "osrm-customize failed"
   rm -f "$DIR/israel.osm.pbf"
