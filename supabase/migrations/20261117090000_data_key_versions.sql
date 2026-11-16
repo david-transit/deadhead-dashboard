@@ -38,6 +38,9 @@ declare op uuid; k text;
 begin
   select id into op from public.operators where slug = p_slug;
   if op is null then raise exception 'unknown operator %', p_slug; end if;
+  -- the same SQL run again (lost or garbled output) re-wraps the same new key instead of rotating twice
+  select key_b64 into k from private.data_key where operator_id = op and kid = p_kid and status = 'current' and created_at > now() - interval '1 day';
+  if k is not null then return extensions.armor(extensions.pgp_pub_encrypt(k, extensions.dearmor(p_pub))); end if;
   if exists (select 1 from private.data_key where operator_id = op and kid = p_kid) then raise exception 'kid % exists', p_kid; end if;
   update private.data_key set status = 'retired', key_b64 = null, retired_at = now() where operator_id = op and status = 'previous';
   update private.data_key set status = 'previous' where operator_id = op and status = 'current';

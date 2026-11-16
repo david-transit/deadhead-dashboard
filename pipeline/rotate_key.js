@@ -21,7 +21,8 @@ const CFG = path.join(REPO, "config"), WORK = path.join(CFG, ".rotate", slug), G
 const KEYFILE = path.join(CFG, `.data_key_${slug}`), RING = path.join(CFG, `.keyring_${slug}.json`);
 const DATA = path.join(REPO, "data", slug), STATE = path.join(WORK, "state.json");
 const run = (c, a, o = {}) => cp.execFileSync(c, a, { cwd: REPO, stdio: ["pipe", "pipe", "inherit"], ...o });
-const gpg = (a, o) => run("gpg", ["--homedir", GNUPG, "--batch", "--quiet", ...a], o);
+const rel = (p) => path.relative(REPO, p).split(path.sep).join("/"); // Git-for-Windows gpg wants POSIX-style paths
+const gpg = (a, o) => run("gpg", ["--homedir", rel(GNUPG), "--batch", "--quiet", ...a], o);
 const sqlq = (s) => "'" + s.replace(/'/g, "''") + "'";
 
 async function runSql(sql) { // Management API; returns rows or null when no token is set
@@ -59,7 +60,7 @@ async function start() {
 async function apply() {
   const { kid } = JSON.parse(fs.readFileSync(STATE, "utf8"));
   run("git", ["pull", "--rebase", "--quiet"], { stdio: "inherit" });
-  const b64 = gpg(["--decrypt", path.join(WORK, "wrapped.asc")]).toString().trim();
+  const b64 = gpg(["--decrypt", rel(path.join(WORK, "wrapped.asc"))]).toString().trim();
   const fresh = K.parseKey(`${kid}:${b64}`); // throws unless 32 bytes
   // keyring: every key this machine has known for the operator (to read the files before re-encryption)
   const ring = K.keyring([RING, KEYFILE]);
@@ -97,7 +98,7 @@ async function apply() {
   run("git", ["add", path.join("data", slug)]);
   run("git", ["commit", "-q", "-m", `Rotate data key ${slug} -> ${kid} (re-encrypt all day/ends files)`]);
   run("git", ["push", "-q"], { stdio: "inherit" });
-  try { run("gpgconf", ["--homedir", GNUPG, "--kill", "gpg-agent"]); } catch {}
+  try { run("gpgconf", ["--homedir", rel(GNUPG), "--kill", "gpg-agent"]); } catch {}
   fs.rmSync(GNUPG, { recursive: true, force: true });
   console.log(`pushed. When GitHub Pages has deployed (a minute or two): node pipeline/rotate_key.js finish ${slug}`);
 }
