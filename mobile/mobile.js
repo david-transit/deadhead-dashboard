@@ -67,12 +67,12 @@
   $("#mFilter").onclick = () => { drawSheet(); sheet.showModal(); };
   $("#mGo").onclick = () => sheet.close();
   sheet.addEventListener("click", e => { if (e.target === sheet) sheet.close(); }); // tap on the backdrop
-  $("#mCls").onclick = e => { const b = e.target.closest("[data-cls]"); if (!b) return; $(`#clsSeg [data-cls="${CSS.escape(b.dataset.cls)}"]`)?.click(); drawSheet(); };
+  $("#mCls").onclick = e => { const b = e.target.closest("[data-cls]"); if (!b) return; $("#cls").value = b.dataset.cls; fire("#cls", "change"); drawSheet(); };
   // (#br / #sort call the original render directly, not the wrapped one: redraw the mobile view after them)
   $("#mBr").onchange = e => { $("#br").value = e.target.value; fire("#br", "change"); drawTop(); };
   $("#mSort").onchange = e => { $("#sort").value = e.target.value; fire("#sort", "change"); drawTop(); };
   function drawSheet() {
-    $("#mCls").innerHTML = [...document.querySelectorAll("#clsSeg [data-cls]")].map(b => `<button type="button" class="${b.classList.contains("on") ? "on" : ""}" data-cls="${esc(b.dataset.cls)}">${esc(b.textContent)}</button>`).join("");
+    $("#mCls").innerHTML = [...document.querySelectorAll("#cls option")].map(o => `<button type="button" class="${o.selected ? "on" : ""}" data-cls="${esc(o.value)}">${esc(o.textContent.replace(/^סוג: /, ""))}</button>`).join("");
     $("#mBr").innerHTML = $("#br").innerHTML; $("#mBr").value = $("#br").value;
     $("#mSort").innerHTML = $("#sort").innerHTML; $("#mSort").value = $("#sort").value;
   }

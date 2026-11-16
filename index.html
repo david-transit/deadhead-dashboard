@@ -21,13 +21,20 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 Heebo,Arial,sans-serif;height:100vh;display:flex;flex-direction:column}
-header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:6px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 #logoBtn{display:block;cursor:pointer;border-radius:8px;flex:none}
 #logoBtn:focus-visible{outline:2px solid var(--svc);outline-offset:2px}
-#logo{height:64px;width:auto;display:block}
-header .title h1{font-size:22px;margin:0;font-weight:700}
-header .title div{color:var(--muted);font-size:14px}
-.controls{margin-inline-start:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#logo{height:40px;width:auto;display:block}
+header .title h1{font-size:17px;margin:0;font-weight:700;white-space:nowrap}
+header .title div{color:var(--muted);font-size:12px;white-space:nowrap}
+.controls{margin-inline-start:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+header .controls .btn,header .controls select,header .controls input{padding-top:5px;padding-bottom:5px;font-size:13px}
+header .controls .btn:not(.iconbtn){padding-inline:10px;white-space:nowrap}
+header .who{white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+header .controls input[type=search]{width:108px}
+#bToday:disabled{display:none}
+@media (min-width:769px){header{flex-wrap:nowrap}header .title{min-width:0;overflow:hidden}header .title h1,header .title div{overflow:hidden;text-overflow:ellipsis}
+  .controls{flex-wrap:nowrap;min-width:0}header .controls select{max-width:136px;text-overflow:ellipsis}}
 .btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 16px;font:inherit;cursor:pointer;color:var(--text)}
 .btn.on,.btn.primary{background:var(--svc);border-color:var(--svc);color:#fff}
 .btn.small{padding:3px 10px;font-size:13px}
@@ -39,15 +46,23 @@ header .title div{color:var(--muted);font-size:14px}
 select,input{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;background:var(--card);color:var(--text)}
 input[type=search]{width:180px}
 .edit-state{font-size:12px;color:var(--rein);font-weight:500}
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:14px 20px 0}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 16px;text-align:center}
-.card .k{color:var(--muted);font-size:14px}
-.card .v{font-size:28px;font-weight:700;direction:ltr}
-.card .s{color:var(--muted);font-size:12px}
-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;padding:14px 20px}
+.cards{display:flex;gap:10px;padding:8px 16px 0;flex-wrap:wrap}
+.card{position:relative;flex:1 1 0;min-width:180px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 14px;display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.card[tabindex]{cursor:help}
+.card[tabindex]:focus-visible{outline:2px solid var(--svc);outline-offset:2px}
+.card .k{color:var(--muted);font-size:13px;white-space:nowrap}
+.card .v{font-size:20px;font-weight:700;direction:ltr}
+.card:has(.s:not(:empty)) .k::after{content:" ⓘ";color:var(--svc);font-size:12px}
+.card .s{display:none;position:absolute;top:calc(100% + 6px);inset-inline-start:0;z-index:15;width:max-content;max-width:min(440px,92vw);background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(20,25,35,.16);padding:8px 12px;font-size:12.5px;line-height:1.55}
+.card:hover .s:not(:empty),.card:focus .s:not(:empty),.card.open .s:not(:empty){display:block}
+.card:nth-child(n+3) .s{inset-inline-start:auto;inset-inline-end:0}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;padding:8px 16px 12px}
 .panel{min-width:0;background:var(--card);border:1px solid var(--line);border-radius:8px;min-height:0;display:flex;flex-direction:column}
 #gantt{overflow:auto;flex:1;min-height:0;position:relative}
-.axis,.row{display:grid;grid-template-columns:200px 1fr;align-items:center}
+.axis,.row{display:grid;grid-template-columns:var(--labw,240px) 1fr;align-items:center}
+body.dense{--labw:215px}
+.row .lab{overflow:hidden;white-space:nowrap}
+body.dense .row .lab .fuelb{display:none}
 .axis{position:sticky;top:0;background:var(--card);z-index:2;border-bottom:1px solid var(--line);height:30px}
 .axis .lab{font-size:12px;color:var(--muted);padding-inline-start:12px}
 .track{position:relative;direction:ltr;height:100%}
@@ -75,12 +90,35 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;
 .it.edt{background:#FFF8E6}
 .edtm{color:#8A6100!important}
 .orig{margin:4px 14px 8px;padding:6px 10px;border:1px dashed var(--line);border-radius:8px;font-size:12px;color:var(--muted)}
-.tick.day{border-left:2px solid #B9C0CA}
+.axis .track,.row .track{overflow:hidden}
+.tick.day{border-left:1px dashed #8C939D}
+.axis .tick .dl{left:auto;right:3px;font-size:10.5px;color:var(--text);white-space:nowrap}
+.savemsg:empty{display:none}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.menu [aria-checked="true"]::before{content:"✓ "}
+#bCollapse svg{transition:transform .2s ease}
+#bCollapse[aria-expanded="false"] svg{transform:rotate(180deg)}
+.btn.pending{box-shadow:0 0 0 3px rgba(232,135,30,.25)}
+@media (min-width:769px){
+  body.topmin header{padding:4px 16px}
+  body.topmin #logo{height:28px}
+  body.topmin header .title,body.topmin #opLogo,body.topmin .controls>:not(.keep),body.topmin section.cards{display:none!important}
+  body.dense .row{height:26px}
+  body.dense .axis{height:26px}
+  body.dense .bar{top:3px;height:20px;font-size:10px}
+  body.dense .row .lab{font-size:12px}
+  body.dense .row .badge{font-size:10px;padding:0 4px}
+  body.dense .axis .tick span,body.dense .tick .dl{top:5px}
+}
+@media (prefers-reduced-motion:reduce){#bCollapse svg{transition:none}}
 .orph{margin:10px 20px 0;padding:8px 14px;border:1px solid #F0C36D;background:#FFF8E6;border-radius:8px;font-size:13px}
 .orph ul{margin:6px 0 0;padding-inline-start:20px}
 .savebar{display:flex;gap:6px;align-items:center}
 #bSave.pending{background:var(--empty);border-color:var(--empty);font-weight:700}
-.legend{display:flex;gap:18px;justify-content:center;padding:8px;border-top:1px solid var(--line);font-size:13px;flex-wrap:wrap}
+.gpanel{position:relative}
+.legend{display:none;position:absolute;top:32px;inset-inline-start:8px;z-index:6;flex-direction:column;gap:7px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(20,25,35,.16);font-size:13px;max-width:360px}
+.legend.open{display:flex}
+.legbtn{font-size:12px;margin-inline-start:6px;padding:0 2px}
 .legend i{display:inline-block;width:26px;height:12px;border-radius:3px;vertical-align:middle;margin-inline-end:6px}
 #side{overflow:auto}
 #side h2{margin:0;padding:12px 14px;font-size:17px;background:var(--sel);border-bottom:1px solid var(--line);border-radius:8px 8px 0 0}
@@ -143,8 +181,8 @@ table.ed input.num{width:110px}
 #gate .alt{display:flex;justify-content:space-between;gap:8px;margin-top:12px;font-size:13px;flex-wrap:wrap}
 .linkbtn{background:none;border:0;color:var(--svc);cursor:pointer;font:inherit;padding:2px;text-decoration:underline}
 .linkbtn.dim{color:var(--muted)}
-.oplogo{display:flex;align-items:center;padding-inline:4px 14px;border-inline-end:1px solid var(--line);height:56px}
-.oplogo img{height:48px;width:auto;max-width:180px;display:block}
+.oplogo{display:flex;align-items:center;padding-inline:2px 12px;border-inline-end:1px solid var(--line);height:38px}
+.oplogo img{height:32px;width:auto;max-width:140px;display:block}
 .iconbtn{width:38px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center}
 .iconbtn svg,.btn svg{width:20px;height:20px;flex:none}
 .btn.withicon{display:inline-flex;align-items:center;gap:6px}
@@ -167,7 +205,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 @media (max-width:900px){body{height:auto}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
 </style>
-<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-16.9">
+<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-16.10">
 </head>
 <body class="locked">
 <div id="gate" class="intro">
@@ -221,32 +259,34 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
   <div class="controls">
     <button class="btn" id="bToday">היום</button>
     <button class="btn" id="bYest">אתמול</button>
-    <label><span class="muted" style="font-size:12px">תאריך </span><select id="day" aria-label="תאריך"></select></label>
-    <div class="seg" role="group" aria-label="סוג שירות" id="clsSeg"></div>
+    <select id="day" class="keep" aria-label="תאריך"></select>
+    <select id="cls" aria-label="סוג שירות"></select>
     <select id="br" aria-label="סניף"></select>
-    <select id="sort" aria-label="מיון"><option value="veh">מיון: מספר רכב</option><option value="empty">מיון: הכי הרבה ק״מ ריקים</option><option value="start">מיון: שעת יציאה</option></select>
-    <input type="search" id="q" placeholder="חיפוש מספר רכב" aria-label="חיפוש מספר רכב">
+    <select id="sort" aria-label="מיון"><option value="veh">מיון: מספר רכב</option><option value="empty">מיון: הכי הרבה ריק</option><option value="start">מיון: שעת יציאה</option></select>
+    <input type="search" id="q" class="keep" placeholder="חיפוש רכב" aria-label="חיפוש מספר רכב">
     <select id="opSel" aria-label="מפעיל" hidden></select>
     <button class="btn iconbtn" id="bSav" title="הצעות חיסכון" aria-label="הצעות חיסכון"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l-4 4 4 4"/><path d="M3 8h13"/><path d="M17 20l4-4-4-4"/><path d="M21 16H8"/></svg></button>
     <button class="btn iconbtn" id="bSettings" title="הגדרות" aria-label="הגדרות"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-    <button class="btn withicon" id="bCtl" hidden title="חדר בקרה: משתמשים והרשאות"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5z"/><circle cx="12" cy="10" r="2.5"/><path d="M8 16.5c.8-1.8 2.3-2.7 4-2.7s3.2.9 4 2.7"/></svg>חדר בקרה</button>
-    <div class="savebar" id="saveBar" hidden><button class="btn primary" id="bSave" disabled>שמירה <span id="nDraft"></span></button><button class="btn" id="bUndo" disabled>ביטול שינויים</button><span class="msg" id="saveMsg" aria-live="polite"></span></div>
+    <div class="savebar keep" id="saveBar" hidden><button class="btn primary" id="bSave" disabled>שמירה <span id="nDraft"></span></button><button class="btn" id="bUndo" disabled title="ביטול כל השינויים שלא נשמרו">ביטול</button></div>
+    <span class="msg savemsg keep" id="saveMsg" aria-live="polite"></span>
     <div class="mewrap"><button class="btn ghost who" id="who" aria-haspopup="menu" aria-expanded="false" title="החשבון שלי"></button>
-      <div class="menu" id="meMenu" role="menu" hidden><button role="menuitem" data-me="pw">שינוי סיסמה</button><button role="menuitem" data-me="sec" id="meSec" hidden>שחזור חשבון (מייל וקודים)</button></div></div>
-    <button class="btn ghost withicon" id="bEdit" title="יציאה מהמערכת"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h12"/></svg>יציאה</button>
+      <div class="menu" id="meMenu" role="menu" hidden><button role="menuitem" data-me="pw">שינוי סיסמה</button><button role="menuitem" data-me="sec" id="meSec" hidden>שחזור חשבון (מייל וקודים)</button>
+        <button role="menuitemcheckbox" id="bDense" aria-checked="false">תצוגה צפופה</button><hr>
+        <button role="menuitem" id="bCtl" hidden>חדר בקרה: משתמשים והרשאות</button><button role="menuitem" id="bEdit">יציאה מהמערכת</button></div></div>
+    <button class="btn ghost iconbtn keep" id="bCollapse" aria-expanded="true" aria-controls="sumStrip" title="כיווץ החלק העליון"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
   </div>
 </header>
-<section class="cards">
+<section class="cards" id="sumStrip" aria-label="סיכום היום">
   <div class="card"><div class="k">רכבים</div><div class="v" id="cV">–</div></div>
-  <div class="card"><div class="k">נסיעות בשירות</div><div class="v" id="cT">–</div><div class="s" id="cTs"></div></div>
-  <div class="card"><div class="k">ק״מ ריקים בין נסיעות</div><div class="v" id="cE">–</div><div class="s" id="cEs">לפי כביש</div></div>
-  <div class="card"><div class="k">ק״מ ריקים מחוץ לסידור</div><div class="v" id="cN">–</div><div class="s" id="cNs"></div></div>
+  <div class="card" tabindex="0" aria-describedby="cTs"><div class="k">נסיעות בשירות</div><div class="v" id="cT">–</div><div class="s" id="cTs" role="tooltip"></div></div>
+  <div class="card" tabindex="0" aria-describedby="cEs"><div class="k">ק״מ ריקים בין נסיעות</div><div class="v" id="cE">–</div><div class="s" id="cEs" role="tooltip">לפי כביש</div></div>
+  <div class="card" tabindex="0" aria-describedby="cNs"><div class="k">ק״מ ריקים מחוץ לסידור</div><div class="v" id="cN">–</div><div class="s" id="cNs" role="tooltip"></div></div>
 </section>
 <div id="orph" class="orph" hidden></div>
 <main>
-  <div class="panel">
+  <div class="panel gpanel">
     <div id="gantt" role="list" aria-label="סידורי רכב"></div>
-    <div class="legend">
+    <div class="legend" id="legendPop" role="note" aria-label="מקרא">
       <span><i style="background:var(--svc)"></i>נסיעה בשירות</span>
       <span><i style="background:repeating-linear-gradient(135deg,var(--empty) 0 4px,#F3A957 4px 6px)"></i>נסיעה ריקה</span>
       <span><i style="background:repeating-linear-gradient(135deg,var(--rein) 0 4px,#5BB585 4px 6px)"></i>נסיעת תגבור</span>
@@ -423,11 +463,11 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 })();
 
 </script>
-<script src="assets/core.js?v=2026-11-16.9"></script>
+<script src="assets/core.js?v=2026-11-16.10"></script>
 <script>
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-16.9";
+const APP_VER="2026-11-16.10";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -491,6 +531,7 @@ function applyOperator(){
   $("#bCtl").hidden=!canManage();
   $("#who").innerHTML=`${esc((PROFILE&&(PROFILE.display_name||PROFILE.username))||"")} ▾<br>${PLATFORM?"מנהל מערכת":esc(ROLEHE[ROLE]||"")}`;
   $("#meSec").hidden=!PLATFORM;
+  setTopMin(lsGet(prefKey("topmin"))==="1",false); applyDense();
 }
 document.getElementById("opSel").onchange=e=>{lsSet("ys_op",e.target.value);location.replace(location.pathname+"?op="+encodeURIComponent(e.target.value))};
 
@@ -555,16 +596,16 @@ const MISSTXT={depot:"לא הוגדר חניון לרכב או לעיר",depot_l
 // ---- branch (סניף): confirmed value in vehicles[veh].branch; otherwise auto from where it starts/ends over ±7 days ----
 const branches=()=>{const b=(eff().S.defaults.branches||[]).map(x=>String(x).trim()).filter(Boolean);return b.length?b:DEF.branches};
 const branchOf=v=>MODEL.branchOf(v.veh,D.day), autoBranch=v=>MODEL.autoBranch(v.veh,D.day);
-const brBadge=v=>{const o=branchOf(v);return o.b?`<span class="badge br${o.auto?" auto":""}" title="${o.auto?"שיוך אוטומטי לפי המקום שבו הרכב מתחיל ומסיים את רוב הימים · לא מאושר":"סניף מאושר"}">${esc(o.b)}${o.auto?" · אוטומטי":""}</span>`:""};
+const brBadge=v=>{const o=branchOf(v);return o.b?`<span class="badge br${o.auto?" auto":""}" title="${o.auto?"שיוך אוטומטי לפי המקום שבו הרכב מתחיל ומסיים את רוב הימים · לא מאושר":"סניף מאושר"}">${esc(o.b)}</span>`:""};
 let brSig="";
 function fillBr(){const bs=branches(),sig=bs.join("|");if(sig===brSig) return;brSig=sig;const el=$("#br"),cur=el.value;
   el.innerHTML=`<option value="">סניף: הכול</option>`+bs.map(b=>`<option value="${esc(b)}">סניף: ${esc(b)}</option>`).join("")+`<option value="__none">סניף: לא משויך</option>`;
   el.value=[...el.options].some(o=>o.value===cur)?cur:""}
-// service classes present in the day (a vehicle of unknown class gets its own button, so the buttons always add up)
+// service classes present in the day (a vehicle of unknown class gets its own option, so the filter always adds up)
 function fillCls(){const have=[...new Set(D.vehicles.map(v=>v.cls))],opts=["עירוני","בינעירוני",...have.filter(c=>!["עירוני","בינעירוני"].includes(c))];
-  const box=$("#clsSeg"),sig=opts.join("|");if(box.dataset.sig===sig) return;box.dataset.sig=sig;if(cls&&!opts.includes(cls)) cls="";
-  box.innerHTML=`<button class="btn${cls?"":" on"}" data-cls="">הכול</button>`+opts.map(c=>`<button class="btn${cls===c?" on":""}" data-cls="${esc(c)}">${esc(c)}</button>`).join("")}
-$("#clsSeg").addEventListener("click",e=>{const b=e.target.closest("[data-cls]");if(!b) return;cls=b.dataset.cls;$("#clsSeg").querySelectorAll(".btn").forEach(x=>x.classList.toggle("on",x===b));render()});
+  const el=$("#cls"),sig=opts.join("|");if(el.dataset.sig===sig) return;el.dataset.sig=sig;if(cls&&!opts.includes(cls)) cls="";
+  el.innerHTML=`<option value="">סוג: הכול</option>`+opts.map(c=>`<option value="${esc(c)}">סוג: ${esc(c)}</option>`).join("");el.value=cls}
+$("#cls").onchange=e=>{cls=e.target.value;render()};
 
 // ---- automatic reinforcement: rides run in service that are not in the licensed GTFS schedule (pipeline: auto) ----
 // no decision = pending, counted as reinforcement; "confirmed" = reinforcement; "rejected" = ordinary service trip.
@@ -654,11 +695,12 @@ function render(){
   vs.sort(so==="empty"?(a,b)=>b[1].emp+b[1].nk-a[1].emp-a[1].nk:so==="start"?(a,b)=>a[0].items[0].start-b[0].items[0].start:(a,b)=>a[0].veh.localeCompare(b[0].veh));
   const S0=D.day_start_min??DAY_START_H*60; let mn=S0,mx=S0+24*60;
   all.forEach(([v,s])=>{v.items.forEach(i=>{mn=Math.min(mn,i.start);mx=Math.max(mx,i.end)});s.n.forEach(l=>{if(l.km){mn=Math.min(mn,l.start);mx=Math.max(mx,l.end)}})});
-  T0=Math.floor(mn/60)*60; T1=Math.ceil(mx/60)*60;
-  const tw=Math.max(($("#gantt").clientWidth||800)-200,720), step=[1,2,3,4].find(k=>tw/((T1-T0)/60)*k>=44)||4;
-  let ticks=""; for(let m=T0;m<=T1;m+=60) ticks+=`<div class="tick${m===S0||m===S0+1440?" day":""}" style="left:${pct(m)}%">${((m-T0)/60)%step===0?`<span>${fmt(m)}</span>`:""}</div>`;
-  let h=`<div class="axis"><div class="lab">רכב</div><div class="track">${ticks}</div></div>`;
-  const grid=ticks.replace(/<span>.*?<\/span>/g,"");
+  T0=Math.floor(mn/60)*60; T1=Math.ceil(Math.max(mx,S0+1440+30)/60)*60; // room after the day end, so its line shows
+  const tw=Math.max(($("#gantt").clientWidth||800)-(document.body.classList.contains("dense")?215:240),720), step=[1,2,3,4].find(k=>tw/((T1-T0)/60)*k>=44)||4;
+  const nearEnd=m=>m<S0+1440&&(S0+1440-m)/60*tw/((T1-T0)/60)<82; // an hour label that would touch "סוף יום"
+  let ticks=""; for(let m=T0;m<=T1;m+=60) ticks+=`<div class="tick${m===S0||m===S0+1440?" day":""}" style="left:${pct(m)}%">${m===S0+1440?'<span class="dl" title="סוף יום השירות">סוף יום</span>':((m-T0)/60)%step===0&&!nearEnd(m)?`<span>${fmt(m)}</span>`:""}</div>`;
+  let h=`<div class="axis"><div class="lab">רכב <button class="linkbtn legbtn" data-legend aria-controls="legendPop" aria-expanded="${$("#legendPop").classList.contains("open")}">מקרא</button></div><div class="track">${ticks}</div></div>`;
+  const grid=ticks.replace(/<span[^>]*>.*?<\/span>/g,"");
   for(const [v,s] of vs){
     let b="";
     for(const n of s.n) if(n.km>=1) b+=bar(n.kind==="rein"?"rein":"dep",n.start,n.end,n.kind==="rein"?n.line:"",legTitle(n),s.flags.includes("tight")?"bad":"");
@@ -676,7 +718,7 @@ function render(){
         b+=bar("emp",i.start,de,nf(i.km)+" ק״מ",`ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}, כ־${nf(i.drive_min)} דק׳ נסיעה: ${i.frm} ← ${i.to} (זמן פנוי ${fmt(i.start)}–${fmt(i.end)})${i.tight?" · לא מספיק זמן לנסוע את זה: נתון חשוד":""}`,i.tight?"bad":"");}
     }
     const f=fuelFor(v);
-    h+=`<div class="row${v.veh===sel?" sel":""}" role="listitem" tabindex="0" data-v="${esc(v.veh)}"><div class="lab">${esc(v.veh)} ${brBadge(v)}<span class="badge ${v.cls==="עירוני"?"urb":"ic"}">${esc(v.cls)}</span>${f?`<span class="badge">${esc(f)}</span>`:""}</div><div class="track">${grid}${b}</div></div>`;
+    h+=`<div class="row${v.veh===sel?" sel":""}" role="listitem" tabindex="0" data-v="${esc(v.veh)}"><div class="lab">${esc(v.veh)} ${brBadge(v)}<span class="badge ${v.cls==="עירוני"?"urb":"ic"}">${esc(v.cls)}</span>${f?`<span class="badge fuelb">${esc(f)}</span>`:""}</div><div class="track">${grid}${b}</div></div>`;
   }
   if(!vs.length) h+='<div class="empty-state">לא נמצאו רכבים</div>';
   window.YS_VIEW={vs,vsAll}; // mobile/mobile.js draws its list from the same filtered + sorted view
@@ -849,7 +891,7 @@ function setVehDraft(veh,patch){ // patch: field -> value (null/"" removes the f
   if(same(val,S.vehicles?.[veh])) delete DRAFT.veh[veh]; else DRAFT.veh[veh]=val;
   touched()}
 function drawSaveBar(){const n=nDraft(),b=$("#bSave");if(!b) return;
-  $("#saveBar").hidden=!canEdit(); $("#nDraft").textContent=n?`(${n})`:""; b.disabled=!n; $("#bUndo").disabled=!n;
+  $("#saveBar").hidden=!canEdit()||!n; $("#nDraft").textContent=n?`(${n})`:""; b.disabled=!n; $("#bUndo").disabled=!n;
   b.classList.toggle("pending",n>0); b.title=n?`יש ${n} שינויים שלא נשמרו`:"אין שינויים לשמירה"}
 async function saveAll(){
   const msg=$("#saveMsg"); if(!nDraft()) return true;
@@ -1230,6 +1272,24 @@ $("#ctlBody").addEventListener("submit",async e=>{e.preventDefault();const user=
   if(await ctlDo({action:"create",username:user,display_name:$("#nName").value.trim(),...(role==="platform"?{}:{operator_id:$("#nOp").value}),role,password:pw},""))
     cmsg(`נוצר המשתמש ${user} עם הסיסמה הזמנית ${pw} . העבר לו את שניהם. בכניסה הראשונה הוא יבחר סיסמה חדשה.`,"ok")});
 
+// ---- compact layout: summary popovers, legend popover, collapsible top area, density (per user, in this browser) ----
+document.querySelectorAll(".card[tabindex]").forEach(c=>{c.addEventListener("click",()=>{const o=!c.classList.contains("open");document.querySelectorAll(".card.open").forEach(x=>x.classList.remove("open"));c.classList.toggle("open",o)});
+  c.addEventListener("keydown",e=>{if(e.key==="Escape"){c.classList.remove("open");c.blur()}else if(e.key==="Enter"||e.key===" "){e.preventDefault();c.click()}})});
+const legend=$("#legendPop"), legOpen=o=>{legend.classList.toggle("open",o);document.querySelectorAll("[data-legend]").forEach(b=>b.setAttribute("aria-expanded",String(o)))};
+$("#gantt").addEventListener("click",e=>{if(e.target.closest("[data-legend]")){e.stopPropagation();legOpen(!legend.classList.contains("open"))}},true);
+document.addEventListener("click",e=>{if(!e.target.closest(".card")) document.querySelectorAll(".card.open").forEach(x=>x.classList.remove("open"));
+  if(legend.classList.contains("open")&&!legend.contains(e.target)&&!e.target.closest("[data-legend]")) legOpen(false)});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&legend.classList.contains("open")){legOpen(false);document.querySelector("[data-legend]")?.focus()}});
+const prefKey=k=>`ys_${k}_${(PROFILE&&PROFILE.username)||lsGet("ys_user")||""}`;
+function setTopMin(min,save){document.body.classList.toggle("topmin",min);const b=$("#bCollapse");b.setAttribute("aria-expanded",String(!min));
+  b.title=min?"הרחבת החלק העליון":"כיווץ החלק העליון";b.setAttribute("aria-label",b.title);if(save) lsSet(prefKey("topmin"),min?"1":"0");setTimeout(render,0)}
+$("#bCollapse").onclick=()=>setTopMin(!document.body.classList.contains("topmin"),true);
+// density: explicit choice of the user, else automatic by window height (<= 960 px = dense)
+function applyDense(){const pref=lsGet(prefKey("dense")),on=pref==null?innerHeight<=960:pref==="1";
+  document.body.classList.toggle("dense",on);$("#bDense").setAttribute("aria-checked",String(on));$("#bDense").textContent=`תצוגה צפופה${pref==null?" (אוטומטי)":""}`}
+$("#bDense").onclick=()=>{lsSet(prefKey("dense"),document.body.classList.contains("dense")?"0":"1");applyDense();render()};
+addEventListener("resize",()=>{if(lsGet(prefKey("dense"))==null) applyDense()});
+
 // ---- my account (user menu): change password; platform admins: recovery email + one-time recovery codes ----
 const meMenu=$("#meMenu"), whoBtn=$("#who");
 const menuOpen=o=>{meMenu.hidden=!o;whoBtn.setAttribute("aria-expanded",String(o));if(o) meMenu.querySelector("button:not([hidden])").focus()};
@@ -1261,7 +1321,7 @@ async function meOpen(view){menuOpen(false);
   if(view==="sec"){$("#meBody").innerHTML='<div class="empty-state">טוען…</div>';$("#dlgMe").showModal();
     try{meDraw("sec",await fnCall({action:"my_security"}))}catch(e){$("#meBody").innerHTML=`<p class="msg err">${esc(errText(e))}</p>`}}
   else{meDraw("pw");$("#dlgMe").showModal();$("#mePw0").focus()}}
-meMenu.addEventListener("click",e=>{const v=e.target.dataset.me;if(v) meOpen(v)});
+meMenu.addEventListener("click",e=>{const v=e.target.dataset.me;if(v) meOpen(v);else if(e.target.id==="bCtl"||e.target.id==="bEdit") menuOpen(false)});
 $("#meClose").onclick=()=>$("#dlgMe").close();
 let MECODES=null;
 $("#meBody").addEventListener("submit",async e=>{e.preventDefault();
@@ -1415,6 +1475,6 @@ $("#gateForm").addEventListener("submit",async e=>{
   try{if((await fnCall({action:"bootstrap_status"},false)).needed) gateMode("bootstrap")}catch(e){console.warn("bootstrap status",e)}
 })();
 </script>
-<script src="mobile/mobile.js?v=2026-11-16.9"></script>
+<script src="mobile/mobile.js?v=2026-11-16.10"></script>
 </body>
 </html>
