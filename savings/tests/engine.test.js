@@ -258,3 +258,10 @@ test("Derech Egged 10.11: full day in < 10 s, deterministic, example pair is sug
   assert.deepEqual(r2.suggestions.map(s => s.id + ":" + s.saving_km), r.suggestions.map(s => s.id + ":" + s.saving_km));
   console.log(`  real day ${DAY}: ${r.stats.vehicles} vehicles, ${r.suggestions.length} suggestions, ${r.nearMisses.length} near misses, plan ${r.plan.saving_km} km, ${ms} ms, missing road ${r.missingRoad.length}`);
 });
+
+test("pair mode explains the best variant of two given vehicles, even when far from passing", () => {
+  const r = E.run({ day: synthDay("2026-11-10", { b2Start: 620 }), others: [], ruleset: { operator: { min_saving_km: 50 } }, pair: { A: "B1", B: "A1" } });
+  assert.equal(r.suggestions.length, 0);
+  assert.equal(r.nearMisses.length, 1);
+  assert.ok(r.nearMisses[0].failed.includes("min_saving"));
+});

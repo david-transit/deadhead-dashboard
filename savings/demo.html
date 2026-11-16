@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>הצעות חיסכון · הדגמה</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&display=swap" rel="stylesheet">
+<!-- Local demo with SYNTHETIC data only (no operator data, no login). Base styles copied from index.html. -->
+<style>
+:root{--gold:#B8860B;--char:#4A5059;--blue:#1F6FEB;--dim:#D9DDE2;--bg:#F5F6F8;--card:#fff;--line:#E3E6EB;--text:#1d2330;--muted:#6b7280;--svc:#1F4E9A;--empty:#E8871E;--depot:#5B3A8C;--rein:#2E8B57;--sel:#E8F0FC;--warn:#C62828;--ok:#2E9E4F}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 Heebo,Arial,sans-serif;height:100vh;display:flex;flex-direction:column}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+#logoBtn{display:block;cursor:pointer;border-radius:8px;flex:none}
+#logoBtn:focus-visible{outline:2px solid var(--svc);outline-offset:2px}
+#logo{height:64px;width:auto;display:block}
+header .title h1{font-size:22px;margin:0;font-weight:700}
+header .title div{color:var(--muted);font-size:14px}
+.controls{margin-inline-start:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 16px;font:inherit;cursor:pointer;color:var(--text)}
+.btn.on,.btn.primary{background:var(--svc);border-color:var(--svc);color:#fff}
+.btn.small{padding:3px 10px;font-size:13px}
+.btn.danger{color:var(--warn)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn:focus-visible,select:focus-visible,input:focus-visible,.row:focus-visible{outline:2px solid var(--svc);outline-offset:2px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.edit-state{font-size:12px;color:var(--rein);font-weight:500}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:14px 20px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 16px;text-align:center}
+.card .k{color:var(--muted);font-size:14px}
+.panel{min-width:0;background:var(--card);border:1px solid var(--line);border-radius:8px;min-height:0;display:flex;flex-direction:column}
+#gantt{overflow:auto;flex:1;min-height:0;position:relative}
+.track{position:relative;direction:ltr;height:100%}
+.tick{position:absolute;top:0;bottom:0;border-left:1px solid #EEF0F3}
+.bar{direction:rtl;position:absolute;top:7px;height:22px;border-radius:5px;font-size:11px;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap}
+.legend{display:flex;gap:18px;justify-content:center;padding:8px;border-top:1px solid var(--line);font-size:13px;flex-wrap:wrap}
+.legend i{display:inline-block;width:26px;height:12px;border-radius:3px;vertical-align:middle;margin-inline-end:6px}
+#side{overflow:auto}
+.muted{color:var(--muted)}
+.empty-state{padding:30px;text-align:center;color:var(--muted)}
+dialog{border:1px solid var(--line);border-radius:10px;padding:0;max-width:min(980px,96vw);width:100%;color:var(--text)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding:0 16px;flex-wrap:wrap}
+.tabs button{border:0;background:none;padding:10px 12px;font:inherit;cursor:pointer;border-bottom:3px solid transparent;color:var(--muted)}
+.tabs button.on{border-color:var(--svc);color:var(--text);font-weight:500}
+table.ed{width:100%;border-collapse:collapse;font-size:13px}
+table.ed th,table.ed td{border-bottom:1px solid #EEF0F3;padding:5px 4px;text-align:right;vertical-align:middle}
+table.ed tr.pickable{cursor:pointer}
+table.ed tr.pickable:hover{background:var(--sel)}
+table.ed tr.chosen{background:#E3F3EA}
+table.ed td.t{direction:ltr;text-align:right}
+table.ed th{color:var(--muted);font-weight:500;font-size:12px}
+table.ed input,table.ed select{width:100%;padding:4px 6px}
+table.ed input.num{width:110px}
+.hint{font-size:12px;color:var(--muted);margin:6px 0 10px}
+.msg{font-size:13px}
+.msg.err{color:var(--warn)}
+.msg.ok{color:var(--ok)}
+body{height:auto;display:block}
+</style>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<div id="savings"></div>
+<script src="engine.js"></script>
+<script src="panel.js"></script>
+<script>
+// synthetic day: 4 terminals, 40 buses doing shuttles between pairs of terminals; deterministic
+const TERM = [[31.79, 35.20, "מסוף מרכז"], [31.84, 35.21, "מסוף צפון"], [31.76, 35.17, "מסוף דרום"], [31.80, 35.25, "מסוף מזרח"]];
+function rnd(seed) { let x = seed; return () => (x = (x * 16807) % 2147483647) / 2147483647; }
+function synth(day, seed) {
+  const r = rnd(seed), vehicles = [];
+  for (let v = 0; v < 40; v++) {
+    const rr = rnd(1000 + v), items = []; let t = 330 + Math.floor(rr() * 120), at = Math.floor(rr() * 4);
+    const line = String(100 + (v % 8)), cls = v % 5 === 0 ? "עירוני" : "בינעירוני";
+    while (t < 1320) {
+      const to = (at + 1 + Math.floor(rr() * 3)) % 4, dur = 40 + Math.floor(rr() * 40);
+      items.push({ kind: "trip", start: t, end: t + dur, sched: t, line, cls, a: TERM[at].slice(0, 2), b: TERM[to].slice(0, 2), frm: TERM[at][2], to: TERM[to][2], km: 20 });
+      const next = (to + (rr() < 0.5 ? 0 : 1)) % 4, gap = 30 + Math.floor(rr() * 70);
+      const km = next === to ? 0 : +(Math.hypot(TERM[to][0] - TERM[next][0], TERM[to][1] - TERM[next][1]) * 111 * 1.3).toFixed(1);
+      if (t + dur + gap < 1320) items.push({ kind: "empty", start: t + dur, end: t + dur + gap, km, drive_min: km * 1.5 });
+      t = t + dur + gap; at = next;
+    }
+    vehicles.push({ veh: String(2340000 + v * 100), cls: v % 5 === 0 ? "עירוני" : "בינעירוני", items });
+  }
+  return { day, day_start_min: 240, routes: [], vehicles };
+}
+const DAYS = ["2026-11-03", "2026-11-09", "2026-11-10", "2026-11-11"];
+let rules = [];
+const host = {
+  operatorId: "demo", canEdit: () => !location.hash.includes("viewer"),
+  days: () => DAYS, currentDay: () => "2026-11-10",
+  loadDay: async d => synth(d, 7), roadEntries: () => [],
+  fetchRoad: async (pairs, cb) => { for (let i = 0; i < pairs.length; i += 25) { cb(Math.min(i + 25, pairs.length), pairs.length); await new Promise(r => setTimeout(r, 20)); } },
+  branchOf: v => (+v.slice(-3) / 100) % 2 ? "ירושלים" : "בני ברק", depotOf: () => null, dcp: () => [],
+  getRows: async () => rules,
+  rpc: async (fn, a) => { rules = [{ scope: "operator", line_key: "", rules: a.p_operator_rules }].concat(Object.entries(a.p_lines).map(([l, r]) => ({ scope: "line", line_key: l, rules: r }))); return rules.length; },
+  workerUrl: "worker.js",
+};
+window.ui = SavingsPanel.mount(document.getElementById("savings"), host);
+</script>
+</body>
+</html>

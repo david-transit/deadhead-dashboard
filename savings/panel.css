@@ -1,0 +1,67 @@
+/* Savings panel: uses the app's tokens (:root in index.html) and its .btn/.card/.panel/.tabs/table.ed classes. */
+.sv{display:flex;flex-direction:column;gap:12px;padding:14px 20px;min-width:0}
+.sv h2{margin:0;font-size:20px}
+.sv h3{margin:0;font-size:16px}
+.sv h4{margin:16px 0 6px;font-size:14px}
+.sv-head{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.sv-actions{display:flex;gap:8px;flex-wrap:wrap}
+.sv-busy{background:var(--sel);border-radius:8px;padding:8px 12px;font-size:13px}
+.sv-empty{background:var(--card);border:1px dashed var(--line);border-radius:8px;padding:24px;text-align:center;color:var(--muted)}
+.sv-cards{padding:0}
+.sv-cards .v.sv-small{font-size:16px;padding:8px 0}
+.sv-body{overflow:hidden}
+.sv-body .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding:0 8px}
+.sv-scroll{overflow:auto;padding:8px 12px;max-height:70vh}
+.sv-table td,.sv-table th{white-space:nowrap}
+.sv-veh{font-variant-numeric:tabular-nums;font-weight:500}
+.sv-chip{display:inline-block;border-radius:10px;padding:0 8px;font-size:12px;background:#EEF0F3;color:var(--text)}
+.sv-chip.bad{background:#FDECEC;color:var(--warn)}
+.sv-chip.warn{background:#FFF3E0;color:#8A4B00}
+.sv-bad{color:var(--warn);font-weight:500}
+.sv-dhead{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.sv-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.sv-kpis div{border:1px solid var(--line);border-radius:8px;padding:8px 12px;display:flex;flex-direction:column}
+.sv-kpis span{color:var(--muted);font-size:12px}
+.sv-kpis b{font-size:18px}
+.sv-kpis .good b{color:var(--ok)}
+.sv-kpis .bad b{color:var(--warn)}
+.sv-plain{margin:10px 0}
+.sv-tl{border:1px solid var(--line);border-radius:8px;padding:4px 0;margin:8px 0}
+.sv-tl-row{display:grid;grid-template-columns:150px 1fr;align-items:center;height:30px;border-bottom:1px solid #F0F2F5}
+.sv-tl-row:last-of-type{border-bottom:0}
+.sv-tl-row.axis{height:24px}
+.sv-tl-lab{font-size:12px;padding-inline-start:10px;color:var(--muted)}
+.sv-tl .track{height:100%}
+.sv-bar{position:absolute;top:6px;bottom:6px;border-radius:4px;color:#fff;font-size:11px;line-height:18px;text-align:center;overflow:hidden;white-space:nowrap;min-width:2px;background:var(--svc)}
+.sv-bar.other{background:var(--gold)}
+.sv-jn{position:absolute;top:2px;bottom:2px;border:2px dashed var(--empty);border-radius:4px;pointer-events:auto;min-width:3px}
+.sv-legend{display:flex;gap:14px;flex-wrap:wrap;padding:6px 10px;font-size:12px;color:var(--muted)}
+.sv-sw{display:inline-block;width:14px;height:10px;border-radius:2px;margin-inline-end:4px;vertical-align:middle}
+.sv-sw.own{background:var(--svc)}
+.sv-sw.other{background:var(--gold)}
+.sv-sw.jn{border:2px dashed var(--empty)}
+.sv-rules{list-style:none;padding:0;margin:0;display:grid;gap:4px}
+.sv-rules li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.sv-ic{display:inline-flex;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;font-size:12px;flex:none;background:#E3F3EA;color:var(--ok)}
+.sv-rules li.bad .sv-ic{background:#FDECEC;color:var(--warn)}
+.sv-rules li.warn .sv-ic{background:#FFF3E0;color:#8A4B00}
+.sv-rules li.off .sv-ic{background:#EEF0F3;color:var(--muted)}
+.sv-why{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.sv-rulesbox{padding:12px 16px}
+.sv-rules-h{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sv-rules-h h3{margin-inline-end:auto}
+.sv-rules-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px}
+.sv-group th{padding-top:12px;color:var(--text);font-size:13px}
+.sv-wins{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sv-win{display:inline-flex;gap:4px;align-items:center;direction:ltr}
+.sv-win input{width:auto}
+.sv-line{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:10px}
+.sv-line-h{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.sv-line-h .btn{margin-inline-start:auto}
+.sv-ovc{width:56px;text-align:center!important}
+.sv-inh{opacity:.6}
+.sv-nw{white-space:nowrap}
+.sv-ltab td:first-child{width:45%}
+.sv-addline{display:flex;gap:6px;margin-bottom:10px}
+@media (max-width:1150px){.sv-rules-grid{grid-template-columns:1fr}}
+@media (max-width:900px){.sv-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.sv-tl-row{grid-template-columns:96px 1fr}}

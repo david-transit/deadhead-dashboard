@@ -282,8 +282,10 @@
     const lim = Object.assign({ suggestions: 150, nearMisses: 60 }, input.limits || {});
 
     // pruning bounds (loosest values across operator + overrides; acceptance always uses the strict per-line value)
-    const PRUNE_MARGIN = loosest(R, "min_margin_min") - 20; // 20 min slack: estimate vs road, near misses
-    const PRUNE_SAVE = loosest(R, "min_saving_km") * 0.5;
+    // input.pair = {A,B}: only that pair, no pruning (answers "why not these two?")
+    const pairOnly = input.pair ? [String(input.pair.A), String(input.pair.B)] : null;
+    const PRUNE_MARGIN = pairOnly ? -Infinity : loosest(R, "min_margin_min") - 20; // 20 min slack: estimate vs road, near misses
+    const PRUNE_SAVE = pairOnly ? -Infinity : loosest(R, "min_saving_km") * 0.5;
     const disabledEverywhere = R.operator.enabled === false && !Object.values(R.lines).some(o => o.enabled === true);
 
     const V = D.vehicles;
@@ -321,6 +323,7 @@
       const A = V[i];
       for (let j = i + 1; j < V.length; j++) {
         const B = V[j];
+        if (pairOnly && !(pairOnly.includes(A.veh) && pairOnly.includes(B.veh) && A.veh !== B.veh)) continue;
         if (A.trips[A.trips.length - 1].end < B.trips[0].start || B.trips[B.trips.length - 1].end < A.trips[0].start) continue;
         stats.pairs++;
         const C = crossings(A, B);
@@ -360,7 +363,7 @@
         passVariants.set(pk, (passVariants.get(pk) || 0) + 1);
         const cur = bestPass.get(pk);
         if (!cur || better(ev, cur)) bestPass.set(pk, ev);
-      } else if (ev.saving_km >= ev.minSave * 0.5 && ev.failed.length <= 2) {
+      } else if (pairOnly || (ev.saving_km >= ev.minSave * 0.5 && ev.failed.length <= 2)) {
         const cur = bestMiss.get(pk);
         if (!cur || ev.failed.length < cur.failed.length || (ev.failed.length === cur.failed.length && better(ev, cur))) bestMiss.set(pk, ev);
       }
