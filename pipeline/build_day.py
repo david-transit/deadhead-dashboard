@@ -11,7 +11,7 @@ import json, sys, os, glob, subprocess, datetime as dt, urllib.request, time, zi
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from stride import TZ, fetch_rides, update_route_ends
+from stride import TZ, DAY_START_H, fetch_rides, update_route_ends
 
 REPO = os.path.dirname(HERE)
 DATA = os.path.join(REPO, "data")
@@ -51,7 +51,7 @@ def osrm_router(cache_file):
 
 def build(day):
     os.makedirs(CACHE_DIR, exist_ok=True)
-    rf = os.path.join(CACHE_DIR, f"rides_{day}.json")
+    rf = os.path.join(CACHE_DIR, f"rides_{day}_h{DAY_START_H}.json")
     raw = json.load(open(rf, encoding="utf-8")) if os.path.exists(rf) else fetch_rides(day, rf)
     ends = update_route_ends(raw, os.path.join(CACHE_DIR, "route_ends.json"))
     z = zipfile.ZipFile(os.path.join(HERE, "ClusterToLine.zip")).read("ClusterToLine.txt").decode("utf-8-sig")
@@ -59,7 +59,7 @@ def build(day):
           for x in csv.DictReader(io.StringIO(z)) if "דרך אגד" in x["OperatorName"]}
     road, save_osrm, osrm_miss = osrm_router(os.path.join(CACHE_DIR, "osrm_cache.json"))
 
-    midnight = dt.datetime.fromisoformat(day)  # local wall clock
+    midnight = dt.datetime.fromisoformat(day)  # local wall clock; times after the next midnight stay >= 1440
     P = lambda s: dt.datetime.fromisoformat(s).astimezone(TZ).replace(tzinfo=None)
     mins = lambda t: (t - midnight).total_seconds() / 60
 
@@ -117,7 +117,7 @@ def build(day):
     if n_empty and osrm_miss[0] > 0.2 * n_empty:
         raise SystemExit(f"{day}: OSRM failed for {osrm_miss[0]}/{n_empty} empty legs")
 
-    out = dict(day=day, operator="דרך אגד עוטף ירושלים", built=dt.datetime.now(TZ).isoformat(timespec="minutes"),
+    out = dict(day=day, day_start_min=DAY_START_H * 60, operator="דרך אגד עוטף ירושלים", built=dt.datetime.now(TZ).isoformat(timespec="minutes"),
                routes=routes, summary=dict(vehicles=len(vehicles), trips=sum(len(v) for v in by.values()),
                empty_day_km=round(tot_day), skipped_rides=skipped), vehicles=vehicles)
     os.makedirs(DATA, exist_ok=True)

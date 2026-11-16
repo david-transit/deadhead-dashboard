@@ -1,0 +1,5 @@
+{
+  "timezone": "Asia/Jerusalem",
+  "service_day_start_hour": 4,
+  "service_day_note": "Service day D runs from D 04:00 to D+1 03:59 local; times after midnight are shown as 24:00-27:59 (not verified against the official GTFS/SIRI spec)."
+}

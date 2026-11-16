@@ -3,7 +3,10 @@ import json, sys, os, time, urllib.request, urllib.parse, datetime as dt
 from zoneinfo import ZoneInfo
 
 API = "https://open-bus-stride-api.hasadna.org.il"
-TZ = ZoneInfo("Asia/Jerusalem")
+CONFIG = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json"), encoding="utf-8"))
+TZ = ZoneInfo(CONFIG["timezone"])
+# service-day boundary (hours after local midnight); env override for experiments
+DAY_START_H = int(os.environ.get("SERVICE_DAY_START_HOUR", CONFIG["service_day_start_hour"]))
 UTC = dt.timezone.utc
 OPERATOR = 135  # Derech Egged
 
@@ -21,10 +24,10 @@ def get(path, params, tries=5):
 
 
 def day_bounds_utc(day):
-    """Local midnight..next local midnight, in UTC (23/24/25 h depending on DST)."""
+    """Service day D: D at DAY_START_H local .. D+1 at DAY_START_H local, in UTC."""
     d = dt.date.fromisoformat(day)
-    a = dt.datetime.combine(d, dt.time(), TZ).astimezone(UTC)
-    b = dt.datetime.combine(d + dt.timedelta(days=1), dt.time(), TZ).astimezone(UTC)
+    a = dt.datetime.combine(d, dt.time(DAY_START_H), TZ).astimezone(UTC)
+    b = dt.datetime.combine(d + dt.timedelta(days=1), dt.time(DAY_START_H), TZ).astimezone(UTC)
     return a, b
 
 

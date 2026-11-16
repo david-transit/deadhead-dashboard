@@ -2,7 +2,7 @@ name: nightly-day
 
 on:
   schedule:
-    - cron: "30 1 * * *"   # 03:30 Israel in winter (IST), 04:30 in summer (IDT)
+    - cron: "0 3 * * *"   # 05:00 Israel in winter (IST), 06:00 in summer (IDT); service day D ends D+1 03:59
   workflow_dispatch:
     inputs:
       from:
@@ -11,6 +11,10 @@ on:
       to:
         description: "Last day YYYY-MM-DD (empty = same as from)"
         required: false
+      force:
+        description: "Rebuild days that already exist"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -50,13 +54,14 @@ jobs:
         env:
           FROM: ${{ inputs.from }}
           TO: ${{ inputs.to }}
+          FORCE: ${{ inputs.force }}
         run: |
           set -eu
           if [ -z "${FROM:-}" ]; then FROM=$(TZ=Asia/Jerusalem date -d yesterday +%F); fi
           if [ -z "${TO:-}" ]; then TO=$FROM; fi
           d=$FROM; list=""
           while [ "$(date -d "$d" +%s)" -le "$(date -d "$TO" +%s)" ]; do
-            if [ -f "data/day_$d.js" ]; then echo "skip $d (already exists)"; else list="$list $d"; fi
+            if [ -f "data/day_$d.js" ] && [ "${FORCE:-false}" != "true" ]; then echo "skip $d (already exists)"; else list="$list $d"; fi
             d=$(date -d "$d +1 day" +%F)
           done
           echo "days=$list" >> "$GITHUB_OUTPUT"
