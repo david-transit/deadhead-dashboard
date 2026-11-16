@@ -142,7 +142,7 @@ function subPair(a,b){let A=sub(a);if(A!==a&&b&&hav(a,b)<ANCH_LOCAL_KM) A=a;retu
 // A cached road km is valid only if it was computed with the same set of relevant approved links (meta.vpc). ----
 let VIAL=[], VIAOK=[];
 async function loadVia(){try{VIAL=await getRows("via_links",`select=*&${opq()}&order=created_at`)||[]}catch(e){console.warn("via links",e);VIAL=[]}
-  VIAOK=VIAL.filter(x=>x.approved_at).map(x=>({id:x.id,name:x.name,a:[+x.a_lat,+x.a_lon],b:[+x.b_lat,+x.b_lon],km:+x.link_km,both:!!x.both_ways}))}
+  VIAOK=VIAL.filter(x=>x.approved_at).map(x=>({id:x.id,name:x.name,a:[+x.a_lat,+x.a_lon],b:[+x.b_lat,+x.b_lon],km:+x.link_km,both:!!x.both_ways,line:Array.isArray(x.geom)&&x.geom.length>1?x.geom:null}))}
 const linksFor=(a,b)=>ROUTE.relevantLinks(a,b,VIAOK);
 // ---- "מסלול תקין" (table route_ok): an origin -> destination pair (after the stop anchor, like the road_cache key) that
 // an editor marked as a correct route, for all days. It hides only "עיקוף גדול" / "מסלול חשוד" of that pair, while the
@@ -155,10 +155,17 @@ function rokM(){if(ROKM&&ROKV===DV) return ROKM;const m=new Map();
   for(const r of ROK) m.set(rokRowKey(r),{...r,km:+r.km});
   for(const [k,x] of Object.entries(DRAFT.rok||{})) if(x==null) m.delete(k); else m.set(k,{...x,draft:true});
   ROKM=m;ROKV=DV;return m}
-const rokOf=i=>i.a&&i.b?rokM().get(rokKey(...subPair(i.a,i.b))):null;
+// a leg matches a marked pair by the exact routed pair, else by the same stop names (origin and destination, this
+// direction), else by both ends within ROK_NEAR_KM (a GPS end point near the stop); "השתנה מאז שאושר" compares the leg's
+// km with the km of that marked pair
+const ROK_NEAR_KM=0.3;
+function rokOf(i){if(!i.a||!i.b) return null;const [A,B]=subPair(i.a,i.b),m=rokM(),x=m.get(rokKey(A,B));if(x) return x;
+  for(const r of m.values()) if(r.origin&&r.origin===i.frm&&r.destination&&r.destination===i.to) return r;
+  for(const r of m.values()) if(hav(A,[+r.a_lat,+r.a_lon])<=ROK_NEAR_KM&&hav(B,[+r.b_lat,+r.b_lon])<=ROK_NEAR_KM) return r;
+  return null}
 const rokChanged=(r,km)=>{const d=Math.abs(km-r.km);return d>0.3||d>0.1*r.km};
 function roadGet(a,b){const r=ROAD.get(roadKey(a,b));if(!r) return null;const ls=linksFor(a,b),vpc=r.meta&&r.meta.vpc;
-  if((ls.length||(vpc&&vpc.length))&&!ROUTE.sameIds(vpc,ls.map(x=>x.id))) return null; // computed with another set of links
+  if((ls.length||(vpc&&vpc.length))&&!ROUTE.sameIds(vpc,ls.map(ROUTE.linkSig))) return null; // computed with another set of links
   return r}
 const roadOf=(a,b)=>roadGet(...subPair(a,b));
 // day legs from / to an anchored stop (road km from the anchor) or near an approved link (road km via the link when
@@ -426,14 +433,26 @@ function tzOff(ms){try{const f=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/J
 const utcISO=(day,m)=>{const base=Date.UTC(+day.slice(0,4),+day.slice(5,7)-1,+day.slice(8,10))+m*60000;return new Date(base-tzOff(base)*60000).toISOString().slice(0,19)+"Z"};
 // road geometry of a pair as routed (anchor / snapping fix / approved link): road_cache.geom, else OSRM (saved for editors)
 const pq=(A,B)=>`${opq()}&a_lat=eq.${(+A[0]).toFixed(5)}&a_lon=eq.${(+A[1]).toFixed(5)}&b_lat=eq.${(+B[0]).toFixed(5)}&b_lon=eq.${(+B[1]).toFixed(5)}`;
-async function geomFor(A,B){const row=roadGet(A,B),m=row&&row.meta||{};
-  try{const g=await getRows("road_cache",`select=geom&${pq(A,B)}`);if(g&&g[0]&&g[0].geom){const j=JSON.parse(g[0].geom);if(j&&j.p) return {parts:j.p.map(YMAP.decode),link:j.l||null,cached:true}}}catch{}
-  let parts=[],link=null;
+// the way a link is driven on a leg: [entry, exit, road line entry -> exit] (meta.via.rev; older results without it:
+// the nearer orientation for a two-way link); the line is via_links.geom, else the straight line
+function linkDir(lk,via,A,B){const ln=lk.line||[lk.a,lk.b];
+  const rev=via&&via.rev!=null?!!via.rev:lk.both&&hav(A,lk.b)+hav(lk.a,B)<hav(A,lk.a)+hav(lk.b,B);
+  return rev?[lk.b,lk.a,ln.slice().reverse()]:[lk.a,lk.b,ln]}
+// The saved geometry is used only if it was drawn for this km and the same approved link (not when the link lost its
+// approval or the km was recomputed): the map always matches the km shown
+// A pair without a valid cached row (e.g. a day-file leg whose snapping was fixed by the pipeline) is routed again with
+// the same route check (assets/route.js), so the map draws the route the km came from, not the plain OSRM route.
+async function geomFor(A,B){let row=roadGet(A,B),fresh=false;
+  if(!row){const r=await osrm(A,B);if(r){row=r;fresh=true}}
+  const m=row&&row.meta||{};
   const lk=m.via&&m.via.id?VIAOK.find(x=>x.id===m.via.id):null;
-  if(lk){parts=[await YMAP.osrmLine(A,lk.a),[lk.a,lk.b],await YMAP.osrmLine(lk.b,B)];link=1}
+  if(row&&!fresh) try{const g=await getRows("road_cache",`select=geom&${pq(A,B)}`);if(g&&g[0]&&g[0].geom){const j=JSON.parse(g[0].geom);
+    if(j&&j.p&&j.km===+row.km&&!!j.l===!!lk) return {parts:j.p.map(YMAP.decode),link:j.l||null,cached:true}}}catch{}
+  let parts=[],link=null;
+  if(lk){const [E,X,ln]=linkDir(lk,m.via,A,B);parts=[await YMAP.osrmLine(A,E),ln,await YMAP.osrmLine(X,B)];link=1}
   else if(m.fix==="near"&&Array.isArray(m.via)){const A2=m.via[0]||A,B2=m.via[1]||B;parts=[[A,A2],await YMAP.osrmLine(A2,B2),[B2,B]]}
   else parts=[await YMAP.osrmLine(A,B,{curb:m.fix==="curb"})];
-  if(row&&canEdit()) try{const geom=JSON.stringify({p:parts.map(YMAP.encode),...(link?{l:1}:{})});
+  if(row&&!fresh&&canEdit()) try{const geom=JSON.stringify({p:parts.map(YMAP.encode),km:+row.km,...(link?{l:1}:{})});
     if(geom.length<=40000) await sb(`/rest/v1/road_cache?${pq(A,B)}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({geom})})}catch(e){console.warn("geom save",e)}
   return {parts,link}}
 // an empty leg (day or night): road route as computed + dashed straight line, anchor / approved link marked
@@ -447,7 +466,7 @@ async function legMap(o){const {a,b,km,min,free,frm,to,title,rt}=o,[A,B]=subPair
   c.status("טוען מסלול…");
   try{const g=await geomFor(A,B);
     g.parts.forEach((pts,k)=>c.line(pts,{color:g.link&&k===1?"#8E44AD":"#1F5FBF",weight:g.link&&k===1?7:5,label:k===0?"מסלול לפי כביש":g.link&&k===1?"קטע מאושר לתחבורה ציבורית":""}));
-    if(g.link){const lk=VIAOK.find(x=>x.id===m.via.id);if(lk) c.point(lk.a,{label:"כניסה לקטע המאושר",fill:"#8E44AD",r:5}).point(lk.b,{label:"יציאה מהקטע המאושר",fill:"#8E44AD",r:5})}
+    if(g.link){const lk=VIAOK.find(x=>x.id===m.via.id);if(lk){const [E,X]=linkDir(lk,m.via,A,B);c.point(E,{label:"כניסה לקטע המאושר",fill:"#8E44AD",r:5}).point(X,{label:"יציאה מהקטע המאושר",fill:"#8E44AD",r:5})}}
     c.fit([a,b,...g.parts.flat()]);c.status("")}
   catch{c.status("לא ניתן לטעון את המסלול מהשרת",true)}
   return c}

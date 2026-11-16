@@ -122,7 +122,7 @@
     // approved bus-only links (via_links): also try OSRM to the link's entry + the link + OSRM from its exit, and keep it
     // when it is shorter than the plain route and neither part has a loop. links: [{id, name, a:[lat,lon], b:[lat,lon], km,
     // both}] already filtered by relevantLinks(). meta.vpc = the link ids considered (a cached result is stale when the set of
-    // relevant approved links changes); meta.via = {id, name, km0: plain km} when a link is used.
+    // relevant approved links changes); meta.via = {id, name, km0: plain km, rev: 1 when driven b -> a} when a link is used.
     async function smartLinks(a, b, links, o) {
       const plain = await smart(a, b, o); if (!plain || !links || !links.length) return plain && links && links.length ? { ...plain, vpc: [] } : plain;
       let best = null;
@@ -131,12 +131,12 @@
               r2 = await smart(X, b, { terminal: [false, ((o && o.terminal) || [true, true])[1]] });
         if (!r1 || !r2 || r1.u || r2.u) continue;
         const km = r1.km + +L.km + r2.km, min = r1.min + +L.km / 25 * 60 + r2.min;
-        if (km < plain.km - 0.05 && (!best || km < best.km)) best = { km, min, L, s: [r1.s[0], r2.s[1]] };
+        if (km < plain.km - 0.05 && (!best || km < best.km)) best = { km, min, L, s: [r1.s[0], r2.s[1]], rev: E !== L.a };
       }
-      const vpc = links.map(L => L.id).sort();
+      const vpc = links.map(linkSig).sort();
       if (!best) return { ...plain, vpc };
       return { km: Math.round(best.km * 100) / 100, min: Math.round(best.min * 10) / 10, v: V, s: best.s, vpc,
-               via: { id: best.L.id, name: String(best.L.name).slice(0, 60), km0: plain.km } };
+               via: { id: best.L.id, name: String(best.L.name).slice(0, 60), km0: plain.km, ...(best.rev ? { rev: 1 } : {}) } };
     }
     return { smart, smartLinks, route, analyze };
   }
@@ -151,8 +151,11 @@
       const t = Math.max(0, Math.min(1, ((m[0] - A[0]) * dx + (m[1] - A[1]) * dy) / L2));
       return Math.hypot(m[0] - A[0] - t * dx, m[1] - A[1] - t * dy) <= NEAR_KM; });
   }
+  // a link's signature in meta.vpc: its id, + ":b" when it is used both ways (a one-way result is stale for a link that
+  // became two-way: the reverse direction was never tried)
+  const linkSig = L => L.both ? L.id + ":b" : L.id;
   const sameIds = (x, y) => JSON.stringify((x || []).slice().sort()) === JSON.stringify((y || []).slice().sort());
   const unresolved = r => !!r && ((r.u || (r.s || []).some(m => m > SNAP_M)) && !r.ok);
-  const api = { make, analyze, unresolved, relevantLinks, sameIds, V, SNAP_M, hav };
+  const api = { make, analyze, unresolved, relevantLinks, sameIds, linkSig, V, SNAP_M, hav };
   if (typeof module === "object" && module.exports) module.exports = api; else root.ROUTE = api;
 })(typeof self !== "undefined" ? self : this);
