@@ -502,12 +502,12 @@ async function rwClick(e){const t=e.target,d=$("#dlgRw");
   const n=t.dataset.rgmap??t.dataset.rgvia??t.dataset.rgnote??t.dataset.rgsend??t.dataset.rgnoteok;const g=n!=null?RP[+n]:null;
   if(t.dataset.rgv){d.close();await selectVehicle(t.dataset.rgv);document.querySelector(`.row[data-v="${CSS.escape(t.dataset.rgv)}"]`)?.scrollIntoView({block:"nearest"});return}
   if(!g) return;
-  if(t.dataset.rgmap!=null){d.close();const x=g.legs[0];legMap({a:g.a,b:g.b,km:g.km,min:g.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:`בעיית מסלול: ${g.legs.length} נסיעות`})}
+  if(t.dataset.rgmap!=null){d.close();const x=g.legs[0];legMap({a:g.a,b:g.b,km:g.km,min:g.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:`בעיית מסלול: ${g.legs.length} נסיעות`,back:openRouteList})}
   else if(t.dataset.rgnote!=null){const w=t.closest(".rwg").querySelector(".rwnote");w.hidden=!w.hidden;if(!w.hidden) w.querySelector("textarea").focus()}
   else if(t.dataset.rgnoteok!=null){const tx=t.closest(".rwnote").querySelector("textarea").value.trim();if(tx) rpDraft(g,{text:tx})}
   else if(t.dataset.rgsend!=null) rpDraft(g,{})
   else if(t.dataset.rgvia!=null){d.close();const x=g.legs[0];
-    const c=await legMap({a:g.a,b:g.b,km:g.km,min:g.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:"הצעת נקודת מעבר",actions:`<p class="hint">לחצו על המפה: קודם נקודת הכניסה לקטע שמותר לאוטובוסים, ואז נקודת היציאה. ההצעה נשמרת ברשימת "נקודות מעבר מאושרות" וממתינה לאישור מנהל מערכת; היא לא משפיעה על החישוב עד שתאושר.</p>`});
+    const c=await legMap({a:g.a,b:g.b,km:g.km,min:g.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:"הצעת נקודת מעבר",back:openRouteList,actions:`<p class="hint">לחצו על המפה: קודם נקודת הכניסה לקטע שמותר לאוטובוסים, ואז נקודת היציאה. ההצעה נשמרת ברשימת "נקודות מעבר מאושרות" וממתינה לאישור מנהל מערכת; היא לא משפיעה על החישוב עד שתאושר.</p>`});
     if(!c) return; const pts=[];c.status("בחרו את נקודת הכניסה");
     c.pick(p=>{pts.push(p);c.point(p,{label:pts.length===1?"כניסה":"יציאה",fill:"#8E44AD"});
       if(pts.length===1){c.status("בחרו את נקודת היציאה");return true}

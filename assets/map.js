@@ -22,13 +22,15 @@
       <div id="mapLeg" class="mapleg"></div><div id="mapAct" class="mapact"></div>`;
     document.body.appendChild(dlg);
     dlg.querySelector("#mapX").onclick = () => dlg.close();
+    // opened from another dialog (o.back): closing the map goes one step back to it
+    dlg.addEventListener("close", () => { const f = back; back = null; if (f) f(); });
     dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
     return dlg;
   }
   const drawLegend = () => { dlg.querySelector("#mapLeg").innerHTML = legend.map(x =>
     `<span><i style="background:${x.color};${x.dash ? "background:repeating-linear-gradient(90deg," + x.color + " 0 6px,transparent 6px 10px)" : ""}"></i>${t(x.label)}</span>`).join(""); };
   // one controller per opened map: calls from an older map (a slow request finishing late) are ignored
-  let gen = 0;
+  let gen = 0, back = null;
   function mk(my) { const ok = () => my === gen && dlg && dlg.open && map;
   const ctl = {
     line(coords, o = {}) { if (!ok() || !coords || coords.length < 2) return ctl;
@@ -51,6 +53,8 @@
   async function open(o) {
     ensure(); legend = []; const my = ++gen, ctl = mk(my);
     dlg.querySelector("#mapT").textContent = o.title || "מפה";
+    back = typeof o.back === "function" ? o.back : null;
+    dlg.querySelector("#mapX").textContent = back ? "→ חזרה" : "✕ סגירה";
     dlg.querySelector("#mapInfo").innerHTML = o.info || ""; dlg.querySelector("#mapLeg").innerHTML = ""; dlg.querySelector("#mapAct").innerHTML = o.actions || "";
     if (!dlg.open) dlg.showModal();
     dlg.querySelector("#mapX").focus();
