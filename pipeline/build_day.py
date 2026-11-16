@@ -265,7 +265,7 @@ def build(day):
                 items.append(leg)
                 if not leg.get("overlap"): tot_day += km
             items.append(dict(kind="trip", start=t["start"], end=t["end"], line=t["line"], km=t["km"], cls=t["cls"], sched=t["sched"],
-                              frm=t["frm"], to=t["to"], a=t["a"], b=t["b"],
+                              frm=t["frm"], to=t["to"], a=t["a"], b=t["b"], ca=t["ca"], cb=t["cb"],
                               **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute")
                                  if t.get(k) is not None}))
         items += dups + ghosts.pop(v, [])

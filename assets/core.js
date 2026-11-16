@@ -170,6 +170,100 @@
     Object.assign(M, { night, vehicleDay, prevActive, nextActive, branchOf, autoBranch, depotFor, autoSt, reinOf, leg, abs, rel });
     return M;
   }
-  const api = { Model, hav, estKm, estMin, roadKey, dayNum, dayStr, addDays, AREA, OVMODES, LEGNAME, EMPTY_NIGHT, LOOKBACK };
+  // ---- manual block edits (fixing data errors) ----
+  // edits: rows of block_edits {id, day, veh, action, payload, created_at}: delete / replace / add / times / move a trip,
+  // the trip named by its scheduled minute (payload.sched). Applied in order (payload.seq, then created_at) to a copy of
+  // the day: the original stays untouched (shown on demand). Edited vehicles get their empty legs, totals and start/end
+  // recomputed; a leg whose two ends did not change keeps the pipeline's road km. Returns a day in the same shape as a
+  // day file (also what the savings engine reads through getBlocks), plus day.edits = {applied, orphans}.
+  const editOrder = (a, b) => ((a.payload || {}).seq ?? Date.parse(a.created_at || 0)) - ((b.payload || {}).seq ?? Date.parse(b.created_at || 0)) || String(a.id).localeCompare(String(b.id));
+  function applyBlockEdits(day, edits, opts) {
+    opts = opts || {};
+    const es = (edits || []).filter(e => e && e.day === day.day).slice().sort(editOrder);
+    if (!es.length) return day;
+    const road = opts.road || (() => null);
+    const V = new Map(day.vehicles.map(v => [v.veh, v]));
+    const T = new Map(), cityOf = (v, end) => v ? (end ? v.last_d : v.first_o)[2] : "";
+    const tripsOf = veh => {
+      if (!T.has(veh)) { const v = V.get(veh), ts = v ? v.items.filter(i => i.kind === "trip").map(t => ({ ...t })) : [];
+        if (v && ts.length) { ts[0].ca = ts[0].ca || cityOf(v, false); ts[ts.length - 1].cb = ts[ts.length - 1].cb || cityOf(v, true); }
+        T.set(veh, ts); }
+      return T.get(veh);
+    };
+    const applied = [], orphans = [];
+    for (const e of es) {
+      const p = e.payload || {}, ts = tripsOf(e.veh), k = p.sched != null ? ts.findIndex(t => t.sched === +p.sched) : -1;
+      const tag = t => Object.assign(t, { edited: true, edit_id: e.id, edit: { action: e.action, by: p.by || null, at: e.created_at || null } });
+      if (e.action !== "add" && k < 0) { orphans.push(e); continue; }
+      if (e.action === "delete") ts.splice(k, 1);
+      else if (e.action === "times") tag(Object.assign(ts[k], { start: +p.start, end: Math.max(+p.end, +p.start + 1) }));
+      else if (e.action === "replace" || e.action === "add") {
+        if (!p.o || !p.d || p.start == null) { orphans.push(e); continue; }
+        const old = e.action === "replace" ? ts[k] : null;
+        const nt = tag({ kind: "trip", line: String(p.line || "?"), frm: p.frm || "", to: p.to || "", a: p.o, b: p.d, ca: p.ca || "", cb: p.cb || "",
+          km: +p.km || 0, km_plan: +p.km || 0, cls: p.cls || (old && old.cls) || "לא ידוע", start: +p.start, end: +p.start + Math.max(+p.dur || 0, 1),
+          sched: old ? old.sched : (p.sched != null ? +p.sched : +p.start), ...(p.auto ? { auto: true } : {}) });
+        if (old) ts[k] = nt; else ts.push(nt);
+      } else if (e.action === "move") {
+        if (!p.to_veh || p.to_veh === e.veh) { orphans.push(e); continue; }
+        const [t] = ts.splice(k, 1); tripsOf(String(p.to_veh)).push(tag({ ...t, moved_from: e.veh }));
+      } else { orphans.push(e); continue; }
+      applied.push(e.id);
+    }
+    const out = [];
+    for (const v of day.vehicles) if (!T.has(v.veh)) out.push(v);
+    for (const [veh, trips] of T) {
+      if (!trips.length) continue; // every trip deleted / moved away: the vehicle did not run
+      const v0 = V.get(veh);
+      trips.sort((a, b) => a.start - b.start || a.sched - b.sched);
+      const old = new Map(), info = [];
+      if (v0) {
+        let prev = null;
+        for (const i of v0.items) { if (i.kind === "trip") prev = i; else if (i.kind === "empty") old.set(i.next_sched, { leg: i, prev }); else info.push(i); }
+      }
+      const items = [];
+      trips.forEach((t, n) => {
+        if (n) {
+          const p = trips[n - 1], gap = t.start - p.end, o = old.get(t.sched);
+          const same = o && o.prev && o.prev.sched === p.sched && !p.edited && !t.edited;
+          let leg;
+          if (same) leg = { ...o.leg };
+          else {
+            const r = hav(p.b, t.a) < 0.05 ? { km: 0, min: 0 } : road(p.b, t.a), km = r ? r.km : Math.round(estKm(p.b, t.a) * 10) / 10;
+            leg = { kind: "empty", start: p.end, end: t.start, km, drive_min: r ? r.min : Math.round(estMin(km) * 10) / 10, frm: p.to, to: t.frm,
+              next_sched: t.sched, a: p.b, b: t.a, ...(r ? {} : { est: true }), edited: true };
+          }
+          leg.start = p.end; leg.end = t.start; delete leg.overlap; delete leg.tight;
+          if (gap < 0) leg.overlap = true;
+          else if (leg.km > 2 && (leg.drive_min > gap + 10 || gap === 0 || leg.km / (gap / 60) > 100)) leg.tight = true;
+          items.push(leg);
+        }
+        items.push(t);
+      });
+      for (const i of info) items.push(i);
+      items.sort((x, y) => (x.kind === "empty" ? x.end : x.start) - (y.kind === "empty" ? y.end : y.start) || ({ empty: 0, ghost: 1, dup: 1, trip: 2 }[x.kind] - { empty: 0, ghost: 1, dup: 1, trip: 2 }[y.kind]));
+      const f = trips[0], l = trips[trips.length - 1];
+      const cls = (() => { const c = {}; for (const t of trips) if (!t.auto) c[t.cls] = (c[t.cls] || 0) + 1; const b = Object.entries(c).sort((x, y) => y[1] - x[1]); return b.length ? b[0][0] : f.cls; })();
+      out.push({ ...(v0 || {}), veh, cls: v0 ? v0.cls : cls, edited: true, items,
+        first_o: [f.a[0], f.a[1], f.ca || cityOf(v0, false)], last_d: [l.b[0], l.b[1], l.cb || cityOf(v0, true)],
+        service_km: Math.round(trips.filter(t => !t.auto).reduce((s, t) => s + (+t.km || 0), 0) * 10) / 10,
+        empty_day_km: Math.round(items.filter(i => i.kind === "empty" && !i.overlap).reduce((s, i) => s + (+i.km || 0), 0) * 10) / 10 });
+    }
+    out.sort((a, b) => a.veh < b.veh ? -1 : a.veh > b.veh ? 1 : 0);
+    return { ...day, vehicles: out, edits: { applied, orphans: orphans.map(e => e.id) } };
+  }
+  // the cross-day index entry of a (possibly edited) vehicle-day, same layout as pipeline ends_entry()
+  function endsEntry(v) {
+    const ts = v.items.filter(i => i.kind === "trip"), f = ts[0], l = ts[ts.length - 1];
+    return [f.start, v.first_o[0], v.first_o[1], v.first_o[2], f.frm, l.end, v.last_d[0], v.last_d[1], v.last_d[2], l.to, l.line, v.cls];
+  }
+  // ends index with the edited days laid over it (days: {day: edited day object})
+  function endsWithEdits(ends, editedDays) {
+    const out = { ...ends };
+    for (const [d, J] of Object.entries(editedDays || {})) { if (!J || !J.edits) continue; out[d] = {}; for (const v of J.vehicles) out[d][v.veh] = endsEntry(v); }
+    return out;
+  }
+  const api = { Model, hav, estKm, estMin, roadKey, dayNum, dayStr, addDays, AREA, OVMODES, LEGNAME, EMPTY_NIGHT, LOOKBACK,
+    applyBlockEdits, endsEntry, endsWithEdits };
   if (typeof module === "object" && module.exports) module.exports = api; else root.DH = api;
 })(typeof self !== "undefined" ? self : this);
