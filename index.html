@@ -49,6 +49,9 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;
 .badge{font-size:11px;border-radius:6px;padding:1px 6px;border:1px solid var(--line);font-weight:400;white-space:nowrap}
 .badge.urb{background:#EAF6EE;border-color:#BFE3CB}
 .badge.ic{background:#EAF0FB;border-color:#C5D5F0}
+.badge.br{background:#F3EFFA;border-color:#D3C6EA;color:var(--depot)}
+.badge.br.auto{background:transparent;border-style:dashed;color:var(--muted)}
+.brrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 10px;font-size:13px}
 .bar{direction:rtl;position:absolute;top:7px;height:22px;border-radius:5px;font-size:11px;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap}
 .bar.svc{background:var(--svc);font-weight:500}
 .bar.emp{background:repeating-linear-gradient(135deg,var(--empty) 0 5px,#F3A957 5px 8px);color:#5a2c00;font-weight:500}
@@ -164,6 +167,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <div class="seg" role="group" aria-label="סוג שירות">
       <button class="btn on" data-cls="">הכול</button><button class="btn" data-cls="עירוני">עירוני</button><button class="btn" data-cls="בינעירוני">בינעירוני</button>
     </div>
+    <select id="br" aria-label="סניף"></select>
     <select id="sort" aria-label="מיון"><option value="veh">מיון: מספר רכב</option><option value="empty">מיון: הכי הרבה ק״מ ריקים</option><option value="start">מיון: שעת יציאה</option></select>
     <input type="search" id="q" placeholder="חיפוש מספר רכב" aria-label="חיפוש מספר רכב">
     <button class="btn" id="bSettings">הגדרות</button>
@@ -340,7 +344,7 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const ymd=d=>d.toISOString().slice(0,10);
 const clone=x=>JSON.parse(JSON.stringify(x));
 let D=null,cls="",sel=null,T0=240,T1=26*60,PW=null;
-const DEF={fuel_by_class:{"עירוני":"גז","בינעירוני":"סולר"},range_km_by_fuel:{"גז":null,"סולר":null}};
+const DEF={fuel_by_class:{"עירוני":"גז","בינעירוני":"סולר"},range_km_by_fuel:{"גז":null,"סולר":null},branches:["בני ברק","ירושלים"]};
 let S={depots:[],fuel_stations:[],driver_change_points:[],defaults:clone(DEF),vehicles:{}};
 let REIN={};
 try{PW=sessionStorage.getItem("edit_pw")}catch{}
@@ -368,6 +372,22 @@ function night(v){
     const km=estKm([+d.lat,+d.lon],p),mn=estMin(km);
     return {kind:"depot_"+w,depot:d.name,km,start:w==="out"?t0.start-mn:t1.end,end:w==="out"?t0.start:t1.end+mn};});
 }
+// ---- branch (סניף): auto from where the vehicle starts and ends its day; confirmed/manual value lives in vehicles[veh].branch ----
+const AREA={"בני ברק":["בני ברק","פתח תקווה","רמת גן","תל אביב יפו","גבעתיים","ראש העין","חולון","בת ים","קרית אונו","אור יהודה"],
+  "ירושלים":["ירושלים","מבשרת ציון","גבעת זאב","מטה יהודה","בית חורון","מעלה אדומים"]};
+const branches=()=>{const b=(S.defaults.branches||[]).map(x=>String(x).trim()).filter(Boolean);return b.length?b:DEF.branches};
+function autoBranch(v){const a=v.first_o?.[2],b=v.last_d?.[2];for(const k in AREA) if(AREA[k].includes(a)&&AREA[k].includes(b)) return k;return ""}
+function branchOf(v){const x=vset(v);return x.branch_confirmed?{b:x.branch||"",auto:false}:{b:autoBranch(v),auto:true}}
+const brBadge=v=>{const o=branchOf(v);return o.b?`<span class="badge br${o.auto?" auto":""}" title="${o.auto?"שיוך אוטומטי לפי תחילת וסוף היום · לא מאושר":"סניף מאושר"}">${esc(o.b)}${o.auto?" · אוטומטי":""}</span>`:""};
+let brSig="";
+function fillBr(){const bs=branches(),sig=bs.join("|");if(sig===brSig) return;brSig=sig;const el=$("#br"),cur=el.value;
+  el.innerHTML=`<option value="">סניף: הכול</option>`+bs.map(b=>`<option value="${esc(b)}">סניף: ${esc(b)}</option>`).join("")+`<option value="__none">סניף: לא משויך</option>`;
+  el.value=[...el.options].some(o=>o.value===cur)?cur:""}
+async function saveVehicles(patch){ // read-modify-write of the whole vehicles object
+  const all=await rpc("get_settings",{p_password:PW})||{}, cur={...(all.vehicles||{})};
+  for(const [veh,p] of Object.entries(patch)) cur[veh]={...(cur[veh]||{}),...p};
+  const st=await rpc("save_setting",{p_password:PW,p_key:"vehicles",p_value:cur}); if(st!=="ok") throw new Error(st);
+  S.vehicles=cur; return cur}
 const rkey=(veh,start)=>veh+"|"+start;
 function vstats(v){
   let emp=0,rein=0; for(const i of v.items) if(i.kind==="empty"&&i.km){const r=REIN[rkey(v.veh,i.start)]; if(r){rein+=+r.rein_km||0;emp+=(+r.before_km||0)+(+r.after_km||0)} else emp+=i.km; }
@@ -400,14 +420,15 @@ const pct=m=>((m-T0)/(T1-T0)*100);
 function bar(c,a,b,txt,title,extra=""){const l=pct(a),w=Math.max(pct(b)-l,.25);return `<div class="bar ${c} ${extra}" style="left:${l}%;width:${w}%" title="${esc(title)}">${w>2.2?esc(txt):""}</div>`}
 function render(){
   if(!D) return;
-  const vsAll=D.vehicles.map(v=>[v,vstats(v)]);
+  fillBr(); const br=$("#br").value;
+  const vsAll=D.vehicles.map(v=>[v,vstats(v)]).filter(([v])=>(!cls||v.cls===cls)&&v.veh.includes($("#q").value.trim())&&(!br||(br==="__none"?!branchOf(v).b:branchOf(v).b===br)));
   const emp=vsAll.reduce((a,[,s])=>a+s.emp,0), rein=vsAll.reduce((a,[,s])=>a+s.rein,0);
   const nAll=vsAll.filter(([,s])=>s.nk!=null), nk=nAll.reduce((a,[,s])=>a+s.nk,0);
-  $("#cV").textContent=nf(D.summary.vehicles); $("#cT").textContent=nf(D.summary.trips); $("#cE").textContent=nf(Math.round(emp));
+  $("#cV").textContent=nf(vsAll.length); $("#cT").textContent=nf(vsAll.reduce((a,[v])=>a+v.items.filter(i=>i.kind==="trip").length,0)); $("#cE").textContent=nf(Math.round(emp));
   $("#cEs").textContent=rein?`לפי כביש · בלי ${nf(Math.round(rein))} ק״מ תגבור`:"לפי כביש";
   $("#cN").textContent=nAll.length?nf(Math.round(nk)):"–";
   $("#cNs").textContent=nAll.length?`הערכה (קו אווירי × 1.35) · ${nAll.length} מתוך ${vsAll.length} רכבים`:"יחושב אחרי הגדרת מיקומי חניונים";
-  let vs=vsAll.filter(([v])=>(!cls||v.cls===cls)&&v.veh.includes($("#q").value.trim()));
+  let vs=vsAll.slice();
   const so=$("#sort").value;
   vs.sort(so==="empty"?(a,b)=>b[1].emp-a[1].emp:so==="start"?(a,b)=>a[0].items[0].start-b[0].items[0].start:(a,b)=>a[0].veh.localeCompare(b[0].veh));
   let mn=1e9,mx=0; D.vehicles.forEach(v=>v.items.forEach(i=>{mn=Math.min(mn,i.start);mx=Math.max(mx,i.end)}));
@@ -429,7 +450,7 @@ function render(){
         b+=bar("emp",i.start,de,i.km==null?"?":nf(i.km)+" ק״מ",`ריק ${nf(i.km)} ק״מ, כ־${nf(i.drive_min)} דק׳ נסיעה: ${i.frm} ← ${i.to} (זמן פנוי ${fmt(i.start)}–${fmt(i.end)})`,i.overlap?"bad":"");}
     }
     const f=fuelFor(v);
-    h+=`<div class="row${v.veh===sel?" sel":""}" role="listitem" tabindex="0" data-v="${esc(v.veh)}"><div class="lab">${esc(v.veh)} <span class="badge ${v.cls==="עירוני"?"urb":"ic"}">${esc(v.cls)}</span>${f?`<span class="badge">${esc(f)}</span>`:""}</div><div class="track">${grid}${b}</div></div>`;
+    h+=`<div class="row${v.veh===sel?" sel":""}" role="listitem" tabindex="0" data-v="${esc(v.veh)}"><div class="lab">${esc(v.veh)} ${brBadge(v)}<span class="badge ${v.cls==="עירוני"?"urb":"ic"}">${esc(v.cls)}</span>${f?`<span class="badge">${esc(f)}</span>`:""}</div><div class="track">${grid}${b}</div></div>`;
   }
   if(!vs.length) h+='<div class="empty-state">לא נמצאו רכבים</div>';
   $("#gantt").innerHTML=h;
@@ -440,7 +461,10 @@ function side(veh){
   const s=vstats(v),[out,inn]=s.n;
   const dep=n=>n.km==null?`<div class="it dep"><span>${n.kind==="depot_out"?"יציאה מחניון":"חזרה לחניון"}<span class="sub">${n.depot?esc(n.depot)+" · מיקום לא הוגדר":"חניון לא הוגדר"}</span></span><span class="t">–</span></div>`
      :`<div class="it dep"><span>${n.kind==="depot_out"?"יציאה מחניון":"חזרה לחניון"}<span class="sub">${esc(n.depot)} · כ־${nf(n.km)} ק״מ (הערכה)</span></span><span class="t">${fmt(n.start)}–${fmt(n.end)}</span></div>`;
-  let h=`<h2>רכב ${esc(v.veh)} · ${esc(v.cls)}</h2>`+dep(out);
+  const bo=branchOf(v),ro=!PW;
+  let h=`<h2>רכב ${esc(v.veh)} · ${esc(v.cls)}</h2><div class="brrow"><label for="sbr"><b>סניף:</b></label><select id="sbr" data-brv="${esc(v.veh)}" ${ro?"disabled":""}>`+
+    [["","לא משויך"],...branches().map(b=>[b,b])].map(([val,lab])=>`<option value="${esc(val)}" ${bo.b===val?"selected":""}>${esc(lab)}</option>`).join("")+`</select>`+
+    (bo.auto?`<span class="badge br auto">אוטומטי</span>${ro||!bo.b?"":`<button class="btn small" data-brok="${esc(v.veh)}">אישור</button>`}`:`<span class="badge br">מאושר</span>`)+`<span class="msg" id="sbrMsg"></span></div>`+dep(out);
   for(const i of v.items){
     if(i.kind==="trip") h+=`<div class="it svc"><span>קו ${esc(i.line)} · ${esc(i.frm)} ← ${esc(i.to)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
     else if(i.overlap) h+=`<div class="it emp" style="color:var(--warn)"><span>חפיפה בין נסיעות (שגיאה בנתונים)</span><span class="t"></span></div>`;
@@ -508,7 +532,12 @@ $("#reinPrev").addEventListener("click",async e=>{
     $("#dlgRein").close();pick=null;render()}
   catch(err){e.target.disabled=false;$("#reinPrev").insertAdjacentHTML("beforeend",`<div class="msg err">${esc(errText(err))}</div>`)}
 });
+async function setBranch(veh,b){const m=$("#sbrMsg");if(m){m.className="msg";m.textContent="שומר…"}
+  try{await saveVehicles({[veh]:{branch:b,branch_confirmed:true}});render()}
+  catch(err){if(m){m.className="msg err";m.textContent=errText(err)}if(String(err.message).includes("wrong_password")) setPw(null)}}
+$("#side").addEventListener("change",e=>{if(e.target.dataset.brv!=null) setBranch(e.target.dataset.brv,e.target.value)});
 $("#side").addEventListener("click",async e=>{
+  if(e.target.dataset.brok!=null){const v=D.vehicles.find(x=>x.veh===e.target.dataset.brok);setBranch(v.veh,autoBranch(v));return}
   const p=e.target.dataset.pickrein, u=e.target.dataset.unrein;
   if(p!=null){ openPick(+p); return }
   if(u!=null){ if(!confirm("לבטל את סימון התגבור?")) return;
@@ -572,12 +601,16 @@ function showTab(t){tab=t;document.querySelectorAll(".tabs button").forEach(b=>b
     h+=`<p class="hint">ברירת המחדל לכל רכב שאין לו הגדרה משלו בלשונית "רכבים".</p><table class="ed"><tr><th>סוג שירות</th><th>דלק</th></tr>`+
       ["עירוני","בינעירוני"].map(c=>`<tr><td>${c}</td><td><select data-def="fuel_by_class" data-c="${c}" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${d.fuel_by_class?.[c]===f?"selected":""}>${f}</option>`).join("")}</select></td></tr>`).join("")+
       `</table><table class="ed" style="margin-top:14px"><tr><th>דלק</th><th>טווח נסיעה בק״מ (ממלא עד ריק)</th></tr>`+
-      ["גז","סולר"].map(f=>`<tr><td>${f}</td><td><input class="num" inputmode="decimal" data-def="range_km_by_fuel" data-c="${f}" value="${esc(d.range_km_by_fuel?.[f]??"")}" ${ro?"disabled":""}></td></tr>`).join("")+`</table>`;}
+      ["גז","סולר"].map(f=>`<tr><td>${f}</td><td><input class="num" inputmode="decimal" data-def="range_km_by_fuel" data-c="${f}" value="${esc(d.range_km_by_fuel?.[f]??"")}" ${ro?"disabled":""}></td></tr>`).join("")+`</table>`+
+      `<div class="field" style="margin-top:14px;max-width:420px"><label for="dbr"><b>סניפים</b> (מופרדים בפסיקים)</label><input id="dbr" data-defl="branches" value="${esc((d.branches||DEF.branches).join(", "))}" ${ro?"disabled":""}></div>`;}
   else if(t==="vehicles"){const vs=D?D.vehicles:[];
     h+=`<p class="hint">שדה ריק = ברירת מחדל. הרשימה מציגה את הרכבים של ${D?D.day.split("-").reverse().join("."):""}. לפני שמשייכים חניון, צריך להוסיף אותו בלשונית "חניונים" ולשמור.</p><input type="search" id="vq" placeholder="חיפוש מספר רכב" style="margin-bottom:8px">
-      <table class="ed"><thead><tr><th>רכב</th><th>סוג</th><th>חניון</th><th>חניון סוף יום (אם שונה)</th><th>דלק</th><th>טווח ק״מ</th></tr></thead><tbody id="vrows">`+
+      ${ro||!D?"":`<button class="btn small" id="brAll" style="margin:0 8px 8px 0">אישור כל השיוכים האוטומטיים</button>`}
+      <table class="ed"><thead><tr><th>רכב</th><th>סוג</th><th>סניף</th><th>חניון</th><th>חניון סוף יום (אם שונה)</th><th>דלק</th><th>טווח ק״מ</th></tr></thead><tbody id="vrows">`+
       vs.map(v=>{const x=draft.vehicles[v.veh]||{},opt=cur=>`<option value=""></option>`+(S.depots||[]).map(d=>`<option value="${esc(d.id)}" ${cur===d.id?"selected":""}>${esc(d.name)}</option>`).join("");
-        return `<tr data-v="${esc(v.veh)}"><td>${esc(v.veh)}</td><td>${esc(v.cls)}</td><td><select data-vk="depot" ${ro?"disabled":""}>${opt(x.depot)}</select></td><td><select data-vk="depot_end" ${ro?"disabled":""}>${opt(x.depot_end)}</select></td>
+        const ab=autoBranch(v),bsel=x.branch_confirmed?(x.branch||""):"__auto";
+        const brs=`<select data-vb="1" ${ro?"disabled":""}>`+[["__auto",`אוטומטי: ${ab||"לא משויך"}`],["","לא משויך"],...branches().map(b=>[b,b])].map(([val,lab])=>`<option value="${esc(val)}" ${bsel===val?"selected":""}>${esc(lab)}</option>`).join("")+`</select>`;
+        return `<tr data-v="${esc(v.veh)}"><td>${esc(v.veh)}</td><td>${esc(v.cls)}</td><td>${brs}</td><td><select data-vk="depot" ${ro?"disabled":""}>${opt(x.depot)}</select></td><td><select data-vk="depot_end" ${ro?"disabled":""}>${opt(x.depot_end)}</select></td>
           <td><select data-vk="fuel" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${x.fuel===f?"selected":""}>${f}</option>`).join("")}</select></td>
           <td><input class="num" inputmode="decimal" data-vk="range_km" value="${esc(x.range_km??"")}" ${ro?"disabled":""}></td></tr>`}).join("")+`</tbody></table>`;}
   else if(t==="password"){
@@ -595,6 +628,10 @@ $("#setBody").addEventListener("input",e=>{
     if(k==="lat"&&/^\s*-?\d+(\.\d+)?\s*[,\s]\s*-?\d+(\.\d+)?\s*$/.test(el.value)){const [a,b]=el.value.split(/[,\s]+/).filter(Boolean);r.lat=a;r.lon=b;showTab(tab);return}
     r[k]=el.value}
   else if(el.dataset.def){draft.defaults[el.dataset.def]={...(draft.defaults[el.dataset.def]||{}),[el.dataset.c]:el.value||null}}
+  else if(el.dataset.defl){draft.defaults[el.dataset.defl]=el.value.split(",").map(x=>x.trim()).filter(Boolean)}
+  else if(el.dataset.vb){const v=el.closest("tr").dataset.v,x=draft.vehicles[v]={...(draft.vehicles[v]||{})};
+    if(el.value==="__auto"){delete x.branch;delete x.branch_confirmed} else {x.branch=el.value;x.branch_confirmed=true}
+    if(!Object.keys(x).length) delete draft.vehicles[v]}
   else if(el.dataset.vk){const v=el.closest("tr").dataset.v,x=draft.vehicles[v]={...(draft.vehicles[v]||{})};if(el.value) x[el.dataset.vk]=el.value; else delete x[el.dataset.vk];if(!Object.keys(x).length) delete draft.vehicles[v]}
 });
 $("#setBody").addEventListener("click",async e=>{
@@ -608,6 +645,10 @@ $("#setBody").addEventListener("click",async e=>{
     catch(err){look={i,html:`<span class="msg err">החיפוש לא זמין כרגע. אפשר להדביק קישור או מספרים.</span>`}}
     showTab(tab);return}
   if(e.target.dataset.pick!=null&&look){const x=LOOKRES[+e.target.dataset.pick],r=draft[tab][look.i];r.lat=(+x.lat).toFixed(6);r.lon=(+x.lon).toFixed(6);look={i:look.i,html:`<span class="msg ok">נבחר: ${esc(x.display_name)}</span>`};showTab(tab);return}
+  if(e.target.id==="brAll"){let n=0;
+    for(const v of D.vehicles){const x=draft.vehicles[v.veh]||{},ab=autoBranch(v);if(!x.branch_confirmed&&ab){draft.vehicles[v.veh]={...x,branch:ab,branch_confirmed:true};n++}}
+    if(!n){$("#setMsg").className="msg";$("#setMsg").textContent="אין שיוכים אוטומטיים לאישור";return}
+    showTab(tab);await $("#setSave").onclick();return}
   if(e.target.id==="addRow"){(draft[tab]=draft[tab]||[]).push({id:uid()});showTab(tab)}
   if(e.target.dataset.del!=null){draft[tab].splice(+e.target.dataset.del,1);showTab(tab)}
   if(e.target.id==="chPw"){const msg=$("#setMsg");msg.className="msg";
@@ -632,7 +673,7 @@ $("#bSettings").onclick=openSettings;
 $("#gantt").addEventListener("click",e=>{const r=e.target.closest(".row");if(!r)return;sel=r.dataset.v;pick=null;document.querySelectorAll(".row.sel").forEach(x=>x.classList.remove("sel"));r.classList.add("sel");side(sel)});
 $("#gantt").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){const r=e.target.closest(".row");if(r){e.preventDefault();r.click()}}});
 document.querySelectorAll(".seg .btn").forEach(b=>b.onclick=()=>{document.querySelectorAll(".seg .btn").forEach(x=>x.classList.remove("on"));b.classList.add("on");cls=b.dataset.cls;render()});
-$("#q").oninput=render; $("#sort").onchange=render; $("#day").onchange=e=>loadDay(e.target.value);
+$("#q").oninput=render; $("#sort").onchange=render; $("#br").onchange=render; $("#day").onchange=e=>loadDay(e.target.value);
 addEventListener("resize",()=>{clearTimeout(window._rt);window._rt=setTimeout(render,150)});
 $("#bToday").onclick=()=>loadDay(today); $("#bYest").onclick=()=>loadDay(yest);
 const QP=new URLSearchParams(location.search);
