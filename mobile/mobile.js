@@ -11,6 +11,7 @@
     cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+    route: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h8.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H16"/></svg>',
     house: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg>',
   };
 
@@ -30,7 +31,10 @@
       <div class="m-tile"><span>ק״מ ריקים</span><b id="mtE">–</b></div>
       <div class="m-tile"><span>ק״מ תגבור</span><b id="mtR">–</b></div>
     </div>
-    <label class="m-search">${ICON.search}<input type="search" id="mQ" placeholder="חיפוש מספר רכב" aria-label="חיפוש מספר רכב" inputmode="numeric" autocomplete="off"></label>
+    <div class="m-srow"><label class="m-search">${ICON.search}<input type="search" id="mQ" placeholder="רכב או קו" aria-label="חיפוש: מספר רכב או מספר קו" inputmode="numeric" autocomplete="off"></label>
+      <button type="button" class="m-findb" id="mFind" aria-haspopup="dialog" title="חיפוש נסיעה: קו, כיוון ושעה">${ICON.route}<span>חיפוש נסיעה</span></button></div>
+    <button type="button" class="m-linef" id="mLineF" hidden></button>
+    <button type="button" class="m-lineq" id="mLineQ" hidden></button>
     <div id="mList" role="list" aria-label="רכבים"></div>
   </section>`);
   const vbar = el(`<div class="m-only" id="mVehBar"><button type="button" id="mBack" aria-label="חזרה לרשימת הרכבים">${ICON.back}</button><h2 id="mVehTitle"></h2></div>`);
@@ -64,7 +68,13 @@
   $("#mYest").onclick = () => $("#bYest").click();
   $("#mToday").onclick = () => $("#bToday").click();
   $("#mDay").onchange = e => { $("#day").value = e.target.value; fire("#day", "change"); };
-  $("#mQ").oninput = e => { $("#q").value = e.target.value; $("#q").oninput(); };
+  // a line number typed in the phone search does not pop the full-screen trip panel while typing: it offers it as a row
+  $("#mQ").oninput = e => { const q = e.target.value; $("#q").value = q;
+    if (typeof lineQ === "function" && lineQ(q.trim()) && !knownVeh(q.trim())) render(); else $("#q").oninput(); };
+  const findArg = () => { const q = $("#q").value.trim(); return typeof lineQ === "function" && lineQ(q) ? q : null; };
+  $("#mFind").onclick = () => openFind(findArg(), true);
+  $("#mLineQ").onclick = () => openFind(findArg(), false);
+  $("#mLineF").onclick = () => $("#bLineF").click();
   $("#mFilter").onclick = () => { drawSheet(); sheet.showModal(); };
   $("#mGo").onclick = () => sheet.close();
   sheet.addEventListener("click", e => { if (e.target === sheet) sheet.close(); }); // tap on the backdrop
@@ -129,6 +139,8 @@
     if (document.activeElement !== $("#mQ")) $("#mQ").value = $("#q").value;
     const n = (cls ? 1 : 0) + ($("#br").value ? 1 : 0) + ($("#sort").value !== "veh" ? 1 : 0);
     $("#mFn").textContent = n ? `(${n})` : ""; $("#mFilter").classList.toggle("on", n > 0);
+    const lf = $("#bLineF"); $("#mLineF").hidden = !lf || lf.hidden; if (lf && !lf.hidden) { $("#mLineF").textContent = lf.textContent; $("#mLineF").setAttribute("aria-label", "הסרת הסינון: " + lf.textContent.replace(" ✕", "")); }
+    const lq = findArg(); $("#mLineQ").hidden = !lq; if (lq) $("#mLineQ").textContent = `נסיעות של קו ${lq} ביום הזה ›`;
     drawList();
   }
 
@@ -176,6 +188,9 @@
   wrap("render", drawTop);
   wrap("side", () => { if (on()) drawVehTitle(); });
   wrap("drawSaveBar", drawSave);
+  // a trip chosen in the trip panel (full screen on the phone): close the panel and show that vehicle's day
+  { const f = window.selectVehicle; if (typeof f === "function") window.selectVehicle = async function (...a) { const r = await f.apply(this, a);
+      try { const d = $("#dlgFind"); if (r && on() && d && d.open) { d.close(); openVeh(); } } catch (e) { console.warn("mobile selectVehicle", e); } return r; }; }
   wrap("loadDay", () => { if (on()) closeVeh(false); });
   MQ.addEventListener("change", () => { if (!on()) { document.body.classList.remove("m-veh", "m-saving"); sheet.open && sheet.close(); } else { drawTop(); } drawSave(); });
   drawSave();

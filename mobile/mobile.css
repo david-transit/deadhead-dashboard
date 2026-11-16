@@ -61,6 +61,21 @@
   .m-search input:focus-visible{outline:0}
   .m-search:focus-within{outline:2px solid var(--svc);outline-offset:1px}
 
+  .m-srow{display:flex;gap:8px;margin-top:10px;align-items:stretch}
+  .m-srow .m-search{flex:1;min-width:0;margin-top:0}
+  .m-findb{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:0 12px;font:inherit;font-size:15px;color:var(--svc);cursor:pointer;white-space:nowrap;min-height:46px}
+  .m-findb svg{width:20px;height:20px;flex:none}
+  .m-linef,.m-lineq{display:flex;align-items:center;width:100%;margin-top:8px;min-height:44px;border-radius:10px;font:inherit;font-size:15px;cursor:pointer;padding:0 14px;text-align:right}
+  .m-linef{background:#FFF8E6;border:1px solid #F0C36D;color:var(--text);font-weight:500}
+  .m-lineq{background:var(--sel);border:1px solid #C5D5F0;color:var(--svc);font-weight:500}
+  #side .it.hl{box-shadow:inset 0 0 0 2px #F5C542;background:#FFF8E6!important}
+  .findpop .fdrow{min-height:48px;font-size:14px;grid-template-columns:auto 52px 1fr;grid-template-areas:"t l v" "r r r" "f f f";row-gap:2px;padding:9px 8px}
+  .findpop .fdrow>.t{grid-area:t}
+  .findpop .fdrow>b{grid-area:l;font-size:15px}
+  .findpop .fdrow>span:nth-child(3){grid-area:r;color:var(--muted);font-size:13px}
+  .findpop .fdrow>span:nth-child(4){grid-area:v;grid-column:auto;text-align:left!important;font-weight:500}
+  .findpop .fdrow>.fl{grid-area:f}
+
   /* vehicle cards */
   #mList{display:flex;flex-direction:column;gap:8px;margin-top:12px}
   .m-vc{display:flex;align-items:stretch;gap:10px;width:100%;text-align:right;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;color:var(--text);cursor:pointer}
