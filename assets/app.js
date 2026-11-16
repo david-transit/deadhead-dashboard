@@ -441,7 +441,7 @@ async function legMap(o){const {a,b,km,min,free,frm,to,title,rt}=o,[A,B]=subPair
   const row=roadGet(A,B),m=(row&&row.meta)||rt||{};
   const info=`<div class="mapkv"><span><b>${kmTxt(km)}</b> ק״מ בכביש</span><span><b>${kmTxt(ax)}</b> ק״מ בקו אווירי</span><span><b>${min==null?"–":nf(Math.round(min))}</b> דק׳ נסיעה</span>${free!=null?`<span><b>${nf(Math.round(free))}</b> דק׳ פנויות</span>`:""}</div>
     <div class="sub">${esc(frm||"")} ← ${esc(to||"")}${m.via&&m.via.id?` · דרך נקודת מעבר מאושרת: ${esc(m.via.name)}`:""}${A!==a||B!==b?" · לפי נקודת עיגון לתחנה":""}${m.fix?" · מסלול שתוקן אוטומטית (הצמדה לכביש)":""}</div>`;
-  const c=await YMAP.open({title,info,actions:o.actions||"",fit:[a,b]});if(!c) return null;
+  const c=await YMAP.open({title,info,actions:o.actions||"",fit:[a,b],back:o.back});if(!c) return null;
   c.line([a,b],{color:"#666",dash:true,weight:3,label:"קו אווירי"}).point(a,{label:"מוצא: "+(frm||""),fill:"#2E9E5B"}).point(b,{label:"יעד: "+(to||""),fill:"#C0392B"});
   if(A!==a) c.point(A,{label:"נקודת עיגון",fill:"#F1C40F",r:6}); if(B!==b) c.point(B,{label:"נקודת עיגון",fill:"#F1C40F",r:6});
   c.status("טוען מסלול…");
