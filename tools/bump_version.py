@@ -7,6 +7,8 @@ cur = re.search(r'const APP_VER="([^"]+)"', s).group(1)
 day = dt.date.today().isoformat()
 n = int(cur.split(".")[-1]) + 1 if cur.startswith(day + ".") else 1
 v = f"{day}.{n}"
-open(p, "w", encoding="utf-8").write(s.replace(f'const APP_VER="{cur}"', f'const APP_VER="{v}"'))
+s = s.replace(f'const APP_VER="{cur}"', f'const APP_VER="{v}"')
+s = re.sub(r'(src="assets/[^"?]+\.js)\?v=[^"]*"', lambda m: f'{m.group(1)}?v={v}"', s)  # local scripts
+open(p, "w", encoding="utf-8").write(s)
 json.dump({"v": v}, open(os.path.join(HERE, "version.json"), "w"))
 print(cur, "->", v)
