@@ -270,7 +270,7 @@ def build(day):
                                  if t.get(k) is not None}))
         items += dups + ghosts.pop(v, [])
         # an empty leg sits right before the trip it leads to (also when SIRI shows overlapping rides)
-        items.sort(key=lambda i: (i["end"] if i["kind"] == "empty" else i["start"], {"ghost": 0, "dup": 0, "empty": 1, "trip": 2}[i["kind"]]))
+        items.sort(key=lambda i: (i["end"] if i["kind"] == "empty" else i["start"], {"empty": 0, "ghost": 1, "dup": 1, "trip": 2}[i["kind"]]))
         f, l = ts[0], ts[-1]
         vehicles.append(dict(veh=v, cls=cls,
             first_o=[f["a"][0], f["a"][1], f["ca"]], last_d=[l["b"][0], l["b"][1], l["cb"]],
