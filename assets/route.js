@@ -119,10 +119,40 @@
       r.why = x0.why.concat(x0.s.some(m => m > SNAP_M) ? ["snap"] : [], x0.motor.some((m, i) => m && term[i]) ? ["motorway"] : []);
       return r;
     }
-    return { smart, route, analyze };
+    // approved bus-only links (via_links): also try OSRM to the link's entry + the link + OSRM from its exit, and keep it
+    // when it is shorter than the plain route and neither part has a loop. links: [{id, name, a:[lat,lon], b:[lat,lon], km,
+    // both}] already filtered by relevantLinks(). meta.vpc = the link ids considered (a cached result is stale when the set of
+    // relevant approved links changes); meta.via = {id, name, km0: plain km} when a link is used.
+    async function smartLinks(a, b, links, o) {
+      const plain = await smart(a, b, o); if (!plain || !links || !links.length) return plain && links && links.length ? { ...plain, vpc: [] } : plain;
+      let best = null;
+      for (const L of links) for (const [E, X] of L.both ? [[L.a, L.b], [L.b, L.a]] : [[L.a, L.b]]) {
+        const r1 = await smart(a, E, { terminal: [((o && o.terminal) || [true, true])[0], false] }),
+              r2 = await smart(X, b, { terminal: [false, ((o && o.terminal) || [true, true])[1]] });
+        if (!r1 || !r2 || r1.u || r2.u) continue;
+        const km = r1.km + +L.km + r2.km, min = r1.min + +L.km / 25 * 60 + r2.min;
+        if (km < plain.km - 0.05 && (!best || km < best.km)) best = { km, min, L, s: [r1.s[0], r2.s[1]] };
+      }
+      const vpc = links.map(L => L.id).sort();
+      if (!best) return { ...plain, vpc };
+      return { km: Math.round(best.km * 100) / 100, min: Math.round(best.min * 10) / 10, v: V, s: best.s, vpc,
+               via: { id: best.L.id, name: String(best.L.name).slice(0, 60), km0: plain.km } };
+    }
+    return { smart, smartLinks, route, analyze };
   }
   // a saved result that the checker refuses: U-turn / revisit / far snap that nobody looked at
+  // links worth trying for a leg a -> b: the link's middle within NEAR_KM of the straight line a-b (legs >= 0.5 km)
+  const NEAR_KM = 2;
+  function relevantLinks(a, b, links) {
+    if (!links || !links.length || !a || !b || hav(a, b) < 0.5) return [];
+    const k = Math.cos(((+a[0] + +b[0]) / 2) * rad) * 111.32, xy = p => [(+p[1]) * k, (+p[0]) * 110.57];
+    const A = xy(a), B = xy(b), dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+    return links.filter(L => { const m = xy([(+L.a[0] + +L.b[0]) / 2, (+L.a[1] + +L.b[1]) / 2]);
+      const t = Math.max(0, Math.min(1, ((m[0] - A[0]) * dx + (m[1] - A[1]) * dy) / L2));
+      return Math.hypot(m[0] - A[0] - t * dx, m[1] - A[1] - t * dy) <= NEAR_KM; });
+  }
+  const sameIds = (x, y) => JSON.stringify((x || []).slice().sort()) === JSON.stringify((y || []).slice().sort());
   const unresolved = r => !!r && ((r.u || (r.s || []).some(m => m > SNAP_M)) && !r.ok);
-  const api = { make, analyze, unresolved, V, SNAP_M, hav };
+  const api = { make, analyze, unresolved, relevantLinks, sameIds, V, SNAP_M, hav };
   if (typeof module === "object" && module.exports) module.exports = api; else root.ROUTE = api;
 })(typeof self !== "undefined" ? self : this);

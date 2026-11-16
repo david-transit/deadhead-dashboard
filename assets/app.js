@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-16.19";
+const APP_VER="2026-11-16.20";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -136,26 +136,39 @@ const sub=p=>p&&anchors().get(pk(p))||p;
 // ANCH_LOCAL_KM of the stop, e.g. drop-off platform -> departure platform): that one stays as it is
 const ANCH_LOCAL_KM=0.5;
 function subPair(a,b){let A=sub(a),B=sub(b);if(A!==a&&b&&hav(a,b)<ANCH_LOCAL_KM) A=a;if(B!==b&&a&&hav(a,b)<ANCH_LOCAL_KM) B=b;return [A,B]}
-const roadOf=(a,b)=>ROAD.get(roadKey(...subPair(a,b)))||null;
-// day legs from / to an anchored stop: road km from the anchor (pipeline km kept as km_file); "wait" until computed
-function anchorDay(J){if(!anchors().size) return J;let ch=false;
+// ---- approved bus-only links ("נקודות מעבר מאושרות", table via_links): only approved ones are used for routing.
+// A cached road km is valid only if it was computed with the same set of relevant approved links (meta.vpc). ----
+let VIAL=[], VIAOK=[];
+async function loadVia(){try{VIAL=await getRows("via_links",`select=*&${opq()}&order=created_at`)||[]}catch(e){console.warn("via links",e);VIAL=[]}
+  VIAOK=VIAL.filter(x=>x.approved_at).map(x=>({id:x.id,name:x.name,a:[+x.a_lat,+x.a_lon],b:[+x.b_lat,+x.b_lon],km:+x.link_km,both:!!x.both_ways}))}
+const linksFor=(a,b)=>ROUTE.relevantLinks(a,b,VIAOK);
+function roadGet(a,b){const r=ROAD.get(roadKey(a,b));if(!r) return null;const ls=linksFor(a,b),vpc=r.meta&&r.meta.vpc;
+  if((ls.length||(vpc&&vpc.length))&&!ROUTE.sameIds(vpc,ls.map(x=>x.id))) return null; // computed with another set of links
+  return r}
+const roadOf=(a,b)=>roadGet(...subPair(a,b));
+// day legs from / to an anchored stop (road km from the anchor) or near an approved link (road km via the link when
+// shorter): the pipeline km is kept as km_file; "wait" until the road km is computed
+function anchorDay(J){if(!anchors().size&&!VIAOK.length) return J;let ch=false;
   const vs=J.vehicles.map(v=>{let vc=false;
-    const items=v.items.map(i=>{if(i.kind!=="empty"||!i.a||!i.b||i.edited) return i;const [A,B]=subPair(i.a,i.b);if(A===i.a&&B===i.b) return i;
-      vc=true;const r=ROAD.get(roadKey(A,B));if(!r) return {...i,anch:"wait"};
-      const n={...i,km:r.km,drive_min:r.min,anch:true,km_file:i.km,rt:r.meta&&(r.meta.fix||r.meta.u)?r.meta:undefined},gap=n.end-n.start;delete n.tight;
+    const items=v.items.map(i=>{if(i.kind!=="empty"||!i.a||!i.b||i.edited) return i;const [A,B]=subPair(i.a,i.b),moved=A!==i.a||B!==i.b;
+      if(!moved&&!linksFor(A,B).length) return i;
+      const r=roadGet(A,B);if(!r){vc=true;return {...i,wait:true,anch:moved||undefined}}
+      if(!moved&&!(r.meta&&r.meta.via)) return i; // near a link but the link is not shorter: the day file stays
+      vc=true;
+      const n={...i,km:r.km,drive_min:r.min,anch:moved||undefined,km_file:i.km,rt:r.meta&&(r.meta.fix||r.meta.u||r.meta.via)?r.meta:undefined},gap=n.end-n.start;delete n.tight;
       if(!n.overlap&&n.km>2&&(n.drive_min>gap+10||gap===0||n.km/(gap/60)>100)) n.tight=true;return n});
     if(!vc) return v;ch=true;
     return {...v,items,empty_day_km:Math.round(items.filter(i=>i.kind==="empty"&&!i.overlap).reduce((s,i)=>s+(+i.km||0),0)*10)/10}});
   return ch?{...J,vehicles:vs}:J}
 function nightPairs(){const out=new Map(),put=(a,b)=>{[a,b]=subPair(a,b);out.set(roadKey(a,b),[a,b])};if(!D) return out;model();
   for(const v of D.vehicles){for(const l of vstats(v).n) if(l.a&&l.b&&!l.road) put(l.a,l.b);
-    for(const i of v.items) if(i.kind==="empty"&&(i.est||i.anch==="wait")&&i.a&&i.b) put(i.a,i.b)} // legs of edited blocks, legs waiting for an anchor route
+    for(const i of v.items) if(i.kind==="empty"&&(i.est||i.wait)&&i.a&&i.b) put(i.a,i.b)} // legs of edited blocks, legs waiting for an anchor / link route
   return out}
 let roadBusy=false,roadAgain=false,roadFail=0;
 // OSRM through assets/route.js: U-turns, revisits, far snaps and motorway snaps at terminals are detected and re-routed
 const RT=ROUTE.make({fetch:async u=>{const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),10000);
   try{const r=await fetch(u,{signal:ctl.signal});return r.json()}finally{clearTimeout(tm)}},gapMs:60});
-async function osrm(a,b){try{const r=await RT.smart(a,b);if(!r) return null;const {km,min,...meta}=r;return {km,min,meta}}catch{return null}}
+async function osrm(a,b){try{const r=await RT.smartLinks(a,b,linksFor(a,b));if(!r) return null;const {km,min,...meta}=r;return {km,min,meta}}catch{return null}}
 const roadRow=(a,b,r)=>({operator_id:OP.id,a_lat:+(+a[0]).toFixed(5),a_lon:+(+a[1]).toFixed(5),b_lat:+(+b[0]).toFixed(5),b_lon:+(+b[1]).toFixed(5),km:+(+r.km).toFixed(2),min:+(+r.min).toFixed(1),meta:r.meta||null});
 async function ensureRoad(){
   if(roadBusy){roadAgain=true;return} roadBusy=true;
@@ -388,7 +401,8 @@ function side(veh){
 // what the route check did on a leg (assets/route.js) / an anchor point used
 function routeNote(i){const r=i.rt,o=[];
   if(i.anch===true) o.push(`לפי נקודת עיגון לתחנה${i.km_file!=null&&Math.abs(i.km_file-i.km)>0.1?` (בנתוני היום: ${nf(i.km_file)} ק״מ)`:""}`);
-  else if(i.anch==="wait") o.push("נקודת עיגון: מחשב מסלול…");
+  if(i.wait) o.push("מחשב מסלול…");
+  if(r&&r.via) o.push(`דרך נקודת מעבר מאושרת: ${esc(r.via.name)} (בלי המעבר: ${nf(r.via.km0)} ק״מ)`);
   if(r&&r.fix) o.push(`מסלול תוקן אוטומטית: OSRM נצמד לכביש הלא נכון ונתן ${nf(r.km0)} ק״מ`);
   if(ROUTE.unresolved(r)) o.push(`<span style="color:var(--warn)">מסלול חשוד (פרסה או נקודה רחוקה מהכביש). אפשר להגדיר נקודת עיגון לתחנה בהגדרות</span>`);
   else if(r&&r.ok) o.push(`מסלול חשוד שנבדק: לא נמצא מסלול טוב יותר`);
@@ -405,7 +419,7 @@ const errBadge=v=>{const c=errsOf(v);return c.n?`<span class="badge errb" title=
 // ---- reinforcement trip: a service line placed inside an empty leg; the gaps before/after stay empty ----
 let pick=null;
 async function roadKm(a,b){ // shared cache, then OSRM; falls back to an estimate
-  const c=ROAD.get(roadKey(a,b)); if(c) return {...c,road:true};
+  const c=roadGet(a,b); if(c) return {...c,road:true};
   const r=await osrm(a,b); if(r){ROAD.set(roadKey(a,b),r);return {...r,road:true}}
   const km=estKm(a,b);return {km,min:estMin(km),road:false}}
 function legOf(veh,ns){const v=D.vehicles.find(x=>x.veh===veh),k=v.items.findIndex(i=>i.kind==="empty"&&i.next_sched===ns);
@@ -540,7 +554,7 @@ async function selectVehicle(veh){
 // totals, start/end) and everything else (nights, cards, branch, savings engine) is computed from them. ----
 let BLKMODE=false, SHOWORIG=false, TR=null, EDC={k:"",m:new Map(),ends:null};
 const editsOf=day=>Object.values(eff().BLK).filter(e=>e.day===day);
-function edCache(){const k=DV+"|"+ROAD.size+"|"+anchors().size;if(EDC.k!==k) EDC={k,m:new Map(),ends:null};return EDC}
+function edCache(){const k=DV+"|"+ROAD.size+"|"+anchors().size+"|"+VIAOK.map(x=>x.id).join();if(EDC.k!==k) EDC={k,m:new Map(),ends:null};return EDC}
 // the day as shown: the raw day file with the block edits of that day applied (raw when there are none)
 function effDay(day){const raw=window.DAY_DATA&&window.DAY_DATA[day];if(!raw) return null;const es=editsOf(day);if(!es.length&&!anchors().size) return raw;
   const c=edCache();if(!c.m.has(day)){const J=anchorDay(raw);c.m.set(day,es.length?DH.applyBlockEdits(J,es,{road:roadOf}):J)}return c.m.get(day)}
@@ -734,6 +748,7 @@ function showTab(t){tab=t;document.querySelectorAll("#sysTabs button").forEach(b
         :`<input data-i="${i}" data-k="${k}" value="${esc(r[k]??"")}" ${t==="stop_anchors"&&k==="name"?'list="stopNames" style="min-width:220px"':""} ${["lat","lon"].includes(k)?'class="num" inputmode="decimal" dir="ltr"':["from","to"].includes(k)?'type="time"':""} ${ro?"disabled":""}>`}</td>`).join("")}
         <td>${ro?"":`<button class="btn small danger" data-del="${i}">מחיקה</button>`}</td></tr>`).join("")+
       `</tbody></table>${rows.length?"":`<p class="muted">עוד לא הוגדר כלום.</p>`}${ro?"":`<button class="btn small" id="addRow" style="margin-top:8px">+ הוספה</button>`}`;}
+  else if(t==="via_links") h+=viaTab(ro);
   else if(t==="defaults"){const d=draft.defaults;
     h+=`<p class="hint">ברירת המחדל לכל רכב שאין לו הגדרה משלו בלשונית "רכבים".</p><table class="ed"><tr><th>סוג שירות</th><th>דלק</th></tr>`+
       ["עירוני","בינעירוני"].map(c=>`<tr><td>${c}</td><td><select data-def="fuel_by_class" data-c="${c}" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${d.fuel_by_class?.[c]===f?"selected":""}>${f}</option>`).join("")}</select></td></tr>`).join("")+
@@ -756,6 +771,41 @@ function showTab(t){tab=t;document.querySelectorAll("#sysTabs button").forEach(b
   $("#setBody").innerHTML=h;
   const vq=$("#vq"); if(vq) vq.oninput=()=>document.querySelectorAll("#vrows tr").forEach(r=>r.hidden=!r.dataset.v.includes(vq.value.trim()));
 }
+// "נקודות מעבר מאושרות": written to the table directly (not a draft). An editor proposes; only a platform admin approves
+// (enforced in the DB, private.guard_via_link). Only approved links are used for routing.
+const llTxt=(la,lo)=>`${(+la).toFixed(6)}, ${(+lo).toFixed(6)}`;
+function viaTab(ro){
+  let h=`<p class="hint">קטע כביש שמותר לאוטובוסים ולא לרכב פרטי (מחסום, כניסה לתחבורה ציבורית בלבד). המסלול מחושב עד נקודת הכניסה, דרך הקטע, ומנקודת היציאה, ונבחר רק אם הוא קצר יותר בלי פרסה. רק קטע <b>מאושר</b> משפיע על החישוב. עורך יכול להציע; רק מנהל מערכת מאשר.</p>
+    <table class="ed"><thead><tr><th>שם</th><th>כניסה</th><th>יציאה</th><th>אורך הקטע</th><th>כיוון</th><th>הערה</th><th>סטטוס</th><th></th></tr></thead><tbody>`+
+    VIAL.map(x=>`<tr><td>${esc(x.name)}</td><td dir="ltr">${esc(llTxt(x.a_lat,x.a_lon))}</td><td dir="ltr">${esc(llTxt(x.b_lat,x.b_lon))}</td><td>${nf(+x.link_km)} ק״מ</td>
+      <td>${x.both_ways?"שני הכיוונים":"כניסה ← יציאה"}</td><td>${esc(x.note||"")}</td>
+      <td>${x.approved_at?`<span class="msg ok">מאושר</span><span class="sub muted" style="display:block">${esc(x.approved_name||"")} · ${esc(String(x.approved_at).slice(0,10).split("-").reverse().join("."))}</span>`:`<span class="msg err">ממתין לאישור</span>`}</td>
+      <td>${PLATFORM&&!x.approved_at?`<button class="btn small" data-vapprove="${esc(x.id)}">אישור</button>`:""}${!ro&&(!x.approved_at||PLATFORM)?`<button class="btn small danger" data-vdel="${esc(x.id)}">מחיקה</button>`:""}</td></tr>`).join("")+
+    `</tbody></table>${VIAL.length?"":`<p class="muted">עוד לא הוגדר כלום.</p>`}`;
+  if(!ro) h+=`<fieldset class="viaadd"><legend>הצעת קטע חדש</legend>
+    <div class="field"><label for="vaName">שם</label><input id="vaName" maxlength="80"></div>
+    <div class="field"><label for="vaA">נקודת כניסה (קו רוחב, קו אורך)</label><input id="vaA" dir="ltr" placeholder="31.871098, 35.134394"></div>
+    <div class="field"><label for="vaB">נקודת יציאה (קו רוחב, קו אורך)</label><input id="vaB" dir="ltr" placeholder="31.865956, 35.140284"></div>
+    <div class="field"><label for="vaKm">אורך הקטע בק״מ (ריק = לפי קו אווירי × 1.2)</label><input id="vaKm" class="num" inputmode="decimal" dir="ltr"></div>
+    <label class="acck"><input type="checkbox" id="vaBoth"> מותר בשני הכיוונים</label>
+    <div class="field"><label for="vaNote">הערה</label><input id="vaNote" maxlength="300"></div>
+    <button class="btn small" id="vaAdd">הצעה</button></fieldset>`;
+  return h}
+async function viaChanged(msg){await loadVia();EDC.k="";showTab("via_links");render();ensureRoad();if(msg){$("#setMsg").className="msg ok";$("#setMsg").textContent=msg}}
+$("#setBody").addEventListener("click",async e=>{const t=e.target,M=$("#setMsg");
+  try{
+    if(t.dataset.vapprove){if(!confirm("לאשר את הקטע? מרגע האישור הוא משמש לחישוב המרחקים של כל המשתמשים.")) return;
+      await sb(`/rest/v1/via_links?id=eq.${encodeURIComponent(t.dataset.vapprove)}&${opq()}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({approved_at:new Date().toISOString()})});
+      await viaChanged("הקטע אושר")}
+    else if(t.dataset.vdel){if(!confirm("למחוק את הקטע?")) return;
+      await delRows("via_links",`id=eq.${encodeURIComponent(t.dataset.vdel)}&${opq()}`);await viaChanged("הקטע נמחק")}
+    else if(t.id==="vaAdd"){const A=parseLoc($("#vaA").value),B=parseLoc($("#vaB").value),name=$("#vaName").value.trim();
+      if(!name||!A||!B){M.className="msg err";M.textContent="צריך שם, נקודת כניסה ונקודת יציאה (קו רוחב, קו אורך)";return}
+      const km=parseFloat($("#vaKm").value)||+(hav([+A[0],+A[1]],[+B[0],+B[1]])*1.2).toFixed(3);
+      if(!(km>0&&km<=20)){M.className="msg err";M.textContent="אורך הקטע לא תקין";return}
+      await sb("/rest/v1/via_links",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({operator_id:OP.id,name,a_lat:+A[0],a_lon:+A[1],b_lat:+B[0],b_lon:+B[1],link_km:km,both_ways:$("#vaBoth").checked,note:$("#vaNote").value.trim()||null})});
+      await viaChanged("ההצעה נשמרה. היא תשמש לחישוב אחרי אישור מנהל מערכת")}
+  }catch(err){M.className="msg err";M.textContent="הפעולה נכשלה: "+errText(err)}});
 document.querySelectorAll("#sysTabs button").forEach(b=>b.onclick=()=>{$("#setMsg").textContent="";look=null;showTab(b.dataset.tab)});
 $("#setBody").addEventListener("input",e=>{
   const el=e.target;
@@ -1043,7 +1093,7 @@ async function unlock(){
   if(!OP){gateMode("noaccess");return false}
   const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k||!k.keys||!Object.keys(k.keys).length) throw new Error("no_key");
   CKEYS={};for(const [kid,v] of Object.entries(k.keys)) CKEYS[kid]=await crypto.subtle.importKey("raw",b64(v),"AES-GCM",false,["decrypt"]);
-  applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad(),loadEnds(),loadChoices()]); drawSaveBar();
+  applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad(),loadEnds(),loadChoices(),loadVia()]); drawSaveBar();
   // the day loads behind the gate while the logo intro is still playing
   if(!days.length) $("#gantt").innerHTML='<div class="empty-state">אין עדיין נתונים למפעיל הזה</div>';
   else loadDay(days.includes(QP.get("day"))?QP.get("day"):days.includes(yest)?yest:days[days.length-1],()=>{
