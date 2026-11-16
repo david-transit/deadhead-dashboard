@@ -33,7 +33,7 @@
     { key: "max_added_wait_min", label: "המתנה נוספת מקסימלית לעומת היום", unit: "דק'", type: "num", dir: "max", group: "זמנים", min: 0 },
     { key: "max_wait_min", label: "המתנה מקסימלית בנקודת החלפה (ריק = ללא הגבלה)", unit: "דק'", type: "num", dir: "max", group: "זמנים", min: 0, nullable: true },
     { key: "blocked_windows", label: "חלונות זמן חסומים", type: "windows", dir: "windows", group: "זמנים",
-      help: "לדוגמה 13:00–16:00 (החלפות נהגים ותדלוק)." },
+      help: "לדוגמה מ־13:00 עד 16:00 (החלפות נהגים ותדלוק)." },
     { key: "blocked_mode", label: "חלון חסום חל על", type: "enum", dir: "enum", group: "זמנים",
       options: [["span", "כל טווח ההחלפה"], ["junction", "רק נקודות ההחלפה"]] },
     { key: "require_dcp", label: "החלפה רק בנקודת החלפת נהגים (מההגדרות)", type: "bool", dir: "require", group: "נהגים" },

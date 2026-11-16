@@ -241,9 +241,9 @@
         ${r || S.detail ? bodyHtml(r) : ""}
         <div class="sv-why">
           <b>למה לא?</b> <span class="muted">בדיקת שני רכבים מסוימים:</span>
-          <input id="svPA" inputmode="numeric" placeholder="רכב א'" aria-label="רכב א'" size="10">
-          <input id="svPB" inputmode="numeric" placeholder="רכב ב'" aria-label="רכב ב'" size="10">
-          <button class="btn small" data-act="why" ${S.busy ? "disabled" : ""}>בדיקה</button>
+          <span class="sv-whyin"><input id="svPA" class="sv-in" inputmode="numeric" placeholder="רכב א'" aria-label="רכב א'">
+          <input id="svPB" class="sv-in" inputmode="numeric" placeholder="רכב ב'" aria-label="רכב ב'">
+          <button class="btn small" data-act="why" ${S.busy ? "disabled" : ""}>בדיקה</button></span>
         </div>`;
     }
     const fmtDay = d => d ? d.slice(8, 10) + "." + d.slice(5, 7) : "";
@@ -355,18 +355,18 @@
       if (m.type === "enum") return `<select id="${id}" ${data} ${dis}>${m.options.map(([v, l]) => `<option value="${v}" ${v === val ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
       if (m.type === "windows") {
         const ws = val || [];
-        return `<div class="sv-wins">${ws.map((w, i) => `<span class="sv-win"><input type="time" ${data} data-win="${i}" data-end="from" value="${esc(w.from)}" ${dis} aria-label="משעה">–<input type="time" ${data} data-win="${i}" data-end="to" value="${esc(w.to)}" ${dis} aria-label="עד שעה">${dis ? "" : `<button class="btn small" data-act="del-win" data-i="${i}" ${line ? `data-line="${esc(line)}"` : ""} aria-label="מחיקת חלון">✕</button>`}</span>`).join("") || `<span class="muted">אין</span>`}
+        return `<div class="sv-wins">${ws.map((w, i) => `<span class="sv-win"><span class="muted">מ־</span><input type="time" ${data} data-win="${i}" data-end="from" value="${esc(w.from)}" ${dis} aria-label="משעה"><span class="muted">עד</span><input type="time" ${data} data-win="${i}" data-end="to" value="${esc(w.to)}" ${dis} aria-label="עד שעה">${dis ? "" : `<button class="btn small" data-act="del-win" data-i="${i}" ${line ? `data-line="${esc(line)}"` : ""} aria-label="מחיקת חלון">✕</button>`}</span>`).join("") || `<span class="muted">אין</span>`}
           ${dis ? "" : `<button class="btn small" data-act="add-win" ${line ? `data-line="${esc(line)}"` : ""}>הוספת חלון</button>`}</div>`;
       }
-      return `<input type="number" id="${id}" class="num" ${data} value="${val == null ? "" : val}" ${m.min != null ? `min="${m.min}"` : ""} ${m.max != null ? `max="${m.max}"` : ""} step="${m.step || 1}" ${dis}>${m.unit ? ` <span class="muted">${esc(m.unit)}</span>` : ""}`;
+      return `<span class="sv-numw"><input type="number" id="${id}" class="sv-num" ${data} value="${val == null ? "" : val}" ${m.min != null ? `min="${m.min}"` : ""} ${m.max != null ? `max="${m.max}"` : ""} step="${m.step || 1}" ${dis}>${m.unit ? `<span class="muted">${esc(m.unit)}</span>` : ""}</span>`;
     }
     function rulesHtml(ro) {
       const R = E.normalizeRuleset(S.draft), groups = [...new Set(E.RULES_META.map(m => m.group))];
-      const opRows = groups.map(g => `<tr class="sv-group"><th colspan="3">${esc(g)}</th></tr>` + E.RULES_META.filter(m => m.group === g && m.key !== "enabled").map(m => {
+      const opRows = groups.map(g => `<div class="sv-group">${esc(g)}</div>` + E.RULES_META.filter(m => m.group === g && m.key !== "enabled").map(m => {
         const v = R.operator[m.key], changed = JSON.stringify(v) !== JSON.stringify(E.DEFAULT_RULES[m.key]);
-        return `<tr><td><label for="sv_${m.key}">${esc(m.label)}</label>${m.help ? `<div class="hint">${esc(m.help)}</div>` : ""}</td>
-          <td>${fieldHtml(m, v, { ro })}</td>
-          <td>${changed ? `<button class="btn small" data-act="reset-op" data-key="${m.key}" ${ro ? "disabled" : ""} title="ברירת מחדל: ${esc(defText(m))}">איפוס</button>` : `<span class="muted sv-nw">ברירת מחדל</span>`}</td></tr>`;
+        return `<div class="sv-rule"><div class="sv-lab"><label for="sv_${m.key}">${esc(m.label)}</label>${m.help ? `<div class="hint">${esc(m.help)}</div>` : ""}</div>
+          <div class="sv-ctl">${fieldHtml(m, v, { ro })}</div>
+          <div class="sv-def">${changed ? `<button class="btn small" data-act="reset-op" data-key="${m.key}" ${ro ? "disabled" : ""} title="ברירת מחדל: ${esc(defText(m))}">איפוס</button>` : `<span class="muted">ברירת מחדל</span>`}</div></div>`;
       }).join("")).join("");
       const lineKeys = Object.keys(R.lines).concat(Object.keys(S.draft.lines).filter(l => !R.lines[l])).filter((x, i, a) => a.indexOf(x) === i)
         .sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0) || a.localeCompare(b));
@@ -374,12 +374,13 @@
         const o = S.draft.lines[l] || {};
         return `<div class="sv-line"><div class="sv-line-h"><b>קו ${esc(l)}</b> <span class="muted">${Object.keys(o).length ? Object.keys(o).length + " כללים עוקפים" : "יורש הכול"}</span>
           ${ro ? "" : `<button class="btn small danger" data-act="del-line" data-line="${esc(l)}">הסרת העקיפות של הקו</button>`}</div>
-          <table class="ed sv-ltab"><thead><tr><th>כלל</th><th>עקיפה</th><th>ערך (אפור = יורש מהמפעיל)</th></tr></thead><tbody>${E.RULES_META.filter(m => !m.operatorOnly && m.key !== "blocked_mode").map(m => {
+          <div class="hint">מסמנים "עקיפה" כדי לקבוע ערך לקו הזה. בלי סימון הקו יורש את ערך המפעיל (מוצג באפור).</div>
+          ${E.RULES_META.filter(m => !m.operatorOnly && m.key !== "blocked_mode").map(m => {
             const ov = m.key in o;
-            return `<tr><td>${esc(m.label)}</td>
-              <td class="sv-ovc"><input type="checkbox" data-ov="${m.key}" data-line="${esc(l)}" ${ov ? "checked" : ""} ${ro ? "disabled" : ""} aria-label="עקיפה של ${esc(m.label)} בקו ${esc(l)}"></td>
-              <td class="${ov ? "" : "sv-inh"}">${fieldHtml(m, ov ? o[m.key] : R.operator[m.key], { line: l, ro, inherited: !ov })}</td></tr>`;
-          }).join("")}</tbody></table></div>`;
+            return `<div class="sv-rule sv-lrule"><div class="sv-lab">${esc(m.label)}</div>
+              <label class="sv-ov"><input type="checkbox" data-ov="${m.key}" data-line="${esc(l)}" ${ov ? "checked" : ""} ${ro ? "disabled" : ""}> עקיפה<span class="sv-sr"> של ${esc(m.label)} בקו ${esc(l)}</span></label>
+              <div class="sv-ctl ${ov ? "" : "sv-inh"}">${fieldHtml(m, ov ? o[m.key] : R.operator[m.key], { line: l, ro, inherited: !ov })}</div></div>`;
+          }).join("")}</div>`;
       }).join("");
       const avail = S.lines.filter(l => !S.draft.lines[l]);
       return `<section class="panel sv-rulesbox" aria-label="כללים">
@@ -391,10 +392,10 @@
         </div>
         <div class="hint">כללי המפעיל חלים על כל הקווים. כלל של קו מחליף את ערך המפעיל לאותו קו; כשבדיקה נוגעת בכמה קווים, הערך המחמיר מביניהם קובע.</div>
         <div class="sv-rules-grid">
-          <div><h4>ברירות מחדל של המפעיל ${ro ? "" : `<button class="btn small" data-act="reset-all">איפוס הכול</button>`}</h4>
-            <table class="ed"><tbody>${opRows}</tbody></table></div>
+          <div><h4 class="sv-h4">ברירות מחדל של המפעיל ${ro ? "" : `<button class="btn small" data-act="reset-all">איפוס הכול</button>`}</h4>
+            <div class="sv-rlist">${opRows}</div></div>
           <div><h4>עקיפות לפי קו</h4>
-            ${ro ? "" : `<div class="sv-addline"><input id="svAddLine" list="svLines" placeholder="מספר קו" aria-label="מספר קו להוספה" size="8"><datalist id="svLines">${avail.map(l => `<option value="${esc(l)}">`).join("")}</datalist>
+            ${ro ? "" : `<div class="sv-addline"><input id="svAddLine" class="sv-in" list="svLines" placeholder="מספר קו" aria-label="מספר קו להוספה"><datalist id="svLines">${avail.map(l => `<option value="${esc(l)}">`).join("")}</datalist>
               <button class="btn small" data-act="add-line">הוספת קו</button></div>`}
             ${lineCards || `<div class="muted">אין עקיפות. כל הקווים יורשים את כללי המפעיל.</div>`}
           </div>
