@@ -31,7 +31,9 @@ const USER = /^[a-z0-9._-]{3,32}$/;
 const admin = createClient(SB_URL, SRK, { auth: { persistSession: false, autoRefreshToken: false } });
 const emailOf = (u: string) => `${u}@${DOMAIN}`;
 const cleanUser = (u: unknown) => String(u ?? "").trim().toLowerCase();
-const okPw = (p: unknown) => typeof p === "string" && p.length >= 10 && p.length <= 72;
+// password policy (David, 2026-11-16; same as Supabase Auth settings): at least 8 characters, a letter and a digit
+const okPw = (p: unknown) => typeof p === "string" && p.length >= 8 && p.length <= 72 && /[A-Za-z]/.test(p) && /[0-9]/.test(p);
+const PW_RULE_HE = "לפחות 8 תווים, עם אותיות ומספרים";
 const cleanName = (n: unknown) => String(n ?? "").trim().slice(0, 80);
 
 const anonClient = () => createClient(SB_URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -439,7 +441,7 @@ Deno.serve(async (req) => {
         throw new Fail("bad_input");
     }
   } catch (e) {
-    if (e instanceof Fail) return out({ error: e.code }, e.status);
+    if (e instanceof Fail) return out(e.code === "weak_password" ? { error: e.code, detail: PW_RULE_HE } : { error: e.code }, e.status);
     if (/last_platform_admin/.test(String((e as Error)?.message || ""))) return out({ error: "last_platform_admin" }, 409);
     console.error("manage_users", b.action, e);
     return out({ error: "server_error" }, 500);
