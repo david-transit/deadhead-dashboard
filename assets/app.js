@@ -77,6 +77,7 @@ function applyOperator(){
   $("#bCtl").hidden=!canManage();
   $("#who").innerHTML=`${esc((PROFILE&&(PROFILE.display_name||PROFILE.username))||"")} ▾<br>${PLATFORM?"מנהל מערכת":esc(ROLEHE[ROLE]||"")}`;
   $("#meSec").hidden=!PLATFORM;
+  {const vt=$('#sysTabs [data-tab="via_links"]');if(vt) vt.hidden=!PLATFORM}
   setTopMin(lsGet(prefKey("topmin"))==="1",false); applyDense();
 }
 document.getElementById("opSel").onchange=e=>{lsSet("ys_op",e.target.value);location.replace(location.pathname+"?op="+encodeURIComponent(e.target.value))};
@@ -936,7 +937,7 @@ function showTab(t){tab=t;document.querySelectorAll("#sysTabs button").forEach(b
         :`<input data-i="${i}" data-k="${k}" value="${esc(r[k]??"")}" ${t==="stop_anchors"&&k==="name"?'list="stopNames" style="min-width:220px"':""} ${["lat","lon"].includes(k)?'class="num" inputmode="decimal" dir="ltr"':["from","to"].includes(k)?'type="time"':""} ${ro?"disabled":""}>`}</td>`).join("")}
         <td>${ro?"":`<button class="btn small danger" data-del="${i}">מחיקה</button>`}</td></tr>`).join("")+
       `</tbody></table>${rows.length?"":`<p class="muted">עוד לא הוגדר כלום.</p>`}${ro?"":`<button class="btn small" id="addRow" style="margin-top:8px">+ הוספה</button>`}`;}
-  else if(t==="via_links") h+=viaTab(ro);
+  else if(t==="via_links") h+=PLATFORM?viaTab(ro):`<p class="hint">רק מנהל מערכת מנהל את נקודות המעבר. אפשר להציע נקודת מעבר מתוך "בעיות מסלול".</p>`;
   else if(t==="defaults"){const d=draft.defaults;
     h+=`<p class="hint">ברירת המחדל לכל רכב שאין לו הגדרה משלו בלשונית "רכבים".</p><table class="ed"><tr><th>סוג שירות</th><th>דלק</th></tr>`+
       ["עירוני","בינעירוני"].map(c=>`<tr><td>${c}</td><td><select data-def="fuel_by_class" data-c="${c}" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${d.fuel_by_class?.[c]===f?"selected":""}>${f}</option>`).join("")}</select></td></tr>`).join("")+
@@ -968,7 +969,7 @@ function viaTab(ro){
     VIAL.map(x=>`<tr><td>${esc(x.name)}</td><td dir="ltr">${esc(llTxt(x.a_lat,x.a_lon))}</td><td dir="ltr">${esc(llTxt(x.b_lat,x.b_lon))}</td><td>${nf(+x.link_km)} ק״מ</td>
       <td>${x.both_ways?"שני הכיוונים":"כניסה ← יציאה"}</td><td>${esc(x.note||"")}</td>
       <td>${x.approved_at?`<span class="msg ok">מאושר</span><span class="sub muted" style="display:block">${esc(x.approved_name||"")} · ${esc(String(x.approved_at).slice(0,10).split("-").reverse().join("."))}</span>`:`<span class="msg err">ממתין לאישור</span>`}</td>
-      <td>${PLATFORM&&!x.approved_at?`<button class="btn small" data-vapprove="${esc(x.id)}">אישור</button>`:""}${!ro&&(!x.approved_at||PLATFORM)?`<button class="btn small danger" data-vdel="${esc(x.id)}">מחיקה</button>`:""}</td></tr>`).join("")+
+      <td><button class="btn small" data-vmap="${esc(x.id)}">מפה</button> ${PLATFORM&&!x.approved_at?`<button class="btn small" data-vapprove="${esc(x.id)}">אישור</button>`:""}${!ro&&(!x.approved_at||PLATFORM)?`<button class="btn small danger" data-vdel="${esc(x.id)}">מחיקה</button>`:""}</td></tr>`).join("")+
     `</tbody></table>${VIAL.length?"":`<p class="muted">עוד לא הוגדר כלום.</p>`}`;
   if(!ro) h+=`<fieldset class="viaadd"><legend>הצעת קטע חדש</legend>
     <div class="field"><label for="vaName">שם</label><input id="vaName" maxlength="80"></div>
@@ -979,9 +980,50 @@ function viaTab(ro){
     <div class="field"><label for="vaNote">הערה</label><input id="vaNote" maxlength="300"></div>
     <button class="btn small" id="vaAdd">הצעה</button></fieldset>`;
   return h}
+// map of one link: an affected pair of the day (the one with the most empty legs; first the pairs whose cached route
+// already uses the link) drawn twice: "המצב הקיים" (route without the link) and "המצב המאושר" (through the link, along
+// via_links.geom). The km of both come from the same route check as the dashboard (assets/route.js).
+const linkObj=x=>({id:x.id,name:x.name,a:[+x.a_lat,+x.a_lon],b:[+x.b_lat,+x.b_lon],km:+x.link_km,both:!!x.both_ways,line:Array.isArray(x.geom)&&x.geom.length>1?x.geom:null});
+// pairs of the day near the link; est = km saved by the link by a rough estimate (straight lines x1.3 to the entry and
+// from the exit), uses = the cached route already goes through it
+function viaPairs(lk){const g=new Map();if(!D) return [];
+  for(const v of D.vehicles) for(const i of v.items){if(i.kind!=="empty"||i.overlap||!i.a||!i.b||i.km==null) continue;
+    const [A,B]=subPair(i.a,i.b);if(!ROUTE.relevantLinks(A,B,[lk]).length) continue;
+    const k=pk(A)+">"+pk(B);let x=g.get(k);
+    if(!x){const r=roadGet(A,B),uses=!!(r&&r.meta&&r.meta.via&&r.meta.via.id===lk.id);
+      const est=Math.max(...(lk.both?[[lk.a,lk.b],[lk.b,lk.a]]:[[lk.a,lk.b]]).map(([E,X])=>i.km-(1.3*hav(A,E)+lk.km+1.3*hav(X,B))));
+      x={A,B,frm:i.frm,to:i.to,km:i.km,n:0,uses,est,row:r};g.set(k,x)}x.n++}
+  return [...g.values()].filter(p=>p.uses||p.est>0.5).sort((p,q)=>(q.uses-p.uses)||q.n-p.n||q.est-p.est)}
+async function viaMap(id){const x=VIAL.find(v=>v.id===id);if(!x) return;const lk=linkObj(x),ps=viaPairs(lk);
+  const back=()=>{$("#dlgSet").showModal();showTab("via_links")};
+  $("#dlgSet").close();
+  const ln=lk.line||[lk.a,lk.b],st=x.approved_at?"מאושר":"ממתין לאישור",nl=ps.reduce((s,p)=>s+p.n,0),nu=ps.filter(p=>p.uses);
+  const cnt=!ps.length?`<div class="sub">אין כרגע נסיעות שעוברות כאן (${esc(dl(D.day))})</div>`
+    :`<div class="sub">${esc(dl(D.day))}: ${nf(nl)} נסיעות ריקות ב־${nf(ps.length)} צמדים צפויות לעבור דרך הקטע${nu.length?` (${nf(nu.reduce((s,p)=>s+p.n,0))} מהן ב־${nf(nu.length)} צמדים כבר מחושבות דרכו)`:", לפי הערכה"+(x.approved_at?"":". החישוב המדויק אחרי האישור")}</div>`;
+  const head=`<div class="mapkv"><span>קטע <b>${kmTxt(lk.km)}</b> ק״מ</span><span>${lk.both?"שני הכיוונים":"כניסה ← יציאה"}</span></div>${cnt}`;
+  const c=await YMAP.open({title:`${x.name} · ${st}`,info:head,fit:[...ln],back});if(!c) return;
+  const drawLink=(E,X,l)=>{c.line(l,{color:"#8E44AD",weight:7,label:"הקטע לתחבורה ציבורית"}).point(E,{label:"כניסה לקטע",fill:"#8E44AD",r:5}).point(X,{label:"יציאה מהקטע",fill:"#8E44AD",r:5})};
+  if(!ps.length){drawLink(lk.a,lk.b,ln);c.fit(ln);c.status("אין כרגע נסיעות שעוברות כאן");return}
+  // the first of the top pairs that really goes through the link (cached, else the same route check as the dashboard)
+  let p=null,after=null,km0=null;
+  for(const q of ps.slice(0,4)){if(!c.open) return;c.status(`מחשב את המסלול של ${q.frm} ← ${q.to}…`);
+    if(q.uses){p=q;after={km:+q.row.km,via:q.row.meta.via};km0=q.row.meta.via.km0;break}
+    try{const r=await RT.smartLinks(q.A,q.B,[lk]);if(r&&r.via&&r.via.id===lk.id){p=q;after=r;km0=r.via.km0;break}}catch{}}
+  if(!c.open) return;
+  if(!p){drawLink(lk.a,lk.b,ln);c.fit(ln);c.info(head+`<div class="sub">בצמדים שנבדקו הקטע לא מקצר את המסלול</div>`);c.status("");return}
+  c.point(p.A,{label:"מוצא: "+(p.frm||""),fill:"#2E9E5B"}).point(p.B,{label:"יעד: "+(p.to||""),fill:"#C0392B"});
+  try{const [E,X,l]=linkDir(lk,after.via,p.A,p.B);
+    const [g0,g1,g2]=await Promise.all([YMAP.osrmLine(p.A,p.B),YMAP.osrmLine(p.A,E),YMAP.osrmLine(X,p.B)]);
+    c.line(g0,{color:"#C0392B",weight:5,dash:true,label:`המצב הקיים (בלי הקטע): ${kmTxt(km0)} ק״מ`})
+     .line(g1,{color:"#1F5FBF",weight:5,label:`המצב המאושר (דרך הקטע): ${kmTxt(after.km)} ק״מ`}).line(g2,{color:"#1F5FBF",weight:5});
+    drawLink(E,X,l);
+    c.info(head+`<div class="sub"><b>${esc(p.frm)} ← ${esc(p.to)}</b> (${nf(p.n)} נסיעות): ${kmTxt(km0)} ק״מ בלי הקטע, ${kmTxt(after.km)} ק״מ דרכו</div>`);
+    c.fit([...g0,...g1,...g2,...l]);c.status("")}
+  catch{c.status("לא ניתן לטעון את המסלול מהשרת",true);drawLink(lk.a,lk.b,ln)}}
 async function viaChanged(msg){await loadVia();EDC.k="";showTab("via_links");render();ensureRoad();if(msg){$("#setMsg").className="msg ok";$("#setMsg").textContent=msg}}
 $("#setBody").addEventListener("click",async e=>{const t=e.target,M=$("#setMsg");
   try{
+    if(t.dataset.vmap){viaMap(t.dataset.vmap);return}
     if(t.dataset.vapprove){if(!confirm("לאשר את הקטע? מרגע האישור הוא משמש לחישוב המרחקים של כל המשתמשים.")) return;
       await sb(`/rest/v1/via_links?id=eq.${encodeURIComponent(t.dataset.vapprove)}&${opq()}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({approved_at:new Date().toISOString()})});
       await viaChanged("הקטע אושר")}
@@ -1080,10 +1122,10 @@ async function drawCtl(){
     `</tbody></table>
     <h4>משתמש חדש</h4>
     <form class="inv" id="ctlNew" autocomplete="off">
+      <div class="field"><label for="nOp">גישה ל־</label><select id="nOp">${PLATFORM?'<option value="platform">מנהל מערכת (כל המפעילים)</option>':""}${AO.map(o=>`<option value="${esc(o.id)}" ${o.id===OP.id?"selected":""}>${esc(o.name)}</option>`).join("")}</select></div>
       <div class="field"><label for="nUser">שם משתמש (אנגלית/ספרות)</label><input id="nUser" dir="ltr" required pattern="[A-Za-z0-9._\\-]{3,32}" style="width:170px" autocomplete="off"></div>
       <div class="field"><label for="nName">שם לתצוגה</label><input id="nName" style="width:170px"></div>
-      <div class="field" id="nOpBox"><label for="nOp">מפעיל</label><select id="nOp">${AO.map(o=>`<option value="${esc(o.id)}" ${o.id===OP.id?"selected":""}>${esc(o.name)}</option>`).join("")}</select></div>
-      <div class="field"><label for="nRole">הרשאה</label>${roleSel("viewer",'id="nRole"').replace("</select>",PLATFORM?'<option value="platform">מנהל מערכת</option></select>':"</select>")}</div>
+      <div class="field" id="nRoleBox"><label for="nRole">הרשאה</label>${roleSel("viewer",'id="nRole"')}</div>
       <div class="field"><label for="nPw">סיסמה זמנית</label><div style="display:flex;gap:4px"><input id="nPw" dir="ltr" required minlength="8" style="width:150px" autocomplete="new-password"><button type="button" class="btn small" id="nGen">הצעה</button></div></div>
       <button class="btn primary">יצירת משתמש</button>
     </form>
@@ -1093,7 +1135,7 @@ async function drawCtl(){
 async function ctlDo(body,okText){cmsg("שומר…");try{await fnCall(body);await drawCtl();cmsg(okText,"ok");return true}catch(e){cmsg(errText(e),"err");return false}}
 $("#bCtl").onclick=()=>{CTL=null;$("#dlgCtl").showModal();drawCtl()};
 $("#ctlClose").onclick=()=>$("#dlgCtl").close();
-$("#ctlBody").addEventListener("change",e=>{const t=e.target;if(t.id==="nRole"){$("#nOpBox").hidden=t.value==="platform";return}
+$("#ctlBody").addEventListener("change",e=>{const t=e.target;if(t.id==="nOp"){$("#nRoleBox").hidden=t.value==="platform";return}
   const tr=t.closest("tr");if(!tr) return;
   if(t.dataset.mrole) ctlDo({action:"set_membership",user_id:tr.dataset.u,operator_id:t.dataset.mrole,role:t.value},`ההרשאה של ${tr.dataset.name} עודכנה`);
   if(t.dataset.madd!=null&&t.value) ctlDo({action:"set_membership",user_id:tr.dataset.u,operator_id:t.value,role:"viewer"},`${tr.dataset.name} קיבל גישת צפייה ל${opName(t.value)}`)});
@@ -1115,8 +1157,8 @@ $("#ctlBody").addEventListener("click",async e=>{const t=e.target,tr=t.closest("
 });
 $("#ctlBody").addEventListener("submit",async e=>{e.preventDefault();const user=$("#nUser").value.trim().toLowerCase(),pw=$("#nPw").value;
   if(!USERRE.test(user)){cmsg(ERR.bad_username,"err");return} if(weakPw(pw)){cmsg(ERR["Password should be"],"err");return}
-  const role=$("#nRole").value;
-  if(await ctlDo({action:"create",username:user,display_name:$("#nName").value.trim(),...(role==="platform"?{}:{operator_id:$("#nOp").value}),role,password:pw},""))
+  const op=$("#nOp").value,role=op==="platform"?"platform":$("#nRole").value;
+  if(await ctlDo({action:"create",username:user,display_name:$("#nName").value.trim(),...(role==="platform"?{}:{operator_id:op}),role,password:pw},""))
     cmsg(`נוצר המשתמש ${user} עם הסיסמה הזמנית ${pw} . העבר לו את שניהם. בכניסה הראשונה הוא יבחר סיסמה חדשה.`,"ok")});
 
 // ---- trip search: "who ran line L, direction X, at about HH:MM?" over the day as shown (block edits + drafts included) ----
