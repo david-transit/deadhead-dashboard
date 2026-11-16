@@ -3,3 +3,4 @@
 # Every row needs David's approval. A change rebuilds the graph (it is part of the graph cache key).
 # type,id,ignore,reason,approved_by,date
 way,314079121,maxweight,"חכם יצחק עמדי, מנהרה מתחת לכביש 1 (maxweight=4.6): שירות קיים עובר - קווים 154/152/59 של דרך אגד, GPS 15.11",David,2026-11-16
+way,601129691,maxheight,"רמפת מחלף הראל לכביש 1 מערבה (trunk_link חד־כיווני, maxheight=3.9): שירות קיים - 19 נסיעות על הרמפה עצמה ב־15.11 (עד 8 מ׳ מהרמפה), כולל דרך אגד; בבדיקה הרחבה (20 מ׳, 10-15.11) 576 מעברים של דרך אגד",David,2026-11-17
