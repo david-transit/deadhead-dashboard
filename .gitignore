@@ -1,6 +1,10 @@
+# plaintext data and secrets are never committed
 data/*.json
-design/
 config/
-*.py
+pipeline/cache/
+*.tmp
+__pycache__/
+# local-only work files
+design/
 image-prompt.md
 *.sh
