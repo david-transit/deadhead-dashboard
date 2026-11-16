@@ -705,18 +705,22 @@ async function unlock(p){
   const k=await rpc("get_data_key",{p_password:p}); if(!k) return false;
   CKEY=await crypto.subtle.importKey("raw",b64(k),"AES-GCM",false,["decrypt"]);
   setPw(p); await Promise.all([loadSettings(),loadRoad()]);
-  logoHome(); document.body.classList.remove("locked"); $("#gate").remove();
-  if(!days.length){$("#gantt").innerHTML='<div class="empty-state">אין נתונים</div>';return true}
-  loadDay(days.includes(QP.get("day"))?QP.get("day"):days.includes(yest)?yest:days[days.length-1],()=>{
+  // the day loads behind the gate while the logo intro is still playing
+  if(!days.length) $("#gantt").innerHTML='<div class="empty-state">אין נתונים</div>';
+  else loadDay(days.includes(QP.get("day"))?QP.get("day"):days.includes(yest)?yest:days[days.length-1],()=>{
     const v=QP.get("veh"); if(v){sel=v;render();document.querySelector(`.row[data-v="${CSS.escape(v)}"]`)?.scrollIntoView({block:"center"})}});
+  await introEnd;
+  logoHome(); document.body.classList.remove("locked"); $("#gate").remove();
   return true;
 }
 let SETUP=false;
 // entry screen intro: the header logo moves into the gate, plays large, then the password form fades in
 const LOGO=$("#logoBtn"), LOGO_HOME=[LOGO.parentNode,LOGO.nextSibling];
 function logoHome(){if(LOGO.parentNode!==LOGO_HOME[0]){LOGO_HOME[0].insertBefore(LOGO,LOGO_HOME[1]);LOGO.removeAttribute("aria-hidden");LOGO.tabIndex=0}}
-function gateIntro(){const g=$("#gate");let done=false;
-  const show=()=>{if(done) return;done=true;clearTimeout(tm);removeEventListener("keydown",show,true);g.removeEventListener("pointerdown",show);g.classList.add("ready");$("#gpw").focus()};
+let introEnd=Promise.resolve(), introOver=false, AUTO=false;
+const showForm=()=>{const g=$("#gate");if(g&&!g.classList.contains("ready")){g.classList.add("ready");$("#gpw").focus()}};
+function gateIntro(){const g=$("#gate");let done=false,res;introEnd=new Promise(r=>res=r);
+  const show=()=>{if(done) return;done=true;introOver=true;clearTimeout(tm);removeEventListener("keydown",show,true);g.removeEventListener("pointerdown",show);res();if(!AUTO) showForm()};
   g.insertBefore(LOGO,g.firstChild); LOGO.setAttribute("aria-hidden","true"); LOGO.tabIndex=-1; g.classList.add("intro");
   window.playLogo(); const tm=setTimeout(show,window.LOGO_MS);
   addEventListener("keydown",show,true); g.addEventListener("pointerdown",show);}
@@ -729,12 +733,13 @@ $("#gateForm").addEventListener("submit",async e=>{
   }catch(err){m.className="msg err";m.textContent=errText(err);$("#gateBtn").disabled=false;$("#gpw").select()}
 });
 (async()=>{
-  if(PW){ try{ if(await unlock(PW)) return }catch(e){} setPw(null) }
-  gateIntro();
+  if(PW){ AUTO=true; gateIntro(); // saved password: play the intro, then straight to the dashboard
+    try{ if(await unlock(PW)) return }catch(e){} setPw(null); AUTO=false; if(introOver) showForm() }
+  else gateIntro();
   try{ if(!(await rpc("has_edit_password",{}))){SETUP=true;
     $("#gateFields").insertAdjacentHTML("afterend",`<div class="field"><label for="gpw2">אימות סיסמה</label><input id="gpw2" type="password" autocomplete="new-password" required></div>`);
     $("#gateBtn").textContent="קביעת סיסמה וכניסה";} }catch(e){}
-  $("#gpw").focus();
+  if(introOver) $("#gpw").focus();
 })();
 </script>
 </body>
