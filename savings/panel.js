@@ -48,7 +48,7 @@
     async function loadRules() {
       try {
         const rows = await host.getRows("rule_sets", `select=scope,line_key,rules,updated_at&operator_id=eq.${host.operatorId}`) || [];
-        const rs = { operator: {}, lines: {} };
+        const rs = { operator: {}, lines: Object.create(null) }; // no prototype keys from line_key (L10)
         for (const r of rows) {
           if (r.scope === "operator") rs.operator = r.rules || {};
           else if (r.scope === "line" && r.line_key) rs.lines[r.line_key] = r.rules || {};
