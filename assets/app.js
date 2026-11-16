@@ -144,6 +144,19 @@ let VIAL=[], VIAOK=[];
 async function loadVia(){try{VIAL=await getRows("via_links",`select=*&${opq()}&order=created_at`)||[]}catch(e){console.warn("via links",e);VIAL=[]}
   VIAOK=VIAL.filter(x=>x.approved_at).map(x=>({id:x.id,name:x.name,a:[+x.a_lat,+x.a_lon],b:[+x.b_lat,+x.b_lon],km:+x.link_km,both:!!x.both_ways}))}
 const linksFor=(a,b)=>ROUTE.relevantLinks(a,b,VIAOK);
+// ---- "מסלול תקין" (table route_ok): an origin -> destination pair (after the stop anchor, like the road_cache key) that
+// an editor marked as a correct route, for all days. It hides only "עיקוף גדול" / "מסלול חשוד" of that pair, while the
+// computed km stays within 0.3 km and 10% of the km at marking time; otherwise the warning comes back as
+// "השתנה מאז שאושר". Marking and cancelling go through the drafts (DRAFT.rok: key -> row, null = cancel the saved row). ----
+let ROK=[],ROKM=null,ROKV=-1;
+async function loadRok(){try{ROK=await getRows("route_ok",`select=*&${opq()}&order=created_at`)||[]}catch(e){console.warn("route ok",e);ROK=[]}ROKM=null}
+const rokKey=(A,B)=>pk(A)+">"+pk(B), rokRowKey=r=>rokKey([r.a_lat,r.a_lon],[r.b_lat,r.b_lon]);
+function rokM(){if(ROKM&&ROKV===DV) return ROKM;const m=new Map();
+  for(const r of ROK) m.set(rokRowKey(r),{...r,km:+r.km});
+  for(const [k,x] of Object.entries(DRAFT.rok||{})) if(x==null) m.delete(k); else m.set(k,{...x,draft:true});
+  ROKM=m;ROKV=DV;return m}
+const rokOf=i=>i.a&&i.b?rokM().get(rokKey(...subPair(i.a,i.b))):null;
+const rokChanged=(r,km)=>{const d=Math.abs(km-r.km);return d>0.3||d>0.1*r.km};
 function roadGet(a,b){const r=ROAD.get(roadKey(a,b));if(!r) return null;const ls=linksFor(a,b),vpc=r.meta&&r.meta.vpc;
   if((ls.length||(vpc&&vpc.length))&&!ROUTE.sameIds(vpc,ls.map(x=>x.id))) return null; // computed with another set of links
   return r}
@@ -477,7 +490,7 @@ const rpKey=g=>D.day+"|"+g.k;
 function routeProblems(){const g=new Map();if(!D) return [];
   for(const v of D.vehicles) for(const i of v.items){const p=legProblems(i);if(!p) continue;
     const k=pk(i.a)+">"+pk(i.b);let x=g.get(k);
-    if(!x){x={k,a:i.a,b:i.b,frm:i.frm,to:i.to,km:i.km,air:hav(i.a,i.b),min:i.drive_min,kinds:new Set(),legs:[]};g.set(k,x)}
+    if(!x){const [A,B]=subPair(i.a,i.b);x={k,a:i.a,b:i.b,A,B,ok:rokOf(i),frm:i.frm,to:i.to,km:i.km,air:hav(i.a,i.b),min:i.drive_min,kinds:new Set(),legs:[]};g.set(k,x)}
     p.forEach(t=>x.kinds.add(t));x.legs.push({veh:v.veh,start:i.start,end:i.end,km:i.km,min:i.drive_min,i})}
   return [...g.values()].sort((x,y)=>(y.kinds.has("time")-x.kinds.has("time"))||y.legs.length-x.legs.length||y.km/Math.max(y.air,.1)-x.km/Math.max(x.air,.1))}
 function drawRouteBar(){RP=routeProblems();const b=$("#rwBar");if(!b) return;const nl=RP.reduce((s,g)=>s+g.legs.length,0);
@@ -485,7 +498,7 @@ function drawRouteBar(){RP=routeProblems();const b=$("#rwBar");if(!b) return;con
   const dl=$("#dlgRw");if(dl&&dl.open&&!(dl.contains(document.activeElement)&&/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName))) drawRouteList()}
 document.addEventListener("click",e=>{if(e.target.closest("[data-rwopen]")) openRouteList()});
 function rwDlg(){let d=$("#dlgRw");if(d) return d;d=document.createElement("dialog");d.id="dlgRw";d.className="rwdlg";d.setAttribute("aria-labelledby","rwT");
-  d.innerHTML=`<div class="maphd"><h3 id="rwT">בעיות מסלול</h3><button type="button" class="btn small" data-rwclose>✕ סגירה</button></div><p class="hint">נסיעות ריקות שלא נכנסות בזמן, עם עיקוף גדול (כביש פי 2.5 מקו אווירי ויותר מ־4 ק״מ) או מסלול חשוד. כל שורה היא זוג מוצא ← יעד. "שלח לבדיקה" ו"הערה" נשמרים כטיוטה ונשלחים ב"שמירה".</p><div id="rwList"></div>`;
+  d.innerHTML=`<div class="maphd"><h3 id="rwT">בעיות מסלול</h3><button type="button" class="btn small" data-rwclose>✕ סגירה</button></div><p class="hint">נסיעות ריקות שלא נכנסות בזמן, עם עיקוף גדול (כביש פי 2.5 מקו אווירי ויותר מ־4 ק״מ) או מסלול חשוד. כל שורה היא זוג מוצא ← יעד. "שלח לבדיקה", "הערה" ו"מסלול תקין" נשמרים כטיוטה ונשלחים ב"שמירה". "מסלול תקין" מסתיר את העיקוף / המסלול החשוד של הזוג בכל הימים (לא את "לא נכנס בזמן").</p><div id="rwList"></div>`;
   document.body.appendChild(d);d.addEventListener("click",rwClick);return d}
 function openRouteList(){const d=rwDlg();drawRouteList();if(!d.open) d.showModal();d.querySelector("[data-rwclose]").focus()}
 function drawRouteList(){const box=$("#rwList");if(!box) return;
@@ -493,21 +506,39 @@ function drawRouteList(){const box=$("#rwList");if(!box) return;
     return `<section class="rwg" data-rg="${n}"><h4>${esc(g.frm)} ← ${esc(g.to)}</h4>
       <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span><span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
       <div class="rwveh">${g.legs.map(x=>`<button type="button" class="btn small" data-rgv="${esc(x.veh)}">${esc(x.veh)} · ${fmt(x.start)}</button>`).join("")}</div>
-      <div class="rwact"><button type="button" class="btn small" data-rgmap="${n}">הצג על מפה</button>${canEdit()?`<button type="button" class="btn small" data-rgvia="${n}">הצע נקודת מעבר</button><button type="button" class="btn small" data-rgnote="${n}">הערה</button><button type="button" class="btn small primary" data-rgsend="${n}" ${dr||RSENT[k]?"disabled":""}>${RSENT[k]?"נשלח לבדיקה":dr?"בטיוטה":"שלח לבדיקה"}</button>`:""}</div>
+      <div class="rwact"><button type="button" class="btn small" data-rgmap="${n}">הצג על מפה</button>${canEdit()?`<button type="button" class="btn small" data-rgvia="${n}">הצע נקודת מעבר</button><button type="button" class="btn small" data-rgnote="${n}">הערה</button><button type="button" class="btn small primary" data-rgsend="${n}" ${dr||RSENT[k]?"disabled":""}>${RSENT[k]?"נשלח לבדיקה":dr?"בטיוטה":"שלח לבדיקה"}</button>${g.kinds.has("detour")||g.kinds.has("route")||g.kinds.has("okchg")?`<button type="button" class="btn small" data-rgok="${n}">מסלול תקין</button>`:""}`:""}</div>
+      ${g.ok&&g.kinds.has("okchg")?`<div class="sub edtm">סומן כמסלול תקין ב־${kmTxt(g.ok.km)} ק״מ; עכשיו ${kmTxt(g.km)} ק״מ. אפשר לסמן שוב</div>`:""}
       ${dr?`<div class="sub edtm">טיוטה: ${esc(dr.text||"לבדיקה")}${dr.proposed_via?" · הוצעה נקודת מעבר":""} · תישלח ב"שמירה"</div>`:""}
-      <div class="rwnote" hidden><textarea rows="2" maxlength="2000" aria-label="הערה על המסלול" placeholder="בלי שמות של אנשים ובלי כתובות פרטיות"></textarea><button type="button" class="btn small" data-rgnoteok="${n}">הוספה לטיוטה</button></div></section>`}).join(""):`<p class="muted">אין בעיות מסלול ביום הזה.</p>`}
+      <div class="rwnote" hidden><textarea rows="2" maxlength="2000" aria-label="הערה על המסלול" placeholder="בלי שמות של אנשים ובלי כתובות פרטיות"></textarea><button type="button" class="btn small" data-rgnoteok="${n}">הוספה לטיוטה</button></div>
+      <div class="rwnote rwok" hidden><textarea rows="2" maxlength="300" aria-label="הערה למסלול התקין (לא חובה)" placeholder="הערה (לא חובה)"></textarea><button type="button" class="btn small primary" data-rgokok="${n}">סימון כתקין (טיוטה)</button></div></section>`}).join(""):`<p class="muted">אין בעיות מסלול ביום הזה.</p>`;
+  box.insertAdjacentHTML("beforeend",rokFoot())}
+// the pairs marked as correct (all days) + cancel; a saved row cancelled in the drafts is listed until "שמירה"
+let ROKOPEN=false;
+function rokFoot(){const m=rokM(),gone=ROK.filter(r=>DRAFT.rok[rokRowKey(r)]===null);if(!m.size&&!gone.length) return "";
+  const row=(k,r,st)=>`<li><span>${esc(r.origin||"?")} ← ${esc(r.destination||"?")} · ${kmTxt(+r.km)} ק״מ${r.note?` · ${esc(r.note)}`:""}${st?` <span class="sub edtm">${st}</span>`:""}</span>${canEdit()?`<button type="button" class="btn small" data-rokdel="${esc(k)}">${st==="יבוטל בשמירה"?"החזרה":"בטל"}</button>`:""}</li>`;
+  return `<div class="rokfoot"><span>${nf(m.size)} צמדים סומנו כתקינים</span> · <button type="button" class="linkbtn" data-rokshow aria-expanded="${ROKOPEN}">${ROKOPEN?"הסתר":"הצג"}</button></div>
+    <ul class="roklist" ${ROKOPEN?"":"hidden"}>${[...m].map(([k,r])=>row(k,r,r.draft?"בטיוטה":"")).join("")}${gone.map(r=>row(rokRowKey(r),r,"יבוטל בשמירה")).join("")}</ul>`}
+function rokSet(k,val){if(!canEdit()) return;const saved=ROK.some(r=>rokRowKey(r)===k);
+  if(val===undefined) delete DRAFT.rok[k]; else if(val===null&&!saved) delete DRAFT.rok[k]; else DRAFT.rok[k]=val;
+  touched();render();drawRouteList()}
 function rpDraft(g,patch){const k=rpKey(g),cur=DRAFT.reports[k]||{day:D.day,origin:g.frm,destination:g.to,
     legs:g.legs.map(x=>({veh:x.veh,start:x.start,end:x.end,km:x.km,min:x.min})),text:null,proposed_via:null};
   DRAFT.reports[k]={...cur,...patch};touched();drawRouteList()}
 async function rwClick(e){const t=e.target,d=$("#dlgRw");
   if(t.closest("[data-rwclose]")||t===d){d.close();return}
-  const n=t.dataset.rgmap??t.dataset.rgvia??t.dataset.rgnote??t.dataset.rgsend??t.dataset.rgnoteok;const g=n!=null?RP[+n]:null;
+  if(t.dataset.rokshow!=null){ROKOPEN=!ROKOPEN;drawRouteList();$("#rwList [data-rokshow]")?.focus();return}
+  if(t.dataset.rokdel!=null){const k=t.dataset.rokdel;rokSet(k,DRAFT.rok[k]===null||(DRAFT.rok[k]&&!ROK.some(r=>rokRowKey(r)===k))?undefined:null);$("#rwList [data-rokshow]")?.focus();return}
+  const n=t.dataset.rgmap??t.dataset.rgvia??t.dataset.rgnote??t.dataset.rgsend??t.dataset.rgnoteok??t.dataset.rgok??t.dataset.rgokok;const g=n!=null?RP[+n]:null;
   if(t.dataset.rgv){d.close();await selectVehicle(t.dataset.rgv);document.querySelector(`.row[data-v="${CSS.escape(t.dataset.rgv)}"]`)?.scrollIntoView({block:"nearest"});return}
   if(!g) return;
   if(t.dataset.rgmap!=null){d.close();const x=g.legs[0];legMap({a:g.a,b:g.b,km:g.km,min:g.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:`בעיית מסלול: ${g.legs.length} נסיעות`,back:openRouteList})}
   else if(t.dataset.rgnote!=null){const w=t.closest(".rwg").querySelector(".rwnote");w.hidden=!w.hidden;if(!w.hidden) w.querySelector("textarea").focus()}
   else if(t.dataset.rgnoteok!=null){const tx=t.closest(".rwnote").querySelector("textarea").value.trim();if(tx) rpDraft(g,{text:tx})}
   else if(t.dataset.rgsend!=null) rpDraft(g,{})
+  else if(t.dataset.rgok!=null){const w=t.closest(".rwg").querySelector(".rwok");w.hidden=!w.hidden;if(!w.hidden) w.querySelector("textarea").focus()}
+  else if(t.dataset.rgokok!=null){const note=t.closest(".rwok").querySelector("textarea").value.trim()||null;
+    rokSet(rokKey(g.A,g.B),{a_lat:+(+g.A[0]).toFixed(5),a_lon:+(+g.A[1]).toFixed(5),b_lat:+(+g.B[0]).toFixed(5),b_lon:+(+g.B[1]).toFixed(5),km:+(+g.km).toFixed(2),origin:g.frm,destination:g.to,note});
+    d.querySelector("[data-rwclose]").focus()}
   else if(t.dataset.rgvia!=null){d.close();const x=g.legs[0];
     const c=await legMap({a:g.a,b:g.b,km:g.km,min:g.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:"הצעת נקודת מעבר",back:openRouteList,actions:`<p class="hint">לחצו על המפה: קודם נקודת הכניסה לקטע שמותר לאוטובוסים, ואז נקודת היציאה. ההצעה נשמרת ברשימת "נקודות מעבר מאושרות" וממתינה לאישור מנהל מערכת; היא לא משפיעה על החישוב עד שתאושר.</p>`});
     if(!c) return; const pts=[];c.status("בחרו את נקודת הכניסה");
@@ -532,11 +563,12 @@ function routeNote(i){const r=i.rt,o=[];
 const ERRK=[["rp","בעיית מסלול"],["inc","לא הושלמה לפי GPS"],["over","חפיפה"],["dup","התחלה כפולה"]];
 // a route problem on an empty leg: "time" = needs more driving time than it has (tight), "detour" = road > 2.5 x air
 // and > 4 km, "route" = suspicious route the route check could not fix
-const RPTXT={time:"לא נכנס בזמן",detour:"עיקוף גדול",route:"מסלול חשוד"};
-function legProblems(i){if(i.kind!=="empty"||i.overlap||i.km==null) return null;const p=[];
+const RPTXT={time:"לא נכנס בזמן",detour:"עיקוף גדול",route:"מסלול חשוד",okchg:"השתנה מאז שאושר"};
+function legProblems(i){if(i.kind!=="empty"||i.overlap||i.km==null) return null;let p=[];
   if(i.tight) p.push("time");
   const ax=i.a&&i.b?hav(i.a,i.b):null; if(ax!=null&&i.km>4&&i.km>2.5*Math.max(ax,0.01)) p.push("detour");
   if(ROUTE.unresolved(i.rt)) p.push("route");
+  if(p.some(t=>t!=="time")){const ok=rokOf(i);if(ok){if(rokChanged(ok,i.km)) p.push("okchg"); else p=p.filter(t=>t==="time")}}
   return p.length?p:null}
 function errsOf(v){const c={inc:0,over:0,dup:0,rp:0};
   for(const i of v.items){if(i.kind==="dup") c.dup++;else if(i.kind==="trip"&&i.incomplete) c.inc++;
@@ -610,7 +642,7 @@ function chooseNight(N,veh,mode){
   setDraft("ovn",N+"|"+veh,{day:N,veh,mode:"depot",detail:{depot_in:li&&idOf(li.depot),depot_out:lo&&idOf(lo.depot)},note:null});render();ensureRoad()}
 // ---- drafts: every edit (settings, reinforcement, overnight, branch, automatic reinforcement) changes the view at once
 // but nothing is written until "שמירה". Drafts stay when the day changes. value null = remove the saved value. ----
-const DRAFT={settings:{},veh:{},ovn:{},rein:{},autor:{},blk:{},rules:{},notes:{},reports:{}}; // rules: {set: savings rule set} (savings panel)
+const DRAFT={settings:{},veh:{},ovn:{},rein:{},autor:{},blk:{},rules:{},notes:{},reports:{},rok:{}}; // rules: {set: savings rule set} (savings panel)
 let DV=0,EFF=null,EFFV=-1;
 const same=(a,b)=>JSON.stringify(a??null)===JSON.stringify(b??null);
 const baseOf=t=>t==="ovn"?OVN:t==="rein"?REIN:t==="autor"?AUTOR:t==="blk"?BLK:t==="notes"?NOTES:null;
@@ -654,6 +686,12 @@ async function saveAll(){
     const n=nDraft(),reps=Object.values(DRAFT.reports).filter(Boolean);
     if(reps.length){await sb("/rest/v1/route_reports",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(reps.map(r=>({operator_id:OP.id,...r})))});
       for(const k of Object.keys(DRAFT.reports)) RSENT[k]=true; DRAFT.reports={};}
+    const rk=Object.entries(DRAFT.rok);
+    if(rk.length){const sv=new Map(ROK.map(r=>[rokRowKey(r),r])),del=rk.map(([k])=>sv.get(k)).filter(Boolean).map(r=>r.id);
+      if(del.length) await delRows("route_ok",`${opq()}&id=in.(${del.join(",")})`);
+      const ins=rk.filter(([,x])=>x).map(([,x])=>({operator_id:OP.id,a_lat:x.a_lat,a_lon:x.a_lon,b_lat:x.b_lat,b_lon:x.b_lon,km:x.km,origin:x.origin,destination:x.destination,note:x.note}));
+      if(ins.length) await sb("/rest/v1/route_ok",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(ins)});
+      DRAFT.rok={};await loadRok()}
     if(DRAFT.rules.set) await rpc("save_rule_set",{p_operator:OP.id,p_operator_rules:DRAFT.rules.set.operator||{},p_lines:DRAFT.rules.set.lines||{}});
     const res=await rpc("save_changes",{p_operator:OP.id,p_changes:ch});
     for(const x of ch.settings) S[x.key]=clone(x.value);
@@ -1226,7 +1264,7 @@ async function unlock(){
   if(!OP){gateMode("noaccess");return false}
   const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k||!k.keys||!Object.keys(k.keys).length) throw new Error("no_key");
   CKEYS={};for(const [kid,v] of Object.entries(k.keys)) CKEYS[kid]=await crypto.subtle.importKey("raw",b64(v),"AES-GCM",false,["decrypt"]);
-  applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad(),loadEnds(),loadChoices(),loadVia()]); drawSaveBar();
+  applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad(),loadEnds(),loadChoices(),loadVia(),loadRok()]); drawSaveBar();
   // the day loads behind the gate while the logo intro is still playing
   if(!days.length) $("#gantt").innerHTML='<div class="empty-state">אין עדיין נתונים למפעיל הזה</div>';
   else loadDay(days.includes(QP.get("day"))?QP.get("day"):days.includes(yest)?yest:days[days.length-1],()=>{
