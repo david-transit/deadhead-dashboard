@@ -107,6 +107,13 @@ table.ed input.num{width:110px}
 #gate{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
 #gate form{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px 28px 22px;width:100%;max-width:380px;text-align:center}
 #gate h2{margin:6px 0 4px;font-size:20px}
+#gate{flex-direction:column;gap:18px;overflow:auto}
+#gate #logoBtn{cursor:default}
+#gate #logo{height:min(55vh,480px);transition:height .5s ease}
+#gate.ready #logo{height:min(26vh,220px)}
+#gate.intro:not(.ready) form{opacity:0;visibility:hidden}
+#gate.intro.ready form{transition:opacity .5s ease}
+@media (prefers-reduced-motion:reduce){#gate #logo,#gate.intro form{transition:none}}
 #gate .field{text-align:right;margin-top:16px}
 #gate .btn{width:100%;margin-top:6px}
 body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
@@ -115,7 +122,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 </style>
 </head>
 <body class="locked">
-<div id="gate">
+<div id="gate" class="intro">
   <form id="gateForm" autocomplete="on">
     <h2>סידורי רכב ונסיעות ריקות</h2>
     <div class="muted">הכניסה בסיסמה</div>
@@ -216,7 +223,6 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <button data-tab="driver_change_points" role="tab">נקודות החלפת נהגים</button>
     <button data-tab="defaults" role="tab">ברירות מחדל</button>
     <button data-tab="vehicles" role="tab">רכבים</button>
-    <button data-tab="password" role="tab">סיסמה</button>
   </div>
   <div class="dlg-b" id="setBody"></div>
   <div class="dlg-f"><button class="btn primary" id="setSave">שמירה</button><span class="msg" id="setMsg" aria-live="polite"></span></div>
@@ -317,6 +323,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
   window.renderAt = t => { cancelAnimationFrame(raf); render(t); };
   const reduce =matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduce) render(T.total); else play();
+  window.playLogo = () => { if (reduce) render(T.total); else play(); }; window.LOGO_MS = reduce ? 0 : T.total;
   const L=document.getElementById('logoBtn'); L.addEventListener('click', play); L.addEventListener('keydown', e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();play()}});
 })();
 
@@ -333,7 +340,7 @@ async function sb(path,opt={}){
   finally{clearTimeout(tm)}
 }
 const rpc=(fn,args)=>sb("/rest/v1/rpc/"+fn,{method:"POST",body:JSON.stringify(args)});
-const ERR={wrong_password:"סיסמה שגויה",password_too_short:"הסיסמה צריכה להיות לפחות 8 תווים",too_many_attempts:"יותר מדי ניסיונות. נסה שוב בעוד 10 דקות",bad_key:"שגיאה פנימית",too_large:"הנתונים גדולים מדי",missing_line:"צריך לבחור קו לתגבור"};
+const ERR={wrong_password:"סיסמה שגויה",not_allowed:"אין הרשאה",password_too_short:"הסיסמה צריכה להיות לפחות 8 תווים",too_many_attempts:"יותר מדי ניסיונות. נסה שוב בעוד 10 דקות",bad_key:"שגיאה פנימית",too_large:"הנתונים גדולים מדי",missing_line:"צריך לבחור קו לתגבור"};
 const errText=e=>{const m=String(e&&e.message||e);for(const k in ERR) if(m.includes(k)) return ERR[k];return /abort/i.test(m)?"אין תשובה מהשרת. נסה שוב":m};
 
 // ---- state ----
@@ -589,7 +596,7 @@ let tab="depots", draft=null, look=null;
 const LOCHINT="<b>איך מכניסים מיקום:</b> בשדה \"כתובת או קישור\" כותבים כתובת רגילה (למשל: מבצע קדש, בני ברק) ולוחצים \"איתור\". אפשר גם להדביק קישור מלא מ־Waze או מגוגל מפות, או שני מספרים שהועתקו בקליק ימני בגוגל מפות. שמות מקומות כמו \"חניון אפיקים\" לא תמיד נמצאים בחיפוש, ואז עדיף קישור או כתובת. החיפוש נעשה ב־OpenStreetMap.";
 function openSettings(){draft=clone(S);look=null;$("#setMsg").textContent="";showTab("depots");$("#dlgSet").showModal()}
 function showTab(t){tab=t;document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
-  $("#setSave").hidden=t==="password"; const ro=!PW; let h=ro?`<p class="hint" style="color:var(--warn)">צפייה בלבד. כדי לערוך לוחצים על "כניסה לעריכה".</p>`:"";
+  const ro=!PW; let h=ro?`<p class="hint" style="color:var(--warn)">צפייה בלבד. כדי לערוך לוחצים על "כניסה לעריכה".</p>`:"";
   if(LISTS[t]){const L=LISTS[t],rows=draft[t]||[];
     h+=`<p class="hint">${LOCHINT}</p><p class="hint">${L.hint}</p><table class="ed"><thead><tr>${L.cols.map(c=>`<th>${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>`+
       rows.map((r,i)=>`<tr>${L.cols.map(([k])=>`<td>${k==="fuel"?`<select data-i="${i}" data-k="${k}" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${r[k]===f?"selected":""}>${f}</option>`).join("")}</select>`
@@ -613,11 +620,6 @@ function showTab(t){tab=t;document.querySelectorAll(".tabs button").forEach(b=>b
         return `<tr data-v="${esc(v.veh)}"><td>${esc(v.veh)}</td><td>${esc(v.cls)}</td><td>${brs}</td><td><select data-vk="depot" ${ro?"disabled":""}>${opt(x.depot)}</select></td><td><select data-vk="depot_end" ${ro?"disabled":""}>${opt(x.depot_end)}</select></td>
           <td><select data-vk="fuel" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${x.fuel===f?"selected":""}>${f}</option>`).join("")}</select></td>
           <td><input class="num" inputmode="decimal" data-vk="range_km" value="${esc(x.range_km??"")}" ${ro?"disabled":""}></td></tr>`}).join("")+`</tbody></table>`;}
-  else if(t==="password"){
-    h=PW?`<p class="hint">החלפת סיסמת העריכה.</p><div class="field"><label for="op">סיסמה נוכחית</label><input id="op" type="password" autocomplete="current-password"></div>
-      <div class="field"><label for="np1">סיסמה חדשה (לפחות 8 תווים)</label><input id="np1" type="password" autocomplete="new-password"></div>
-      <div class="field"><label for="np2">אימות</label><input id="np2" type="password" autocomplete="new-password"></div><button class="btn primary" id="chPw">החלפת סיסמה</button>`
-      :`<p class="hint">כדי להחליף סיסמה צריך קודם להיכנס לעריכה.</p>`;}
   $("#setBody").innerHTML=h;
   const vq=$("#vq"); if(vq) vq.oninput=()=>document.querySelectorAll("#vrows tr").forEach(r=>r.hidden=!r.dataset.v.includes(vq.value.trim()));
 }
@@ -651,10 +653,6 @@ $("#setBody").addEventListener("click",async e=>{
     showTab(tab);await $("#setSave").onclick();return}
   if(e.target.id==="addRow"){(draft[tab]=draft[tab]||[]).push({id:uid()});showTab(tab)}
   if(e.target.dataset.del!=null){draft[tab].splice(+e.target.dataset.del,1);showTab(tab)}
-  if(e.target.id==="chPw"){const msg=$("#setMsg");msg.className="msg";
-    if($("#np1").value!==$("#np2").value){msg.className="msg err";msg.textContent="הסיסמאות לא זהות";return}
-    try{const st=await rpc("set_edit_password",{p_old:$("#op").value,p_new:$("#np1").value});if(st!=="ok") throw new Error(st);setPw($("#np1").value);msg.className="msg ok";msg.textContent="הסיסמה הוחלפה"}
-    catch(err){msg.className="msg err";msg.textContent=errText(err)}}
 });
 $("#setSave").onclick=async()=>{
   const msg=$("#setMsg"); if(!PW){msg.className="msg err";msg.textContent="צריך להיכנס לעריכה";return}
@@ -681,13 +679,21 @@ async function unlock(p){
   const k=await rpc("get_data_key",{p_password:p}); if(!k) return false;
   CKEY=await crypto.subtle.importKey("raw",b64(k),"AES-GCM",false,["decrypt"]);
   setPw(p); await loadSettings();
-  document.body.classList.remove("locked"); $("#gate").remove();
+  logoHome(); document.body.classList.remove("locked"); $("#gate").remove();
   if(!days.length){$("#gantt").innerHTML='<div class="empty-state">אין נתונים</div>';return true}
   loadDay(days.includes(QP.get("day"))?QP.get("day"):days.includes(yest)?yest:days[days.length-1],()=>{
     const v=QP.get("veh"); if(v){sel=v;render();document.querySelector(`.row[data-v="${CSS.escape(v)}"]`)?.scrollIntoView({block:"center"})}});
   return true;
 }
 let SETUP=false;
+// entry screen intro: the header logo moves into the gate, plays large, then the password form fades in
+const LOGO=$("#logoBtn"), LOGO_HOME=[LOGO.parentNode,LOGO.nextSibling];
+function logoHome(){if(LOGO.parentNode!==LOGO_HOME[0]){LOGO_HOME[0].insertBefore(LOGO,LOGO_HOME[1]);LOGO.removeAttribute("aria-hidden");LOGO.tabIndex=0}}
+function gateIntro(){const g=$("#gate");let done=false;
+  const show=()=>{if(done) return;done=true;clearTimeout(tm);removeEventListener("keydown",show,true);g.removeEventListener("pointerdown",show);g.classList.add("ready");$("#gpw").focus()};
+  g.insertBefore(LOGO,g.firstChild); LOGO.setAttribute("aria-hidden","true"); LOGO.tabIndex=-1; g.classList.add("intro");
+  window.playLogo(); const tm=setTimeout(show,window.LOGO_MS);
+  addEventListener("keydown",show,true); g.addEventListener("pointerdown",show);}
 $("#gateForm").addEventListener("submit",async e=>{
   e.preventDefault(); const m=$("#gateMsg"),p=$("#gpw").value; m.className="msg"; m.textContent="בודק…"; $("#gateBtn").disabled=true;
   try{
@@ -698,6 +704,7 @@ $("#gateForm").addEventListener("submit",async e=>{
 });
 (async()=>{
   if(PW){ try{ if(await unlock(PW)) return }catch(e){} setPw(null) }
+  gateIntro();
   try{ if(!(await rpc("has_edit_password",{}))){SETUP=true;
     $("#gateFields").insertAdjacentHTML("afterend",`<div class="field"><label for="gpw2">אימות סיסמה</label><input id="gpw2" type="password" autocomplete="new-password" required></div>`);
     $("#gateBtn").textContent="קביעת סיסמה וכניסה";} }catch(e){}
