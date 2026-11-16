@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>סידורי רכב ונסיעות ריקות</title>
+<title>יאללה־סע · נסיעות ריקות</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&family=Montserrat:wght@800&family=Rubik:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -116,6 +116,15 @@ table.ed input.num{width:110px}
 @media (prefers-reduced-motion:reduce){#gate #logo,#gate.intro form{transition:none}}
 #gate .field{text-align:right;margin-top:16px}
 #gate .btn{width:100%;margin-top:6px}
+#gate .alt{display:flex;justify-content:space-between;gap:8px;margin-top:12px;font-size:13px;flex-wrap:wrap}
+.linkbtn{background:none;border:0;color:var(--svc);cursor:pointer;font:inherit;padding:2px;text-decoration:underline}
+.linkbtn.dim{color:var(--muted)}
+.oplogo{display:flex;align-items:center;padding-inline-start:14px;border-inline-start:1px solid var(--line);height:56px}
+.oplogo img{max-height:52px;max-width:170px;display:block}
+.who{font-size:12px;color:var(--muted);text-align:left;line-height:1.3}
+.copyrow{display:flex;gap:6px;margin-top:6px}.copyrow input{flex:1;direction:ltr;min-width:0}
+.inv{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}.inv .field{margin:0}
+h4{margin:18px 0 6px;font-size:15px}
 body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 @media (max-width:900px){body{height:auto}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
@@ -124,11 +133,12 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 <body class="locked">
 <div id="gate" class="intro">
   <form id="gateForm" autocomplete="on">
-    <h2>סידורי רכב ונסיעות ריקות</h2>
-    <div class="muted">הכניסה בסיסמה</div>
-    <div class="field" id="gateFields"><label for="gpw">סיסמה</label><input id="gpw" type="password" autocomplete="current-password" required></div>
+    <h2>נסיעות ריקות</h2>
+    <div class="muted" id="gateSub">כניסה למערכת</div>
+    <div id="gateFields"></div>
     <button class="btn primary" type="submit" id="gateBtn">כניסה</button>
     <div class="msg" id="gateMsg" aria-live="polite" style="margin-top:10px;min-height:1.2em"></div>
+    <div class="alt" id="gateAlt"></div>
   </form>
 </div>
 <header>
@@ -166,7 +176,8 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
   <line x1="942" y1="1083" x2="1171" y2="1083" stroke="var(--gold)" stroke-width="12"/>
   <text x="628" y="1105" text-anchor="middle" direction="rtl" font-family="Rubik, sans-serif" font-weight="500" font-size="108" textLength="565" lengthAdjust="spacingAndGlyphs" fill="var(--char)">יאללה-סע</text>
 </svg></div>
-  <div class="title"><h1>סידורי רכב ונסיעות ריקות</h1><div id="op">דרך אגד עוטף ירושלים</div></div>
+  <div class="oplogo" id="opLogo" hidden></div>
+  <div class="title"><h1>נסיעות ריקות</h1><div id="op"></div></div>
   <div class="controls">
     <button class="btn" id="bToday">היום</button>
     <button class="btn" id="bYest">אתמול</button>
@@ -177,7 +188,10 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <select id="br" aria-label="סניף"></select>
     <select id="sort" aria-label="מיון"><option value="veh">מיון: מספר רכב</option><option value="empty">מיון: הכי הרבה ק״מ ריקים</option><option value="start">מיון: שעת יציאה</option></select>
     <input type="search" id="q" placeholder="חיפוש מספר רכב" aria-label="חיפוש מספר רכב">
+    <select id="opSel" aria-label="מפעיל" hidden></select>
     <button class="btn" id="bSettings">הגדרות</button>
+    <button class="btn" id="bUsers" hidden>משתמשים</button>
+    <div class="who" id="who"></div>
     <button class="btn" id="bEdit">יציאה</button>
   </div>
 </header>
@@ -202,12 +216,9 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
   <aside class="panel" id="side" aria-live="polite"><div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div></aside>
 </main>
 
-<dialog id="dlgPw" class="small" aria-labelledby="pwTitle">
-  <form method="dialog" id="pwForm">
-    <div class="dlg-h"><h3 id="pwTitle">כניסה לעריכה</h3><button class="btn small" value="cancel" formnovalidate>סגירה</button></div>
-    <div class="dlg-b" id="pwBody"></div>
-    <div class="dlg-f"><button class="btn primary" id="pwOk" value="ok">אישור</button><span class="msg" id="pwMsg" aria-live="polite"></span></div>
-  </form>
+<dialog id="dlgUsers" aria-labelledby="usersTitle">
+  <div class="dlg-h"><h3 id="usersTitle">משתמשים</h3><button class="btn small" id="usersClose">סגירה</button></div>
+  <div class="dlg-b" id="usersBody"></div>
 </dialog>
 
 <dialog id="dlgRein" aria-labelledby="reinTitle">
@@ -328,20 +339,67 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 })();
 
 </script>
-<script src="data/days.js"></script>
 <script>
-// ---- backend (Supabase REST; the publishable key is public by design, every write goes through a password-checked function) ----
+// ---- backend: Supabase Auth (email + password) + REST. Every row is protected by RLS (operator + role);
+// the publishable key is public by design. User management runs in the manage_users Edge Function. ----
 const SB="https://xghfcdgettrcdciwwzbl.supabase.co", KEY="sb_publishable_hCBsqYekz61JY6SFfT_sjw_-wj0QGXT";
-async function sb(path,opt={}){
-  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),12000);
-  try{const r=await fetch(SB+path,{...opt,signal:ctl.signal,headers:{apikey:KEY,"Content-Type":"application/json",...(opt.headers||{})}});
-    const t=await r.text(); let j=null; try{j=t?JSON.parse(t):null}catch{}
-    if(!r.ok) throw new Error((j&&j.message)||("שגיאה "+r.status)); return j;}
-  finally{clearTimeout(tm)}
-}
+const SITE=location.origin+location.pathname, SKEY="ys_session";
+const lsGet=k=>{try{return localStorage.getItem(k)}catch{return null}}, lsSet=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch{}};
+let SES=null; try{SES=JSON.parse(lsGet(SKEY)||"null")}catch{}
+function setSes(j){SES=j?{access_token:j.access_token,refresh_token:j.refresh_token,expires_at:+j.expires_at||Math.floor(Date.now()/1000)+(+j.expires_in||3600),user:j.user||null}:null;
+  lsSet(SKEY,SES?JSON.stringify(SES):null)}
+async function http(url,opt={},ms=15000){const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),ms);
+  try{const r=await fetch(url,{...opt,signal:ctl.signal});const t=await r.text();let j=null;try{j=t?JSON.parse(t):null}catch{}
+    if(!r.ok){const e=new Error(j?[j.error_code,j.error,j.code,j.msg,j.message,j.error_description].filter(Boolean).join(" · ")||("שגיאה "+r.status):"שגיאה "+r.status);e.status=r.status;throw e}
+    return j}
+  finally{clearTimeout(tm)}}
+const authPost=(path,body,tok)=>http(SB+"/auth/v1/"+path,{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json",...(tok?{Authorization:"Bearer "+tok}:{})},body:JSON.stringify(body)});
+let refreshing=null;
+function refresh(){return refreshing??=(async()=>{try{
+    const o=JSON.parse(lsGet(SKEY)||"null"); // another tab may have refreshed already
+    if(o&&o.refresh_token!==SES.refresh_token&&o.expires_at-60>Date.now()/1000){SES=o;return}
+    setSes(await authPost("token?grant_type=refresh_token",{refresh_token:SES.refresh_token}))}
+  catch(e){if(e.status>=400&&e.status<500) setSes(null);throw e} finally{refreshing=null}})()}
+async function token(){if(!SES) throw new Error("not_signed_in");if(SES.expires_at-60<Date.now()/1000) await refresh();if(!SES) throw new Error("not_signed_in");return SES.access_token}
+async function sb(path,opt={},retry=true){
+  try{return await http(SB+path,{...opt,headers:{apikey:KEY,"Content-Type":"application/json",Authorization:"Bearer "+await token(),...(opt.headers||{})}})}
+  catch(e){if(e.status===401&&retry&&SES){await refresh();return sb(path,opt,false)}throw e}}
 const rpc=(fn,args)=>sb("/rest/v1/rpc/"+fn,{method:"POST",body:JSON.stringify(args)});
-const ERR={wrong_password:"סיסמה שגויה",not_allowed:"אין הרשאה",password_too_short:"הסיסמה צריכה להיות לפחות 8 תווים",too_many_attempts:"יותר מדי ניסיונות. נסה שוב בעוד 10 דקות",bad_key:"שגיאה פנימית",too_large:"הנתונים גדולים מדי",missing_line:"צריך לבחור קו לתגבור"};
+const getRows=(t,qs)=>sb(`/rest/v1/${t}?${qs}`);
+const upsert=(t,rows,on)=>sb(`/rest/v1/${t}?on_conflict=${on}`,{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(rows)});
+const delRows=(t,qs)=>sb(`/rest/v1/${t}?${qs}`,{method:"DELETE",headers:{Prefer:"return=minimal"}});
+const opq=()=>"operator_id=eq."+OP.id, dq=d=>"day=eq."+d, vq=v=>"veh=eq."+encodeURIComponent(v);
+const ERR={invalid_credentials:"אימייל או סיסמה שגויים","Invalid login credentials":"אימייל או סיסמה שגויים",email_not_confirmed:"החשבון עוד לא אושר. פתח את קישור ההזמנה מהמייל",
+  "row-level security":"אין לך הרשאה לשנות את זה",not_allowed:"אין לך הרשאה לפעולה הזו","42501":"אין לך הרשאה לשנות את זה",not_signed_in:"צריך להיכנס מחדש",
+  weak_password:"הסיסמה חלשה מדי. בחר סיסמה ארוכה יותר","Password should be":"הסיסמה צריכה להיות לפחות 8 תווים",same_password:"הסיסמה החדשה זהה לישנה",
+  over_email_send_rate_limit:"נשלחו יותר מדי מיילים. נסה שוב בעוד שעה","rate limit":"יותר מדי ניסיונות. נסה שוב מאוחר יותר",over_request_rate_limit:"יותר מדי ניסיונות. נסה שוב מאוחר יותר",
+  signup_disabled:"ההרשמה סגורה. רק מי שהוזמן יכול להיכנס","Signups not allowed":"ההרשמה סגורה. רק מי שהוזמן יכול להיכנס",
+  email_failed:"שליחת המייל נכשלה. אפשר ליצור קישור הזמנה ולשלוח אותו בעצמך",already_member:"המשתמש כבר משויך למפעיל הזה",not_self:"אי אפשר לשנות או להסיר את עצמך",
+  already_active:"המשתמש כבר נכנס למערכת. הוא יכול לבחור \"שכחתי סיסמה\" במסך הכניסה",bad_input:"הנתונים לא תקינים",server_error:"שגיאה בשרת. נסה שוב",
+  no_key:"אין גישה לנתוני המפעיל",too_large:"הנתונים גדולים מדי",missing_line:"צריך לבחור קו לתגבור"};
 const errText=e=>{const m=String(e&&e.message||e);for(const k in ERR) if(m.includes(k)) return ERR[k];return /abort/i.test(m)?"אין תשובה מהשרת. נסה שוב":m};
+
+// ---- operator (tenant) and role ----
+let OP=null,OPS=[],ROLE=null,PLATFORM=false,ME=null;
+const ROLEHE={admin:"מנהל",editor:"עורך",viewer:"צופה"};
+const canEdit=()=>PLATFORM||ROLE==="editor"||ROLE==="admin", canManage=()=>PLATFORM||ROLE==="admin";
+async function loadAccess(){
+  ME=SES.user&&SES.user.id?SES.user:await http(SB+"/auth/v1/user",{headers:{apikey:KEY,Authorization:"Bearer "+await token()}});
+  if(!SES.user){SES.user=ME;lsSet(SKEY,JSON.stringify(SES))}
+  const [pa,ms,ops]=await Promise.all([getRows("platform_admins","select=user_id&user_id=eq."+ME.id),getRows("memberships","select=operator_id,role&user_id=eq."+ME.id),getRows("operators","select=id,slug,name,logo_url&order=name")]);
+  PLATFORM=pa.length>0; OPS=ops||[];
+  const want=QP.get("op")||lsGet("ys_op"); OP=OPS.find(o=>o.slug===want)||OPS[0]||null;
+  ROLE=OP?(ms.find(m=>m.operator_id===OP.id)?.role||(PLATFORM?"admin":null)):null;
+  if(OP) lsSet("ys_op",OP.slug);
+}
+function applyOperator(){
+  $("#op").textContent=OP.name; document.title=`יאללה־סע · נסיעות ריקות · ${OP.name}`;
+  const lb=$("#opLogo"); lb.hidden=!OP.logo_url; lb.innerHTML=OP.logo_url?`<img src="${esc(OP.logo_url)}" alt="${esc(OP.name)}">`:"";
+  const os=$("#opSel"); os.hidden=OPS.length<2; os.innerHTML=OPS.map(o=>`<option value="${esc(o.slug)}" ${o.id===OP.id?"selected":""}>${esc(o.name)}</option>`).join("");
+  $("#bUsers").hidden=!canManage();
+  $("#who").innerHTML=`${esc(ME.email||"")}<br>${PLATFORM?"מנהל מערכת":esc(ROLEHE[ROLE]||"")}`;
+}
+document.getElementById("opSel").onchange=e=>{lsSet("ys_op",e.target.value);location.replace(location.pathname+"?op="+encodeURIComponent(e.target.value))};
 
 // ---- state ----
 const $=s=>document.querySelector(s);
@@ -351,14 +409,12 @@ const nf=n=>n==null||isNaN(n)?"–":Number(n).toLocaleString("he-IL",{maximumFra
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ymd=d=>d.toISOString().slice(0,10);
 const clone=x=>JSON.parse(JSON.stringify(x));
-let D=null,cls="",sel=null,T0=240,T1=26*60,PW=null;
+let D=null,cls="",sel=null,T0=240,T1=26*60;
 const DEF={fuel_by_class:{"עירוני":"גז","בינעירוני":"סולר"},range_km_by_fuel:{"גז":null,"סולר":null},branches:["בני ברק","ירושלים"]};
 let S={depots:[],fuel_stations:[],driver_change_points:[],defaults:clone(DEF),vehicles:{}};
 let REIN={}, OVN={}, AUTOR={};
-try{PW=sessionStorage.getItem("edit_pw")}catch{}
-const days=(window.DAYS||[]).slice().sort();
-const DAY_START_H=4; // service day D = D 04:00 … D+1 03:59 (same as pipeline/config.json)
-const now=new Date(Date.now()-new Date().getTimezoneOffset()*6e4-DAY_START_H*36e5), today=ymd(now), yest=ymd(new Date(now-864e5));
+// days of the current operator: data/<slug>/days.js (built by the pipeline); service day D = D hh:00 … D+1 hh:00 (operators.json)
+let days=[],DAY_START_H=4,today="",yest="";
 
 // ---- night trips: estimate (straight line × 1.35) until road distances are computed ----
 const hav=(a,b)=>{const R=6371,r=x=>x*Math.PI/180,dp=r(b[0]-a[0]),dl=r(b[1]-a[1]);return 2*R*Math.asin(Math.sqrt(Math.sin(dp/2)**2+Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dl/2)**2))};
@@ -375,7 +431,8 @@ const fuelFor=v=>vset(v).fuel||S.defaults.fuel_by_class?.[v.cls]||null;
 const rangeFor=v=>parseFloat(vset(v).range_km)||parseFloat(S.defaults.range_km_by_fuel?.[fuelFor(v)])||null;
 // ---- night legs by road: shared cache in Supabase (road_cache), missing pairs computed with OSRM ----
 const ROAD=new Map(), roadKey=(a,b)=>[a[0],a[1],b[0],b[1]].map(x=>(+x).toFixed(5)).join(",");
-async function loadRoad(){try{(await rpc("get_road_cache",{p_password:PW})||[]).forEach(r=>ROAD.set(roadKey([r[0],r[1]],[r[2],r[3]]),{km:+r[4],min:+r[5]}))}catch(e){console.warn("road cache",e)}}
+async function loadRoad(){try{for(let off=0;;off+=1000){const rows=await getRows("road_cache",`select=a_lat,a_lon,b_lat,b_lon,km,min&order=a_lat,a_lon,b_lat,b_lon&limit=1000&offset=${off}`)||[];
+  rows.forEach(r=>ROAD.set(roadKey([r.a_lat,r.a_lon],[r.b_lat,r.b_lon]),{km:+r.km,min:+r.min}));if(rows.length<1000) break}}catch(e){console.warn("road cache",e)}}
 function nightPairs(){const out=new Map();if(!D) return out;
   for(const v of D.vehicles) for(const l of night(v)) if(l.a&&!l.road) out.set(roadKey(l.a,l.b),[l.a,l.b]);
   return out}
@@ -388,7 +445,8 @@ async function osrm(a,b){for(let t=0;t<2;t++){const ctl=new AbortController(),tm
 async function ensureRoad(){
   if(roadBusy){roadAgain=true;return} roadBusy=true;
   try{do{roadAgain=false;const todo=[...nightPairs().values()];let buf=[];if(todo.length) render();
-    const flush=async()=>{if(!buf.length||!PW) return;const rows=buf;buf=[];try{await rpc("put_road_cache",{p_password:PW,p_rows:rows})}catch(e){console.warn("road save",e)}};
+    const flush=async()=>{if(!buf.length||!canEdit()) return;const rows=buf;buf=[];
+      try{await upsert("road_cache",rows.map(r=>({a_lat:r[0],a_lon:r[1],b_lat:r[2],b_lon:r[3],km:+(+r[4]).toFixed(2),min:+(+r[5]).toFixed(1)})),"a_lat,a_lon,b_lat,b_lon")}catch(e){console.warn("road save",e)}};
     for(let i=0;i<todo.length;i++){const [a,b]=todo[i],r=await osrm(a,b);
       if(r){ROAD.set(roadKey(a,b),r);buf.push([+(+a[0]).toFixed(5),+(+a[1]).toFixed(5),+(+b[0]).toFixed(5),+(+b[1]).toFixed(5),r.km,r.min])} else roadFail++;
       if(buf.length>=50) await flush();
@@ -403,7 +461,7 @@ async function ensureRoad(){
 // Without previous-day data: the morning leg from the depot (settings), as before. End-of-day legs are counted on the next day.
 const OVMODES=[["stay","יצא למחרת מהמקום שבו סיים"],["depot","חזר לחניון בלילה"],["rein","נסיעת תגבור"]];
 const ovMode=v=>OVN[v.veh]?.mode||"stay";
-async function loadOvernight(day){OVN={};try{(await rpc("get_overnight",{p_password:PW,p_day:day})||[]).forEach(r=>OVN[r.veh]=r)}catch(e){console.warn("overnight",e)}}
+async function loadOvernight(day){OVN={};try{(await getRows("overnight_override",`select=veh,mode,note&${opq()}&${dq(day)}`)||[]).forEach(r=>OVN[r.veh]=r)}catch(e){console.warn("overnight",e)}}
 function leg(kind,a,b,x){if(hav(a,b)<0.05) return {kind,km:0,min:0,road:true,...x}; // same place: nothing to route
   const r=ROAD.get(roadKey(a,b)),km=r?r.km:estKm(a,b);return {kind,a,b,km,min:r?r.min:estMin(km),road:!!r,...x}}
 function night(v){
@@ -433,14 +491,14 @@ function fillBr(){const bs=branches(),sig=bs.join("|");if(sig===brSig) return;br
   el.innerHTML=`<option value="">סניף: הכול</option>`+bs.map(b=>`<option value="${esc(b)}">סניף: ${esc(b)}</option>`).join("")+`<option value="__none">סניף: לא משויך</option>`;
   el.value=[...el.options].some(o=>o.value===cur)?cur:""}
 async function saveVehicles(patch){ // read-modify-write of the whole vehicles object
-  const all=await rpc("get_settings",{p_password:PW})||{}, cur={...(all.vehicles||{})};
+  const r=await getRows("settings",`select=value&${opq()}&key=eq.vehicles`)||[], cur={...((r[0]&&r[0].value)||{})};
   for(const [veh,p] of Object.entries(patch)) cur[veh]={...(cur[veh]||{}),...p};
-  const st=await rpc("save_setting",{p_password:PW,p_key:"vehicles",p_value:cur}); if(st!=="ok") throw new Error(st);
+  await saveSetting("vehicles",cur);
   S.vehicles=cur; return cur}
 const rkey=(veh,start)=>veh+"|"+start;
 // ---- automatic reinforcement: rides the bus ran in service that are not in the licensed GTFS schedule (pipeline: auto) ----
 // no decision = pending, counted as reinforcement; "confirmed" = reinforcement; "rejected" = ordinary service trip
-async function loadAutoRein(day){AUTOR={};try{(await rpc("get_auto_rein",{p_password:PW,p_day:day})||[]).forEach(r=>AUTOR[rkey(r.veh,r.start_min)]=r.status)}catch(e){console.warn("auto reinforcement",e)}}
+async function loadAutoRein(day){AUTOR={};try{(await getRows("auto_rein_status",`select=veh,start_min,status&${opq()}&${dq(day)}`)||[]).forEach(r=>AUTOR[rkey(r.veh,r.start_min)]=r.status)}catch(e){console.warn("auto reinforcement",e)}}
 const autoSt=(v,i)=>AUTOR[rkey(v.veh,i.start)]||"pending";
 const AUTOTXT={pending:"ממתין לאישור",confirmed:"אושר כתגבור",rejected:"נדחה: נספר כנסיעה רגילה בשירות"};
 function vstats(v){
@@ -454,10 +512,16 @@ function vstats(v){
 }
 
 // ---- days ----
-$("#day").innerHTML=days.map(d=>`<option value="${d}">${d.split("-").reverse().join(".")}</option>`).join("");
-$("#bToday").disabled=!days.includes(today); $("#bYest").disabled=!days.includes(yest);
-$("#bToday").title=days.includes(today)?"":"אין עדיין נתונים להיום"; $("#bYest").title=days.includes(yest)?"":"אין נתונים לאתמול";
-async function loadRein(day){REIN={};try{(await rpc("get_reinforcement",{p_password:PW,p_day:day})||[]).forEach(r=>REIN[rkey(r.veh,r.start_min)]=r)}catch(e){console.warn("reinforcement",e)}}
+const loadScript=src=>new Promise((ok,bad)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=bad;document.head.appendChild(s)});
+async function initDays(){
+  try{await loadScript(`data/${OP.slug}/days.js?v=${Math.floor(Date.now()/6e5)}`)}catch{}
+  const m=(window.OPDAYS||{})[OP.slug]||{days:[]}; days=(m.days||[]).slice().sort(); DAY_START_H=m.day_start_hour??4;
+  const now=new Date(Date.now()-new Date().getTimezoneOffset()*6e4-DAY_START_H*36e5); today=ymd(now); yest=ymd(new Date(now-864e5));
+  $("#day").innerHTML=days.map(d=>`<option value="${d}">${d.split("-").reverse().join(".")}</option>`).join("");
+  $("#bToday").disabled=!days.includes(today); $("#bYest").disabled=!days.includes(yest);
+  $("#bToday").title=days.includes(today)?"":"אין עדיין נתונים להיום"; $("#bYest").title=days.includes(yest)?"":"אין נתונים לאתמול";
+}
+async function loadRein(day){REIN={};try{(await getRows("reinforcement",`select=veh,start_min,km,line,route_frm,route_to,rein_km,before_km,after_km,note&${opq()}&${dq(day)}`)||[]).forEach(r=>REIN[rkey(r.veh,r.start_min)]=r)}catch(e){console.warn("reinforcement",e)}}
 let CKEY=null;
 const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function decryptDay(day){const e=window.ENC_DAY[day];
@@ -469,7 +533,7 @@ function loadDay(day,after){
     D=window.DAY_DATA[day];sel=null;await Promise.all([loadRein(day),loadOvernight(day),loadAutoRein(day)]);render();ensureRoad();$("#side").innerHTML='<div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div>';after&&after()};
   if((window.DAY_DATA&&window.DAY_DATA[day])||(window.ENC_DAY&&window.ENC_DAY[day])) return go();
   $("#gantt").innerHTML='<div class="empty-state">טוען…</div>';
-  const s=document.createElement("script"); s.src=`data/day_${day}.js`; s.onload=go;
+  const s=document.createElement("script"); s.src=`data/${OP.slug}/day_${day}.js`; s.onload=go;
   s.onerror=()=>{$("#gantt").innerHTML='<div class="empty-state">לא ניתן לטעון את נתוני היום הזה</div>'}; document.head.appendChild(s);
 }
 
@@ -524,9 +588,9 @@ function side(veh){
   const s=vstats(v),pv=v.prev,last=[...v.items].reverse().find(i=>i.kind==="trip");
   const dep=n=>n.kind==="over"&&n.km===0?`<div class="it wait"><span>התחיל את היום במקום שבו סיים אתמול<span class="sub">אין נסיעה ריקה לתחילת היום (משוער)</span></span><span class="t"></span></div>`:n.km==null?`<div class="it dep"><span>${LEGNAME[n.kind]}<span class="sub">${n.depot?esc(n.depot)+" · מיקום החניון לא הוגדר":"חניון לא הוגדר בהגדרות"}</span></span><span class="t">–</span></div>`
      :`<div class="it ${n.kind==="rein"?"rein":"dep"}"><span>${LEGNAME[n.kind]}: ${nf(n.km)} ק״מ<span class="sub">${n.frm?esc(n.frm)+" ← "+esc(n.to)+" · ":""}${esc(legKm(n))}</span></span><span class="t">${n.end<=(D.day_start_min??DAY_START_H*60)?`אתמול ${fmt(n.start+1440)}–${fmt(n.end+1440)}`:`${fmt(n.start)}–${fmt(n.end)}`}</span></div>`;
-  const lodge=pv?`<div class="it wait"><span>לינה: סיים אתמול ${fmt(pv.end+1440)} ב${esc(pv.to)} (קו ${esc(pv.line)})${PW?`<span class="sub"><select data-ovn="${esc(v.veh)}" aria-label="מה הרכב עשה בלילה">${OVMODES.map(([k,t])=>`<option value="${k}" ${ovMode(v)===k?"selected":""}>${t}</option>`).join("")}</select> <span class="msg" id="ovnMsg"></span></span>`:`<span class="sub">${esc(OVMODES.find(x=>x[0]===ovMode(v))[1])}</span>`}</span><span class="t"></span></div>`
+  const lodge=pv?`<div class="it wait"><span>לינה: סיים אתמול ${fmt(pv.end+1440)} ב${esc(pv.to)} (קו ${esc(pv.line)})${canEdit()?`<span class="sub"><select data-ovn="${esc(v.veh)}" aria-label="מה הרכב עשה בלילה">${OVMODES.map(([k,t])=>`<option value="${k}" ${ovMode(v)===k?"selected":""}>${t}</option>`).join("")}</select> <span class="msg" id="ovnMsg"></span></span>`:`<span class="sub">${esc(OVMODES.find(x=>x[0]===ovMode(v))[1])}</span>`}</span><span class="t"></span></div>`
      :`<div class="it wait"><span>לינה: אין נתונים על היום הקודם</span><span class="t"></span></div>`;
-  const bo=branchOf(v),ro=!PW;
+  const bo=branchOf(v),ro=!canEdit();
   let h=`<h2>רכב ${esc(v.veh)} · ${esc(v.cls)}</h2><div class="brrow"><label for="sbr"><b>סניף:</b></label><select id="sbr" data-brv="${esc(v.veh)}" ${ro?"disabled":""}>`+
     [["","לא משויך"],...branches().map(b=>[b,b])].map(([val,lab])=>`<option value="${esc(val)}" ${bo.b===val?"selected":""}>${esc(lab)}</option>`).join("")+`</select>`+
     (bo.auto?`<span class="badge br auto">אוטומטי</span>${ro||!bo.b?"":`<button class="btn small" data-brok="${esc(v.veh)}">אישור</button>`}`:`<span class="badge br">מאושר</span>`)+`<span class="msg" id="sbrMsg"></span></div>`+lodge+s.n.map(dep).join("");
@@ -534,15 +598,15 @@ function side(veh){
     if(i.auto){const st=autoSt(v,i),btn=(k,t)=>`<button class="btn small" data-ar="${i.start}" data-st="${k}">${t}</button>`;
       h+=`<div class="it ${st==="rejected"?"svc":"rein"}"><span>${st==="rejected"?"":"תגבור אוטומטי (לא בלוח הרישוי) · "}קו ${esc(i.line)}${i.unmapped?` (קו לא מזוהה, line_ref ${esc(i.line_ref)})`:""} · ${esc(i.frm)} ← ${esc(i.to)}
         <span class="sub">${AUTOTXT[st]} · ${i.km==null?"? ק״מ":nf(i.km)+" ק״מ"}${i.dur_est?" · משך משוער":""}</span>
-        ${PW?`<span class="sub">${st!=="confirmed"?btn("confirmed","אישור כתגבור"):""}${st!=="rejected"?btn("rejected","דחייה (נסיעה רגילה)"):""}${st!=="pending"?btn("auto","ביטול החלטה"):""}</span><span class="msg" id="arMsg${i.start}"></span>`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
+        ${canEdit()?`<span class="sub">${st!=="confirmed"?btn("confirmed","אישור כתגבור"):""}${st!=="rejected"?btn("rejected","דחייה (נסיעה רגילה)"):""}${st!=="pending"?btn("auto","ביטול החלטה"):""}</span><span class="msg" id="arMsg${i.start}"></span>`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
     else if(i.kind==="trip") h+=`<div class="it svc"><span>קו ${esc(i.line)} · ${esc(i.frm)} ← ${esc(i.to)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
     else if(i.overlap) h+=`<div class="it emp" style="color:var(--warn)"><span>חפיפה בין נסיעות (שגיאה בנתונים)</span><span class="t"></span></div>`;
     else if(i.km>=1){const r=REIN[rkey(v.veh,i.start)];
       if(r) h+=`<div class="it rein"><span>תגבור קו ${esc(r.line)} · ${nf(r.rein_km)} ק״מ<span class="sub">${esc(r.route_frm)} ← ${esc(r.route_to)}</span>
           <span class="sub" style="color:#B4630E">ריק לפני ${nf(r.before_km)} ק״מ · ריק אחרי ${nf(r.after_km)} ק״מ (במקום ${nf(i.km)} ק״מ ריק)</span>
-          ${PW?`<button class="btn small" data-unrein="${i.start}">ביטול תגבור</button>`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
+          ${canEdit()?`<button class="btn small" data-unrein="${i.start}">ביטול תגבור</button>`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
       else h+=`<div class="it emp"><span>ריק ${nf(i.km)} ק״מ · כ־${nf(i.drive_min)} דק׳<span class="sub">${esc(i.frm)} ← ${esc(i.to)} · זמן פנוי ${Math.round(i.end-i.start)} דק׳</span>
-          ${PW?`<button class="btn small" data-pickrein="${i.start}">סימון נסיעת תגבור</button>`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
+          ${canEdit()?`<button class="btn small" data-pickrein="${i.start}">סימון נסיעת תגבור</button>`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
     else h+=`<div class="it wait"><span>המתנה${i.km>0.05?` · מעבר ${nf(i.km)} ק״מ`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
   }
   h+=`<div class="it wait"><span>סוף היום: נשאר ב${esc(last.to)}<span class="sub">המעבר מכאן נספר ביום הבא</span></span><span class="t">${fmt(last.end)}</span></div>`;
@@ -595,60 +659,42 @@ $("#reinQ").oninput=drawPick;
 $("#reinClose").onclick=()=>{$("#dlgRein").close();pick=null};
 $("#reinPrev").addEventListener("click",async e=>{
   if(e.target.id!=="reinSave"||!pick||!pick.calc) return; const c=pick.calc; e.target.disabled=true;
-  try{const st=await rpc("set_reinforcement",{p_password:PW,p_day:D.day,p_veh:sel,p_start_min:pick.start,p_km:c.legKm,p_on:true,p_line:c.r.line,p_route_frm:c.r.frm,p_route_to:c.r.to,p_rein_km:c.r.km,p_before_km:+c.b.km.toFixed(2),p_after_km:+c.a.km.toFixed(2)});
-    if(st!=="ok") throw new Error(st);
+  try{await upsert("reinforcement",[{operator_id:OP.id,day:D.day,veh:sel,start_min:pick.start,km:c.legKm,line:String(c.r.line).slice(0,20),route_frm:String(c.r.frm).slice(0,200),
+      route_to:String(c.r.to).slice(0,200),rein_km:c.r.km,before_km:+c.b.km.toFixed(2),after_km:+c.a.km.toFixed(2)}],"operator_id,day,veh,start_min");
     REIN[rkey(sel,pick.start)]={veh:sel,start_min:pick.start,km:c.legKm,line:c.r.line,route_frm:c.r.frm,route_to:c.r.to,rein_km:c.r.km,before_km:c.b.km,after_km:c.a.km};
     $("#dlgRein").close();pick=null;render()}
   catch(err){e.target.disabled=false;$("#reinPrev").insertAdjacentHTML("beforeend",`<div class="msg err">${esc(errText(err))}</div>`)}
 });
 async function setBranch(veh,b){const m=$("#sbrMsg");if(m){m.className="msg";m.textContent="שומר…"}
   try{await saveVehicles({[veh]:{branch:b,branch_confirmed:true}});render()}
-  catch(err){if(m){m.className="msg err";m.textContent=errText(err)}if(String(err.message).includes("wrong_password")) setPw(null)}}
+  catch(err){if(m){m.className="msg err";m.textContent=errText(err)}}}
 $("#side").addEventListener("change",async e=>{if(e.target.dataset.brv!=null) setBranch(e.target.dataset.brv,e.target.value);
   if(e.target.dataset.ovn!=null){const veh=e.target.dataset.ovn,mode=e.target.value,m=$("#ovnMsg");if(m){m.className="msg";m.textContent="שומר…"}
-    try{const st=await rpc("set_overnight",{p_password:PW,p_day:D.day,p_veh:veh,p_mode:mode,p_note:null});if(st!=="ok") throw new Error(st);
+    try{if(mode==="stay") await delRows("overnight_override",`${opq()}&${dq(D.day)}&${vq(veh)}`);
+      else await upsert("overnight_override",[{operator_id:OP.id,day:D.day,veh,mode,note:null}],"operator_id,day,veh");
       if(mode==="stay") delete OVN[veh]; else OVN[veh]={veh,mode};render();ensureRoad()}
-    catch(err){if(m){m.className="msg err";m.textContent=errText(err)}if(String(err.message).includes("wrong_password")) setPw(null)}}});
+    catch(err){if(m){m.className="msg err";m.textContent=errText(err)}}}});
 $("#side").addEventListener("click",async e=>{
   if(e.target.dataset.ar!=null){const start=+e.target.dataset.ar,st=e.target.dataset.st,m=$("#arMsg"+start);if(m){m.className="msg";m.textContent="שומר…"}
-    try{const r=await rpc("set_auto_rein",{p_password:PW,p_day:D.day,p_veh:sel,p_start_min:start,p_status:st});if(r!=="ok") throw new Error(r);
+    try{if(st==="auto") await delRows("auto_rein_status",`${opq()}&${dq(D.day)}&${vq(sel)}&start_min=eq.${start}`);
+      else await upsert("auto_rein_status",[{operator_id:OP.id,day:D.day,veh:sel,start_min:start,status:st}],"operator_id,day,veh,start_min");
       if(st==="auto") delete AUTOR[rkey(sel,start)]; else AUTOR[rkey(sel,start)]=st; render()}
-    catch(err){if(m){m.className="msg err";m.textContent=errText(err)}if(String(err.message).includes("wrong_password")) setPw(null)}
+    catch(err){if(m){m.className="msg err";m.textContent=errText(err)}}
     return}
   if(e.target.dataset.brok!=null){const v=D.vehicles.find(x=>x.veh===e.target.dataset.brok);setBranch(v.veh,autoBranch(v));return}
   const p=e.target.dataset.pickrein, u=e.target.dataset.unrein;
   if(p!=null){ openPick(+p); return }
   if(u!=null){ if(!confirm("לבטל את סימון התגבור?")) return;
-    try{const st=await rpc("set_reinforcement",{p_password:PW,p_day:D.day,p_veh:sel,p_start_min:+u,p_km:null,p_on:false});if(st!=="ok") throw new Error(st);delete REIN[rkey(sel,+u)];render()}
+    try{await delRows("reinforcement",`${opq()}&${dq(D.day)}&${vq(sel)}&start_min=eq.${+u}`);delete REIN[rkey(sel,+u)];render()}
     catch(err){alert(errText(err))} }
 });
 
-// ---- edit mode / password (chosen by the user; only a bcrypt hash is stored) ----
-function setPw(p){PW=p;try{p?sessionStorage.setItem("edit_pw",p):sessionStorage.removeItem("edit_pw")}catch{}
-  if(sel&&D) side(sel)}
-async function openPw(){
-  let has=true; try{has=await rpc("has_edit_password",{})}catch(e){alert(errText(e));return}
-  $("#pwTitle").textContent=has?"כניסה לעריכה":"הגדרת סיסמת עריכה";
-  $("#pwBody").innerHTML=has?`<div class="field"><label for="pw1">סיסמת עריכה</label><input id="pw1" type="password" autocomplete="current-password" required></div>`
-    :`<p class="hint">זו הפעם הראשונה. בחר סיסמה של לפחות 8 תווים. רק מי שיודע אותה יוכל לשנות נתונים, וכל מי שיש לו את הקישור יכול לצפות.</p>
-      <div class="field"><label for="pw1">סיסמה חדשה</label><input id="pw1" type="password" autocomplete="new-password" minlength="8" required></div>
-      <div class="field"><label for="pw2">אימות סיסמה</label><input id="pw2" type="password" autocomplete="new-password" minlength="8" required></div>`;
-  $("#pwMsg").textContent=""; $("#dlgPw").dataset.mode=has?"login":"setup"; $("#dlgPw").showModal(); $("#pw1").focus();
-}
-$("#pwForm").addEventListener("submit",async e=>{
-  if(e.submitter&&e.submitter.value==="cancel") return;
-  e.preventDefault(); const m=$("#dlgPw").dataset.mode,p1=$("#pw1").value; $("#pwMsg").className="msg"; $("#pwMsg").textContent="בודק…";
-  try{
-    if(m==="setup"){ if(p1!==$("#pw2").value) throw new Error("הסיסמאות לא זהות");
-      const st=await rpc("set_edit_password",{p_old:null,p_new:p1}); if(st!=="ok") throw new Error(st); }
-    else if(!(await rpc("check_edit_password",{p_password:p1}))) throw new Error("wrong_password");
-    setPw(p1); $("#dlgPw").close();
-  }catch(err){$("#pwMsg").className="msg err";$("#pwMsg").textContent=errText(err)}
-});
-$("#bEdit").onclick=()=>{setPw(null);location.replace(location.pathname)};
+// ---- sign out ----
+$("#bEdit").onclick=async()=>{try{await authPost("logout",{},SES&&SES.access_token)}catch{} setSes(null);location.replace(location.pathname)};
 
 // ---- settings ----
-async function loadSettings(){try{const all=await rpc("get_settings",{p_password:PW})||{};for(const k in all) S[k]=k==="defaults"?{...clone(DEF),...all[k]}:all[k]}catch(e){console.warn("settings",e)}}
+async function loadSettings(){try{const rows=await getRows("settings",`select=key,value&${opq()}`)||[];for(const {key:k,value:v} of rows) S[k]=k==="defaults"?{...clone(DEF),...v}:v}catch(e){console.warn("settings",e)}}
+const saveSetting=(key,value)=>upsert("settings",[{operator_id:OP.id,key,value}],"operator_id,key");
 const uid=()=>Math.random().toString(36).slice(2,9);
 let LOOKRES=[];
 function parseLoc(s){ // Waze ll=, Google @lat,lon / q= / !3d..!4d.., or plain "lat, lon"
@@ -667,7 +713,7 @@ let tab="depots", draft=null, look=null;
 const LOCHINT="<b>איך מכניסים מיקום:</b> בשדה \"כתובת או קישור\" כותבים כתובת רגילה (למשל: מבצע קדש, בני ברק) ולוחצים \"איתור\". אפשר גם להדביק קישור מלא מ־Waze או מגוגל מפות, או שני מספרים שהועתקו בקליק ימני בגוגל מפות. שמות מקומות כמו \"חניון אפיקים\" לא תמיד נמצאים בחיפוש, ואז עדיף קישור או כתובת. החיפוש נעשה ב־OpenStreetMap.";
 function openSettings(){draft=clone(S);look=null;$("#setMsg").textContent="";showTab("depots");$("#dlgSet").showModal()}
 function showTab(t){tab=t;document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
-  const ro=!PW; let h=ro?`<p class="hint" style="color:var(--warn)">צפייה בלבד. כדי לערוך לוחצים על "כניסה לעריכה".</p>`:"";
+  const ro=!canEdit(); let h=ro?`<p class="hint" style="color:var(--warn)">צפייה בלבד: ההרשאה שלך היא לצפייה. לשינויים פנה למנהל המפעיל.</p>`:"";
   if(LISTS[t]){const L=LISTS[t],rows=draft[t]||[];
     h+=`<p class="hint">${LOCHINT}</p><p class="hint">${L.hint}</p><table class="ed"><thead><tr>${L.cols.map(c=>`<th>${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>`+
       rows.map((r,i)=>`<tr>${L.cols.map(([k])=>`<td>${k==="fuel"?`<select data-i="${i}" data-k="${k}" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${r[k]===f?"selected":""}>${f}</option>`).join("")}</select>`
@@ -726,14 +772,14 @@ $("#setBody").addEventListener("click",async e=>{
   if(e.target.dataset.del!=null){draft[tab].splice(+e.target.dataset.del,1);showTab(tab)}
 });
 $("#setSave").onclick=async()=>{
-  const msg=$("#setMsg"); if(!PW){msg.className="msg err";msg.textContent="צריך להיכנס לעריכה";return}
+  const msg=$("#setMsg"); if(!canEdit()){msg.className="msg err";msg.textContent=ERR.not_allowed;return}
   const key=tab; let val=clone(draft[key]);
   if(LISTS[key]){val=(val||[]).map(r=>({...r,id:r.id||uid(),lat:r.lat===""||r.lat==null?null:r.lat,lon:r.lon===""||r.lon==null?null:r.lon})).filter(r=>(r.name||"").trim());
     for(const r of val) if((r.lat!=null&&!isFinite(parseFloat(r.lat)))||(r.lon!=null&&!isFinite(parseFloat(r.lon)))){msg.className="msg err";msg.textContent=`מיקום לא תקין ב"${r.name}"`;return}}
   msg.className="msg";msg.textContent="שומר…";
-  try{const st=await rpc("save_setting",{p_password:PW,p_key:key,p_value:val});if(st!=="ok") throw new Error(st);
+  try{await saveSetting(key,val);
     S[key]=clone(val);draft[key]=clone(val);msg.className="msg ok";msg.textContent="נשמר";render();if(key==="depots"||key==="vehicles") ensureRoad()}
-  catch(err){msg.className="msg err";msg.textContent=errText(err);if(String(err.message).includes("wrong_password")) setPw(null)}
+  catch(err){msg.className="msg err";msg.textContent=errText(err)}
 };
 $("#setClose").onclick=()=>$("#dlgSet").close();
 $("#bSettings").onclick=openSettings;
@@ -746,45 +792,123 @@ $("#q").oninput=render; $("#sort").onchange=render; $("#br").onchange=render; $(
 addEventListener("resize",()=>{clearTimeout(window._rt);window._rt=setTimeout(render,150)});
 $("#bToday").onclick=()=>loadDay(today); $("#bYest").onclick=()=>loadDay(yest);
 const QP=new URLSearchParams(location.search);
-async function unlock(p){
-  const k=await rpc("get_data_key",{p_password:p}); if(!k) return false;
+// ---- users (operator admins and platform admin): manage_users Edge Function ----
+const ROLEHINT="צופה: רואה הכול. עורך: גם משנה הגדרות, תגבורים ומעברי לילה. מנהל: גם מנהל את המשתמשים של המפעיל.";
+const roleSel=(cur,attrs="")=>`<select ${attrs}>${["viewer","editor","admin"].map(r=>`<option value="${r}" ${r===cur?"selected":""}>${ROLEHE[r]}</option>`).join("")}</select>`;
+async function mu(body){return http(SB+"/functions/v1/manage_users",{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json",Authorization:"Bearer "+await token()},
+  body:JSON.stringify({operator_id:OP.id,redirect_to:SITE,...body})},30000)}
+const umsg=(t,cls="")=>{const m=$("#usersMsg");if(m){m.className="msg "+cls;m.textContent=t}};
+function showLink(link,who){$("#usersLink").innerHTML=`<div class="copyrow"><input readonly value="${esc(link)}" aria-label="קישור כניסה"><button class="btn small" data-copy>העתקה</button></div>
+  <p class="hint" style="color:var(--warn)">הקישור הוא כמו מפתח לחשבון של ${esc(who)}: שולחים אותו רק לו (וואטסאפ או מייל). הוא עובד פעם אחת ולזמן מוגבל. אם פג תוקפו, יוצרים קישור חדש.</p>`}
+async function drawUsers(){
+  const box=$("#usersBody"); box.innerHTML='<div class="empty-state">טוען…</div>';
+  let r; try{r=await mu({action:"list"})}catch(e){box.innerHTML=`<p class="msg err">${esc(errText(e))}</p>`;return}
+  const dt=x=>x?new Date(x).toLocaleDateString("he-IL"):"";
+  box.innerHTML=`<p class="hint">משתמשים של <b>${esc(OP.name)}</b>. ${ROLEHINT}</p>
+    <table class="ed"><thead><tr><th>אימייל</th><th>הרשאה</th><th>מצב</th><th></th></tr></thead><tbody>`+
+    r.users.map(u=>`<tr data-u="${esc(u.user_id)}" data-email="${esc(u.email)}"><td dir="ltr" style="text-align:right">${esc(u.email)}${u.me?" (אתה)":""}</td>
+      <td>${roleSel(u.role,`data-role aria-label="הרשאה של ${esc(u.email)}" ${u.me&&!PLATFORM?"disabled":""}`)}</td>
+      <td>${u.pending?'<span class="muted">הוזמן, עוד לא נכנס</span>':"נכנס לאחרונה "+dt(u.last_sign_in)}</td>
+      <td>${u.pending||PLATFORM?`<button class="btn small" data-link>קישור כניסה חדש</button> `:""}${u.me?"":`<button class="btn small danger" data-rm>הסרה</button>`}</td></tr>`).join("")+
+    `</tbody></table>${r.users.length?"":'<p class="muted">אין עדיין משתמשים.</p>'}
+    <h4>הזמנת משתמש</h4>
+    <div class="inv"><div class="field"><label for="invEmail">אימייל</label><input id="invEmail" type="email" dir="ltr" autocomplete="off" style="width:240px"></div>
+      <div class="field"><label for="invRole">הרשאה</label>${roleSel("viewer",'id="invRole"')}</div>
+      <button class="btn primary" data-inv="link">יצירת קישור הזמנה</button><button class="btn" data-inv="email">שליחת הזמנה במייל</button></div>
+    <p class="hint">מי שמוזמן בוחר סיסמה משלו בכניסה הראשונה. "קישור הזמנה" מעתיקים ושולחים בעצמך. שליחה במייל עובדת רק אם הוגדר במערכת שירות מייל.</p>
+    <div class="msg" id="usersMsg" aria-live="polite"></div><div id="usersLink"></div>`;
+}
+$("#bUsers").onclick=()=>{$("#dlgUsers").showModal();drawUsers()};
+$("#usersClose").onclick=()=>$("#dlgUsers").close();
+$("#usersBody").addEventListener("change",async e=>{if(e.target.dataset.role==null) return;const tr=e.target.closest("tr");
+  umsg("שומר…");try{await mu({action:"set_role",user_id:tr.dataset.u,role:e.target.value});umsg("ההרשאה של "+tr.dataset.email+" עודכנה","ok")}catch(err){umsg(errText(err),"err");drawUsers()}});
+$("#usersBody").addEventListener("click",async e=>{const t=e.target,tr=t.closest("tr");
+  if(t.dataset.copy!=null){const i=t.previousElementSibling;i.select();try{await navigator.clipboard.writeText(i.value);t.textContent="הועתק"}catch{document.execCommand&&document.execCommand("copy");t.textContent="הועתק"}return}
+  if(t.dataset.rm!=null){if(!confirm(`להסיר את ${tr.dataset.email} מ${OP.name}? הוא לא יוכל להיכנס יותר לנתוני המפעיל.`)) return;
+    try{await mu({action:"remove",user_id:tr.dataset.u});await drawUsers();umsg(tr.dataset.email+" הוסר","ok")}catch(err){umsg(errText(err),"err")}return}
+  if(t.dataset.link!=null){t.disabled=true;try{const r=await mu({action:"link",user_id:tr.dataset.u});showLink(r.link,tr.dataset.email);umsg("נוצר קישור כניסה חדש","ok")}catch(err){umsg(errText(err),"err")}t.disabled=false;return}
+  if(t.dataset.inv){const email=$("#invEmail").value.trim(),role=$("#invRole").value;
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){umsg("כתובת מייל לא תקינה","err");$("#invEmail").focus();return}
+    t.disabled=true;umsg(t.dataset.inv==="email"?"שולח…":"יוצר קישור…");
+    try{const r=await mu({action:"invite",email,role,send:t.dataset.inv});await drawUsers();
+      if(r.link){showLink(r.link,email);umsg(`${email} נוסף כ${ROLEHE[role]}. העתק את הקישור ושלח לו.`,"ok")}
+      else if(r.sent) umsg(`נשלחה הזמנה במייל ל־${email}`,"ok");
+      else umsg(`${email} כבר רשום במערכת ושויך ל${OP.name}. הוא נכנס עם הסיסמה שלו.`,"ok")}
+    catch(err){t.disabled=false;umsg(errText(err),"err")}}
+});
+
+// ---- entry: login, forgot password, choosing a password (invite / reset link), no access ----
+async function unlock(){
+  await loadAccess();
+  if(!OP){gateMode("noaccess");return false}
+  const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k) throw new Error("no_key");
   CKEY=await crypto.subtle.importKey("raw",b64(k),"AES-GCM",false,["decrypt"]);
-  setPw(p); await Promise.all([loadSettings(),loadRoad()]);
+  applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad()]);
   // the day loads behind the gate while the logo intro is still playing
-  if(!days.length) $("#gantt").innerHTML='<div class="empty-state">אין נתונים</div>';
+  if(!days.length) $("#gantt").innerHTML='<div class="empty-state">אין עדיין נתונים למפעיל הזה</div>';
   else loadDay(days.includes(QP.get("day"))?QP.get("day"):days.includes(yest)?yest:days[days.length-1],()=>{
     const v=QP.get("veh"); if(v){sel=v;render();document.querySelector(`.row[data-v="${CSS.escape(v)}"]`)?.scrollIntoView({block:"center"})}});
   await introEnd;
   logoHome(); document.body.classList.remove("locked"); $("#gate").remove();
   return true;
 }
-let SETUP=false;
-// entry screen intro: the header logo moves into the gate, plays large, then the password form fades in
+// entry screen intro: the header logo moves into the gate, plays large, then the form fades in
 const LOGO=$("#logoBtn"), LOGO_HOME=[LOGO.parentNode,LOGO.nextSibling];
 function logoHome(){if(LOGO.parentNode!==LOGO_HOME[0]){LOGO_HOME[0].insertBefore(LOGO,LOGO_HOME[1]);LOGO.removeAttribute("aria-hidden");LOGO.tabIndex=0}}
-let introEnd=Promise.resolve(), introOver=false, AUTO=false;
-const showForm=()=>{const g=$("#gate");if(g&&!g.classList.contains("ready")){g.classList.add("ready");$("#gpw").focus()}};
+let introEnd=Promise.resolve(), introOver=false, AUTO=false, GMODE="login";
+const showForm=()=>{const g=$("#gate");if(g&&!g.classList.contains("ready")){g.classList.add("ready");g.querySelector("#gateFields input:not([hidden]),#gateBtn")?.focus()}};
 function gateIntro(){const g=$("#gate");let done=false,res;introEnd=new Promise(r=>res=r);
   const show=()=>{if(done) return;done=true;introOver=true;clearTimeout(tm);removeEventListener("keydown",show,true);g.removeEventListener("pointerdown",show);res();if(!AUTO) showForm()};
   g.insertBefore(LOGO,g.firstChild); LOGO.setAttribute("aria-hidden","true"); LOGO.tabIndex=-1; g.classList.add("intro");
   window.playLogo(); const tm=setTimeout(show,window.LOGO_MS);
   addEventListener("keydown",show,true); g.addEventListener("pointerdown",show);}
+const fld=(id,label,type,ac,extra="")=>`<div class="field" style="text-align:right;margin-top:14px"><label for="${id}">${label}</label><input id="${id}" type="${type}" autocomplete="${ac}" ${type==="email"?'dir="ltr"':""} required ${extra}></div>`;
+function gateMode(m,{msg="",err=""}={}){
+  GMODE=m; const email=(SES&&SES.user&&SES.user.email)||lsGet("ys_email")||"";
+  const F=$("#gateFields"),A=$("#gateAlt"),B=$("#gateBtn"),S=$("#gateSub"); B.disabled=false;
+  const legacy=`<a class="linkbtn dim" href="legacy.html">כניסה בסיסמה המשותפת (זמני)</a>`;
+  if(m==="login"){S.textContent="כניסה עם אימייל וסיסמה";F.innerHTML=fld("gEmail","אימייל","email","username",`value="${esc(email)}"`)+fld("gpw","סיסמה","password","current-password");
+    B.textContent="כניסה";A.innerHTML=`<button type="button" class="linkbtn" data-gm="forgot">שכחתי סיסמה</button>${legacy}`}
+  else if(m==="forgot"){S.textContent="נשלח אליך קישור לבחירת סיסמה חדשה";F.innerHTML=fld("gEmail","אימייל","email","username",`value="${esc(email)}"`);
+    B.textContent="שליחת קישור";A.innerHTML=`<button type="button" class="linkbtn" data-gm="login">חזרה לכניסה</button>`}
+  else if(m==="setpw"){S.textContent=`בחירת סיסמה${email?" לחשבון "+email:""}`;
+    F.innerHTML=`<input type="email" autocomplete="username" value="${esc(email)}" hidden>`+fld("gpw","סיסמה חדשה (לפחות 8 תווים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
+    B.textContent="שמירת הסיסמה וכניסה";A.innerHTML=""}
+  else if(m==="noaccess"){S.textContent=`החשבון ${email} עוד לא שויך לאף מפעיל. פנה למנהל המערכת.`;F.innerHTML="";B.textContent="יציאה";A.innerHTML=""}
+  const gm=$("#gateMsg"); gm.className="msg"+(err?" err":msg?" ok":""); gm.textContent=err||msg;
+  if(introOver) {showForm();(F.querySelector("input:not([hidden])")||B).focus()}
+}
+$("#gateAlt").addEventListener("click",e=>{const m=e.target.dataset.gm;if(m) gateMode(m)});
 $("#gateForm").addEventListener("submit",async e=>{
-  e.preventDefault(); const m=$("#gateMsg"),p=$("#gpw").value; m.className="msg"; m.textContent="בודק…"; $("#gateBtn").disabled=true;
+  e.preventDefault(); const m=$("#gateMsg"); m.className="msg"; m.textContent="רגע…"; $("#gateBtn").disabled=true;
+  const fail=err=>{m.className="msg err";m.textContent=errText(err);$("#gateBtn").disabled=false};
   try{
-    if(SETUP){ if(p!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
-      const st=await rpc("set_edit_password",{p_old:null,p_new:p}); if(st!=="ok") throw new Error(st); }
-    if(!(await unlock(p))) throw new Error("wrong_password");
-  }catch(err){m.className="msg err";m.textContent=errText(err);$("#gateBtn").disabled=false;$("#gpw").select()}
+    if(GMODE==="login"){const email=$("#gEmail").value.trim(); lsSet("ys_email",email);
+      setSes(await authPost("token?grant_type=password",{email,password:$("#gpw").value}));
+      if(!(await unlock())) return;}
+    else if(GMODE==="forgot"){const email=$("#gEmail").value.trim(); lsSet("ys_email",email);
+      await authPost("recover?redirect_to="+encodeURIComponent(SITE),{email});
+      gateMode("login",{msg:"אם הכתובת רשומה במערכת, נשלח אליה קישור. לא הגיע מייל תוך כמה דקות? בקש ממנהל המפעיל קישור כניסה חדש."})}
+    else if(GMODE==="setpw"){const p=$("#gpw").value; if(p.length<8) throw new Error("Password should be"); if(p!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
+      const u=await http(SB+"/auth/v1/user",{method:"PUT",headers:{apikey:KEY,"Content-Type":"application/json",Authorization:"Bearer "+await token()},body:JSON.stringify({password:p})});
+      if(u&&u.id){SES.user=u;lsSet(SKEY,JSON.stringify(SES))}
+      if(!(await unlock())) return;}
+    else if(GMODE==="noaccess"){$("#bEdit").onclick()}
+  }catch(err){fail(err);if(GMODE==="login") $("#gpw")?.select()}
 });
 (async()=>{
-  if(PW){ AUTO=true; gateIntro(); // saved password: play the intro, then straight to the dashboard
-    try{ if(await unlock(PW)) return }catch(e){} setPw(null); AUTO=false; if(introOver) showForm() }
-  else gateIntro();
-  try{ if(!(await rpc("has_edit_password",{}))){SETUP=true;
-    $("#gateFields").insertAdjacentHTML("afterend",`<div class="field"><label for="gpw2">אימות סיסמה</label><input id="gpw2" type="password" autocomplete="new-password" required></div>`);
-    $("#gateBtn").textContent="קביעת סיסמה וכניסה";} }catch(e){}
-  if(introOver) $("#gpw").focus();
+  const h=new URLSearchParams(location.hash.slice(1)); let linkType=null;
+  if(h.get("error")||h.get("error_code")){history.replaceState(null,"",location.pathname+location.search); gateIntro();
+    gateMode("login",{err:h.get("error_code")==="otp_expired"?"הקישור פג תוקף או שכבר השתמשו בו. בקש ממנהל המפעיל קישור חדש, או לחץ \"שכחתי סיסמה\".":"הכניסה מהקישור נכשלה. "+(h.get("error_description")||"")});return}
+  if(h.get("access_token")){setSes({access_token:h.get("access_token"),refresh_token:h.get("refresh_token"),expires_at:h.get("expires_at"),expires_in:h.get("expires_in")});
+    linkType=h.get("type"); history.replaceState(null,"",location.pathname+location.search)}
+  if(["invite","recovery","magiclink","signup"].includes(linkType)){gateIntro();
+    try{const u=await http(SB+"/auth/v1/user",{headers:{apikey:KEY,Authorization:"Bearer "+await token()}});SES.user=u;lsSet(SKEY,JSON.stringify(SES))}catch(e){setSes(null);gateMode("login",{err:errText(e)});return}
+    gateMode("setpw");return}
+  if(SES){AUTO=true; gateIntro(); // signed in before: play the intro, then straight to the dashboard
+    try{if(await unlock()) return}catch(e){console.warn(e); if(e.status===401||e.message==="not_signed_in") setSes(null)}
+    AUTO=false; if(GMODE!=="noaccess") gateMode("login",SES?{err:"לא ניתן לטעון את הנתונים. נסה שוב."}:{}); else if(introOver) showForm()}
+  else {gateIntro(); gateMode("login")}
 })();
 </script>
 </body>
