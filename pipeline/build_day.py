@@ -49,6 +49,32 @@ def osrm_router(cache_file):
     return road, save, miss
 
 
+def load_prev(day):
+    """Where each vehicle ended the previous service day (for the inferred overnight leg).
+    Reads data/day_<D-1>.json, or decrypts data/day_<D-1>.js with the data key."""
+    pd = (dt.date.fromisoformat(day) - dt.timedelta(days=1)).isoformat()
+    jf, ef = os.path.join(DATA, f"day_{pd}.json"), os.path.join(DATA, f"day_{pd}.js")
+    try:
+        if os.path.exists(jf):
+            P = json.load(open(jf, encoding="utf-8"))
+        elif os.path.exists(ef) and os.path.exists(KEY_FILE):
+            P = json.loads(subprocess.run(["node", os.path.join(HERE, "decrypt.js"), KEY_FILE, ef],
+                                          check=True, capture_output=True).stdout.decode("utf-8"))
+        else:
+            print("no previous day", pd, file=sys.stderr); return {}
+    except Exception as e:
+        print("previous day unreadable", pd, e, file=sys.stderr); return {}
+    out = {}
+    for v in P.get("vehicles", []):
+        t = [i for i in v["items"] if i["kind"] == "trip"]
+        if not t or not v.get("last_d"): continue
+        # minutes relative to day D's midnight (negative = the evening before)
+        out[v["veh"]] = dict(end=t[-1]["end"] - 1440, line=t[-1]["line"], to=t[-1]["to"],
+                             lat=v["last_d"][0], lon=v["last_d"][1], city=v["last_d"][2])
+    print("previous day", pd, "vehicles:", len(out), file=sys.stderr)
+    return out
+
+
 def build(day):
     os.makedirs(CACHE_DIR, exist_ok=True)
     rf = os.path.join(CACHE_DIR, f"rides_{day}_h{DAY_START_H}.json")
@@ -77,6 +103,7 @@ def build(day):
             start=round(mins(st)), end=round(mins(st) + dur), o=e["o"], d=e["d"], km=round(e["km"], 1),
             cls=CL.get(x["gtfs_route__route_mkt"], "לא ידוע")))
 
+    prev = load_prev(day)
     vehicles = []; tot_day = 0
     for v, ts in sorted(by.items()):
         ts.sort(key=lambda t: t["start"])
@@ -94,7 +121,8 @@ def build(day):
             first_o=[round(ts[0]["o"][0], 5), round(ts[0]["o"][1], 5), ts[0]["o"][3]],
             last_d=[round(ts[-1]["d"][0], 5), round(ts[-1]["d"][1], 5), ts[-1]["d"][3]],
             service_km=round(sum(t["km"] for t in ts), 1), items=items,
-            empty_day_km=round(sum(i["km"] or 0 for i in items if i["kind"] == "empty"), 1)))
+            empty_day_km=round(sum(i["km"] or 0 for i in items if i["kind"] == "empty"), 1),
+            **({"prev": prev[v]} if v in prev else {})))
 
     # catalog of service routes (line + direction) seen this day, for marking reinforcement trips
     cat = {}

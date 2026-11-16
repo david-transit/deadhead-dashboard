@@ -185,7 +185,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
   <div class="card"><div class="k">רכבים</div><div class="v" id="cV">–</div></div>
   <div class="card"><div class="k">נסיעות בשירות</div><div class="v" id="cT">–</div></div>
   <div class="card"><div class="k">ק״מ ריקים בין נסיעות</div><div class="v" id="cE">–</div><div class="s" id="cEs">לפי כביש</div></div>
-  <div class="card"><div class="k">ק״מ ריקים בלילה (חניון)</div><div class="v" id="cN">–</div><div class="s" id="cNs"></div></div>
+  <div class="card"><div class="k">ק״מ ריקים מחוץ לסידור</div><div class="v" id="cN">–</div><div class="s" id="cNs"></div></div>
 </section>
 <main>
   <div class="panel">
@@ -354,7 +354,7 @@ const clone=x=>JSON.parse(JSON.stringify(x));
 let D=null,cls="",sel=null,T0=240,T1=26*60,PW=null;
 const DEF={fuel_by_class:{"עירוני":"גז","בינעירוני":"סולר"},range_km_by_fuel:{"גז":null,"סולר":null},branches:["בני ברק","ירושלים"]};
 let S={depots:[],fuel_stations:[],driver_change_points:[],defaults:clone(DEF),vehicles:{}};
-let REIN={};
+let REIN={}, OVN={};
 try{PW=sessionStorage.getItem("edit_pw")}catch{}
 const days=(window.DAYS||[]).slice().sort();
 const DAY_START_H=4; // service day D = D 04:00 … D+1 03:59 (same as pipeline/config.json)
@@ -365,10 +365,10 @@ const hav=(a,b)=>{const R=6371,r=x=>x*Math.PI/180,dp=r(b[0]-a[0]),dl=r(b[1]-a[1]
 const estKm=(a,b)=>hav(a,b)*1.35, estMin=km=>km/40*60;
 const hasLoc=x=>x&&x.lat!=null&&x.lon!=null&&isFinite(parseFloat(x.lat))&&isFinite(parseFloat(x.lon));
 const vset=v=>S.vehicles[v.veh]||{};
-function depotFor(v,which){
+function depotFor(v,which,cityOverride){
   const id=(which==="in"&&vset(v).depot_end)||vset(v).depot;
   if(id) return S.depots.find(d=>d.id===id)||null;
-  const city=(which==="out"?v.first_o:v.last_d)?.[2];
+  const city=cityOverride??(which==="out"?v.first_o:v.last_d)?.[2];
   return S.depots.find(d=>(d.cities||"").split(",").map(s=>s.trim()).filter(Boolean).includes(city))||null;
 }
 const fuelFor=v=>vset(v).fuel||S.defaults.fuel_by_class?.[v.cls]||null;
@@ -377,9 +377,7 @@ const rangeFor=v=>parseFloat(vset(v).range_km)||parseFloat(S.defaults.range_km_b
 const ROAD=new Map(), roadKey=(a,b)=>[a[0],a[1],b[0],b[1]].map(x=>(+x).toFixed(5)).join(",");
 async function loadRoad(){try{(await rpc("get_road_cache",{p_password:PW})||[]).forEach(r=>ROAD.set(roadKey([r[0],r[1]],[r[2],r[3]]),{km:+r[4],min:+r[5]}))}catch(e){console.warn("road cache",e)}}
 function nightPairs(){const out=new Map();if(!D) return out;
-  for(const v of D.vehicles) for(const w of ["out","in"]){const d=depotFor(v,w),p=w==="out"?v.first_o:v.last_d;
-    if(!d||!hasLoc(d)||!p) continue; const a=[+d.lat,+d.lon],ab=w==="out"?[a,[p[0],p[1]]]:[[p[0],p[1]],a],k=roadKey(...ab);
-    if(!ROAD.has(k)) out.set(k,ab)}
+  for(const v of D.vehicles) for(const l of night(v)) if(l.a&&!l.road) out.set(roadKey(l.a,l.b),[l.a,l.b]);
   return out}
 let roadBusy=false,roadAgain=false,roadFail=0;
 async function osrm(a,b){for(let t=0;t<2;t++){const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),10000);
@@ -398,15 +396,31 @@ async function ensureRoad(){
       await new Promise(r=>setTimeout(r,150))}
     await flush(); if(todo.length) render();
   }while(roadAgain)}finally{roadBusy=false}}
+// ---- legs outside the schedule, counted in the day they are driven ----
+// v.prev (from the pipeline) = where the bus ended the previous service day. Default assumption: it slept there and drove
+// empty to today's first trip ("מעבר לילה"). Per vehicle-day override (overnight_override): "depot" = went back to its depot
+// at night and left from it in the morning; "rein" = the overnight move was a reinforcement trip.
+// Without previous-day data: the morning leg from the depot (settings), as before. End-of-day legs are counted on the next day.
+const OVMODES=[["stay","יצא למחרת מהמקום שבו סיים"],["depot","חזר לחניון בלילה"],["rein","נסיעת תגבור"]];
+const ovMode=v=>OVN[v.veh]?.mode||"stay";
+async function loadOvernight(day){OVN={};try{(await rpc("get_overnight",{p_password:PW,p_day:day})||[]).forEach(r=>OVN[r.veh]=r)}catch(e){console.warn("overnight",e)}}
+function leg(kind,a,b,x){if(hav(a,b)<0.05) return {kind,km:0,min:0,road:true,...x}; // same place: nothing to route
+  const r=ROAD.get(roadKey(a,b)),km=r?r.km:estKm(a,b);return {kind,a,b,km,min:r?r.min:estMin(km),road:!!r,...x}}
 function night(v){
-  const t0=v.items.find(i=>i.kind==="trip"),t1=[...v.items].reverse().find(i=>i.kind==="trip");
-  return ["out","in"].map(w=>{const d=depotFor(v,w),p=w==="out"?v.first_o:v.last_d;
-    if(!d) return {kind:"depot_"+w,depot:null,km:null};
-    if(!hasLoc(d)||!p) return {kind:"depot_"+w,depot:d.name,km:null};
-    const a=[+d.lat,+d.lon],r=w==="out"?ROAD.get(roadKey(a,p)):ROAD.get(roadKey(p,a));
-    const km=r?r.km:estKm(a,p),mn=r?r.min:estMin(km);
-    return {kind:"depot_"+w,depot:d.name,km,road:!!r,start:w==="out"?t0.start-mn:t1.end,end:w==="out"?t0.start:t1.end+mn};});
-}
+  const t0=v.items.find(i=>i.kind==="trip"),F=[v.first_o[0],v.first_o[1]],p=v.prev,L=[];
+  const morning=l=>{if(l.km!=null){l.end=t0.start;l.start=t0.start-l.min}return l};
+  const depotLeg=(kind,d,a,b,x)=>!d?{kind,km:null,depot:null,...x}:!hasLoc(d)?{kind,km:null,depot:d.name,...x}:leg(kind,a(d),b(d),{depot:d.name,...x});
+  const dpos=d=>[+d.lat,+d.lon];
+  if(p){const P=[p.lat,p.lon],m=ovMode(v);
+    if(m==="depot"){const di=depotFor(v,"in",p.city),d2=depotFor(v,"out");
+      const li=depotLeg("in",di,()=>P,dpos,{est:true,frm:p.to,to:di?.name});
+      if(li.km!=null){li.start=p.end;li.end=p.end+li.min}
+      L.push(li, morning(depotLeg("out",d2,dpos,()=>F,{est:true,frm:d2?.name,to:t0.frm})));}
+    else L.push(morning(leg(m==="rein"?"rein":"over",P,F,{est:true,frm:p.to,to:t0.frm})));}
+  else{const d=depotFor(v,"out");L.push(morning(depotLeg("out",d,dpos,()=>F,{frm:d?.name,to:t0.frm})))}
+  return L}
+const LEGNAME={over:"יציאה ריקה לתחילת היום",out:"יציאה מחניון",in:"חזרה לחניון בלילה",rein:"מעבר לילה כנסיעת תגבור"};
+const legKm=l=>l.km==null?"":`${l.road?nf(l.km)+" ק״מ לפי כביש":"כ־"+nf(l.km)+" ק״מ (הערכה"+(roadBusy?" · מחשב…":"")+")"}${l.est?" · משוער":""}`;
 // ---- branch (סניף): auto from where the vehicle starts and ends its day; confirmed/manual value lives in vehicles[veh].branch ----
 const AREA={"בני ברק":["בני ברק","פתח תקווה","רמת גן","תל אביב יפו","גבעתיים","ראש העין","חולון","בת ים","קרית אונו","אור יהודה"],
   "ירושלים":["ירושלים","מבשרת ציון","גבעת זאב","מטה יהודה","בית חורון","מעלה אדומים"]};
@@ -426,8 +440,10 @@ async function saveVehicles(patch){ // read-modify-write of the whole vehicles o
 const rkey=(veh,start)=>veh+"|"+start;
 function vstats(v){
   let emp=0,rein=0; for(const i of v.items) if(i.kind==="empty"&&i.km){const r=REIN[rkey(v.veh,i.start)]; if(r){rein+=+r.rein_km||0;emp+=(+r.before_km||0)+(+r.after_km||0)} else emp+=i.km; }
-  const n=night(v), nk=n.every(x=>x.km!=null)?n.reduce((a,x)=>a+x.km,0):null;
-  return {emp,rein,n,nk,day:(v.service_km||0)+emp+rein+(nk||0)};
+  const n=night(v), ne=n.filter(x=>x.kind!=="rein"), nk=ne.every(x=>x.km!=null)?ne.reduce((a,x)=>a+x.km,0):null;
+  const part=k=>ne.filter(x=>x.kind===k).reduce((a,x)=>a+(x.km||0),0);
+  for(const x of n) if(x.kind==="rein") rein+=x.km||0;
+  return {emp,rein,n,nk,out:part("out"),in:part("in"),over:part("over"),day:(v.service_km||0)+emp+rein+(nk||0)};
 }
 
 // ---- days ----
@@ -443,7 +459,7 @@ async function decryptDay(day){const e=window.ENC_DAY[day];
 function loadDay(day,after){
   $("#day").value=day; $("#bToday").classList.toggle("on",day===today); $("#bYest").classList.toggle("on",day===yest);
   const go=async()=>{window.DAY_DATA=window.DAY_DATA||{};try{if(!window.DAY_DATA[day]) window.DAY_DATA[day]=await decryptDay(day)}catch(e){$("#gantt").innerHTML='<div class="empty-state">לא ניתן לפענח את נתוני היום הזה</div>';return}
-    D=window.DAY_DATA[day];sel=null;await loadRein(day);render();ensureRoad();$("#side").innerHTML='<div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div>';after&&after()};
+    D=window.DAY_DATA[day];sel=null;await Promise.all([loadRein(day),loadOvernight(day)]);render();ensureRoad();$("#side").innerHTML='<div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div>';after&&after()};
   if((window.DAY_DATA&&window.DAY_DATA[day])||(window.ENC_DAY&&window.ENC_DAY[day])) return go();
   $("#gantt").innerHTML='<div class="empty-state">טוען…</div>';
   const s=document.createElement("script"); s.src=`data/day_${day}.js`; s.onload=go;
@@ -462,7 +478,9 @@ function render(){
   $("#cV").textContent=nf(vsAll.length); $("#cT").textContent=nf(vsAll.reduce((a,[v])=>a+v.items.filter(i=>i.kind==="trip").length,0)); $("#cE").textContent=nf(Math.round(emp));
   $("#cEs").textContent=rein?`לפי כביש · בלי ${nf(Math.round(rein))} ק״מ תגבור`:"לפי כביש";
   $("#cN").textContent=nAll.length?nf(Math.round(nk)):"–";
-  $("#cNs").textContent=!nAll.length?"יחושב אחרי הגדרת מיקומי חניונים":nEst?`${roadBusy?"מחשב לפי כביש…":"חלק הערכה (קו אווירי × 1.35)"} · ${nAll.length-nEst} מתוך ${nAll.length} לפי כביש`:`לפי כביש · ${nAll.length} מתוך ${vsAll.length} רכבים`;
+  const sum=k=>nAll.reduce((a,[,s])=>a+s[k],0);
+  $("#cNs").textContent=!nAll.length?"יחושב אחרי הגדרת מיקומי חניונים":`יציאה ${nf(Math.round(sum("out")))} · חזרה ${nf(Math.round(sum("in")))} · מעבר לילה ${nf(Math.round(sum("over")))} (משוער) · `+
+    (nEst?`${roadBusy?"מחשב לפי כביש…":"חלק הערכה"} · ${nAll.length-nEst} מתוך ${nAll.length} לפי כביש`:`לפי כביש · ${nAll.length} מתוך ${vsAll.length} רכבים`);
   let vs=vsAll.slice();
   const so=$("#sort").value;
   vs.sort(so==="empty"?(a,b)=>b[1].emp-a[1].emp:so==="start"?(a,b)=>a[0].items[0].start-b[0].items[0].start:(a,b)=>a[0].veh.localeCompare(b[0].veh));
@@ -474,7 +492,7 @@ function render(){
   const grid=ticks.replace(/<span>.*?<\/span>/g,"");
   for(const [v,s] of vs){
     let b="";
-    for(const n of s.n) if(n.km!=null) b+=bar("dep",n.start,n.end,"",`${n.kind==="depot_out"?"יציאה מ":"חזרה ל"}${n.depot}: ${n.road?`${nf(n.km)} ק״מ לפי כביש`:`כ־${nf(n.km)} ק״מ (הערכה${roadBusy?" · מחשב…":""})`}`);
+    for(const n of s.n) if(n.km>=1&&n.end>T0) b+=bar(n.kind==="rein"?"rein":"dep",Math.max(n.start,T0),n.end,"",`${LEGNAME[n.kind]}${n.depot?" · "+n.depot:""}: ${legKm(n)}${n.frm?` · ${n.frm} ← ${n.to}`:""}`);
     for(const i of v.items){
       if(i.kind==="trip") b+=bar("svc",i.start,i.end,i.line,`${fmt(i.start)}–${fmt(i.end)} קו ${i.line}: ${i.frm} ← ${i.to}`);
       else if(REIN[rkey(v.veh,i.start)]){const r=REIN[rkey(v.veh,i.start)],m1=estMin(+r.before_km||0),m3=estMin(+r.after_km||0),m2=Math.max(i.end-i.start-m1-m3,5);
@@ -493,13 +511,15 @@ function render(){
 }
 function side(veh){
   const v=D.vehicles.find(x=>x.veh===veh); if(!v) return;
-  const s=vstats(v),[out,inn]=s.n;
-  const dep=n=>n.km==null?`<div class="it dep"><span>${n.kind==="depot_out"?"יציאה מחניון":"חזרה לחניון"}<span class="sub">${n.depot?esc(n.depot)+" · מיקום לא הוגדר":"חניון לא הוגדר"}</span></span><span class="t">–</span></div>`
-     :`<div class="it dep"><span>${n.kind==="depot_out"?"יציאה מחניון":"חזרה לחניון"}<span class="sub">${esc(n.depot)} · ${n.road?`${nf(n.km)} ק״מ לפי כביש`:`כ־${nf(n.km)} ק״מ (הערכה${roadBusy?" · מחשב…":""})`}</span></span><span class="t">${fmt(n.start)}–${fmt(n.end)}</span></div>`;
+  const s=vstats(v),pv=v.prev,last=[...v.items].reverse().find(i=>i.kind==="trip");
+  const dep=n=>n.kind==="over"&&n.km===0?`<div class="it wait"><span>התחיל את היום במקום שבו סיים אתמול<span class="sub">אין נסיעה ריקה לתחילת היום (משוער)</span></span><span class="t"></span></div>`:n.km==null?`<div class="it dep"><span>${LEGNAME[n.kind]}<span class="sub">${n.depot?esc(n.depot)+" · מיקום החניון לא הוגדר":"חניון לא הוגדר בהגדרות"}</span></span><span class="t">–</span></div>`
+     :`<div class="it ${n.kind==="rein"?"rein":"dep"}"><span>${LEGNAME[n.kind]}: ${nf(n.km)} ק״מ<span class="sub">${n.frm?esc(n.frm)+" ← "+esc(n.to)+" · ":""}${esc(legKm(n))}</span></span><span class="t">${n.end<=(D.day_start_min??DAY_START_H*60)?`אתמול ${fmt(n.start+1440)}–${fmt(n.end+1440)}`:`${fmt(n.start)}–${fmt(n.end)}`}</span></div>`;
+  const lodge=pv?`<div class="it wait"><span>לינה: סיים אתמול ${fmt(pv.end+1440)} ב${esc(pv.to)} (קו ${esc(pv.line)})${PW?`<span class="sub"><select data-ovn="${esc(v.veh)}" aria-label="מה הרכב עשה בלילה">${OVMODES.map(([k,t])=>`<option value="${k}" ${ovMode(v)===k?"selected":""}>${t}</option>`).join("")}</select> <span class="msg" id="ovnMsg"></span></span>`:`<span class="sub">${esc(OVMODES.find(x=>x[0]===ovMode(v))[1])}</span>`}</span><span class="t"></span></div>`
+     :`<div class="it wait"><span>לינה: אין נתונים על היום הקודם</span><span class="t"></span></div>`;
   const bo=branchOf(v),ro=!PW;
   let h=`<h2>רכב ${esc(v.veh)} · ${esc(v.cls)}</h2><div class="brrow"><label for="sbr"><b>סניף:</b></label><select id="sbr" data-brv="${esc(v.veh)}" ${ro?"disabled":""}>`+
     [["","לא משויך"],...branches().map(b=>[b,b])].map(([val,lab])=>`<option value="${esc(val)}" ${bo.b===val?"selected":""}>${esc(lab)}</option>`).join("")+`</select>`+
-    (bo.auto?`<span class="badge br auto">אוטומטי</span>${ro||!bo.b?"":`<button class="btn small" data-brok="${esc(v.veh)}">אישור</button>`}`:`<span class="badge br">מאושר</span>`)+`<span class="msg" id="sbrMsg"></span></div>`+dep(out);
+    (bo.auto?`<span class="badge br auto">אוטומטי</span>${ro||!bo.b?"":`<button class="btn small" data-brok="${esc(v.veh)}">אישור</button>`}`:`<span class="badge br">מאושר</span>`)+`<span class="msg" id="sbrMsg"></span></div>`+lodge+s.n.map(dep).join("");
   for(const i of v.items){
     if(i.kind==="trip") h+=`<div class="it svc"><span>קו ${esc(i.line)} · ${esc(i.frm)} ← ${esc(i.to)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
     else if(i.overlap) h+=`<div class="it emp" style="color:var(--warn)"><span>חפיפה בין נסיעות (שגיאה בנתונים)</span><span class="t"></span></div>`;
@@ -511,11 +531,11 @@ function side(veh){
           ${PW?`<button class="btn small" data-pickrein="${i.start}">סימון נסיעת תגבור</button>`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
     else h+=`<div class="it wait"><span>המתנה${i.km>0.05?` · מעבר ${nf(i.km)} ק״מ`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
   }
-  h+=dep(inn);
-  h+=`<div class="tot"><div><b>${nf(s.emp)}</b><span>ק״מ ריק ביום</span></div><div><b>${s.nk==null?"–":nf(s.nk)}</b><span>ק״מ ריק בלילה</span></div><div><b>${nf(s.emp+(s.nk||0))}</b><span>סה״כ ריק</span></div></div>`;
+  h+=`<div class="it wait"><span>סוף היום: נשאר ב${esc(last.to)}<span class="sub">המעבר מכאן נספר ביום הבא</span></span><span class="t">${fmt(last.end)}</span></div>`;
+  h+=`<div class="tot"><div><b>${nf(s.emp)}</b><span>ק״מ ריק ביום</span></div><div><b>${s.nk==null?"–":nf(s.nk)}</b><span>ק״מ ריק מחוץ לסידור</span></div><div><b>${nf(s.emp+(s.nk||0))}</b><span>סה״כ ריק</span></div></div>`;
   if(s.rein) h+=`<div class="it rein"><span>ק״מ תגבור (לא נספרים כריקים)</span><span class="t">${nf(s.rein)}</span></div>`;
   const r=rangeFor(v), p=r?Math.min(s.day/r*100,100):0, f=fuelFor(v);
-  h+=`<div class="fuel"><div><b>דלק:</b> ${esc(f||"לא הוגדר")}</div><div><b>חניון:</b> ${esc(out.depot||"לא הוגדר")}${inn.depot&&inn.depot!==out.depot?` ← ${esc(inn.depot)}`:""}</div>
+  h+=`<div class="fuel"><div><b>דלק:</b> ${esc(f||"לא הוגדר")}</div><div><b>חניון:</b> ${esc(depotFor(v,"out")?.name||"לא הוגדר")}</div>
      <div><b>ק״מ ביום:</b> ${nf(s.day)} (בשירות ${nf(v.service_km)})</div>
      ${r?`<div><b>מתוך טווח:</b> ${nf(r)} ק״מ · נשאר ${nf(Math.max(r-s.day,0))} ק״מ בסוף היום</div><div class="prog"><div style="width:${p}%;background:${p>90?"var(--warn)":p>75?"var(--empty)":"var(--ok)"}"></div></div>${s.day>r?`<div style="color:var(--warn)">חורג מהטווח: צריך תדלוק במהלך היום</div>`:""}`:`<div class="muted">טווח נסיעה לא הוגדר</div>`}</div>`;
   $("#side").innerHTML=h;
@@ -570,7 +590,11 @@ $("#reinPrev").addEventListener("click",async e=>{
 async function setBranch(veh,b){const m=$("#sbrMsg");if(m){m.className="msg";m.textContent="שומר…"}
   try{await saveVehicles({[veh]:{branch:b,branch_confirmed:true}});render()}
   catch(err){if(m){m.className="msg err";m.textContent=errText(err)}if(String(err.message).includes("wrong_password")) setPw(null)}}
-$("#side").addEventListener("change",e=>{if(e.target.dataset.brv!=null) setBranch(e.target.dataset.brv,e.target.value)});
+$("#side").addEventListener("change",async e=>{if(e.target.dataset.brv!=null) setBranch(e.target.dataset.brv,e.target.value);
+  if(e.target.dataset.ovn!=null){const veh=e.target.dataset.ovn,mode=e.target.value,m=$("#ovnMsg");if(m){m.className="msg";m.textContent="שומר…"}
+    try{const st=await rpc("set_overnight",{p_password:PW,p_day:D.day,p_veh:veh,p_mode:mode,p_note:null});if(st!=="ok") throw new Error(st);
+      if(mode==="stay") delete OVN[veh]; else OVN[veh]={veh,mode};render();ensureRoad()}
+    catch(err){if(m){m.className="msg err";m.textContent=errText(err)}if(String(err.message).includes("wrong_password")) setPw(null)}}});
 $("#side").addEventListener("click",async e=>{
   if(e.target.dataset.brok!=null){const v=D.vehicles.find(x=>x.veh===e.target.dataset.brok);setBranch(v.veh,autoBranch(v));return}
   const p=e.target.dataset.pickrein, u=e.target.dataset.unrein;
