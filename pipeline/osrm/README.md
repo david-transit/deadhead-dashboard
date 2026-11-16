@@ -1,14 +1,21 @@
 # Our own OSRM with a bus profile (nightly)
 
-Empty-leg road distances are routed with a **bus** profile, not the public car server: the car profile cannot use
-bus-only roads (for example "האיילות" between Beit Horon and Givat Ze'ev) and inflates the km.
+Empty-leg road distances can be routed with a **bus** profile instead of the public car server: the car profile cannot
+use bus-only roads and inflates the km.
+
+**Status: OFF (car) until David approves the bus-vs-car review.** Switch on: repository variable
+`DEADHEAD_ROUTING=bus` (Settings → Secrets and variables → Actions → Variables); the next nightly routes new legs with
+bus-strict and re-routes cached car routes. Then run the checker with `--bus` (G5). Switch off: delete the variable.
+Review: `.github/workflows/bus-compare.yml` (manual, or a push to branch bus-osrm) routes every unique leg of the live day
+files with bus-strict, bus-relaxed and the public car server, uploads the result encrypted (artifact `bus-compare`);
+`compare.js` does the routing.
 
 - `profiles/` — the bus profiles of **transit-studio (Nadav)**, copied unchanged from `infra/osrm/profiles/` at commit
   `32aaa6e2bd3c17bc7f35d55bb71c73ff754a36af` (branch `codex/transit-studio-v1`), reused with the consent of David and
   Nadav. Each file carries a header with the source. Do not edit them here: change them upstream and copy again.
   `bus-strict` = bus/psv access rules (bus lanes and bus-only roads allowed, bus traps passable) and no way below the bus
-  dimensions in `bus_dimensions.lua`; it wraps `/opt/car.lua` of the pinned image. `bus-relaxed` is kept for reference
-  (not built).
+  dimensions in `bus_dimensions.lua`; it wraps `/opt/car.lua` of the pinned image. `bus-relaxed` is built only by
+  bus-compare (it marks the ways the strict profile blocks).
 - Image: `ghcr.io/project-osrm/osrm-backend:v26.10.0-debian`, the same pinned tag as transit-studio's
   `infra/osrm/compose.yaml`.
 - Map data: Geofabrik `israel-and-palestine-latest.osm.pbf` (© OpenStreetMap contributors, ODbL).
