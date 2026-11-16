@@ -9,6 +9,7 @@
 <style>
 :root{--gold:#B8860B;--char:#4A5059;--blue:#1F6FEB;--dim:#D9DDE2;--bg:#F5F6F8;--card:#fff;--line:#E3E6EB;--text:#1d2330;--muted:#6b7280;--svc:#1F4E9A;--empty:#E8871E;--depot:#5B3A8C;--rein:#2E8B57;--sel:#E8F0FC;--warn:#C62828;--ok:#2E9E4F}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 Heebo,Arial,sans-serif;height:100vh;display:flex;flex-direction:column}
 header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 #logoBtn{display:block;cursor:pointer;border-radius:8px;flex:none}
@@ -119,8 +120,16 @@ table.ed input.num{width:110px}
 #gate .alt{display:flex;justify-content:space-between;gap:8px;margin-top:12px;font-size:13px;flex-wrap:wrap}
 .linkbtn{background:none;border:0;color:var(--svc);cursor:pointer;font:inherit;padding:2px;text-decoration:underline}
 .linkbtn.dim{color:var(--muted)}
-.oplogo{display:flex;align-items:center;padding-inline-start:14px;border-inline-start:1px solid var(--line);height:56px}
-.oplogo img{max-height:52px;max-width:170px;display:block}
+.oplogo{display:flex;align-items:center;padding-inline:4px 14px;border-inline-end:1px solid var(--line);height:56px}
+.oplogo img{height:48px;width:auto;max-width:180px;display:block}
+.iconbtn{width:38px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+.iconbtn svg,.btn svg{width:20px;height:20px;flex:none}
+.btn.withicon{display:inline-flex;align-items:center;gap:6px}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ghost:hover{color:var(--text);background:var(--bg)}
+.mrow{display:flex;gap:4px;align-items:center;margin:2px 0;white-space:nowrap}.mrow select{width:auto}
+.secsw{display:flex;gap:6px;padding:10px 16px 0}
+.secsw .btn{padding:5px 14px}
 .who{font-size:12px;color:var(--muted);text-align:left;line-height:1.3}
 .copyrow{display:flex;gap:6px;margin-top:6px}.copyrow input{flex:1;direction:ltr;min-width:0}
 .inv{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}.inv .field{margin:0}
@@ -189,10 +198,10 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <select id="sort" aria-label="מיון"><option value="veh">מיון: מספר רכב</option><option value="empty">מיון: הכי הרבה ק״מ ריקים</option><option value="start">מיון: שעת יציאה</option></select>
     <input type="search" id="q" placeholder="חיפוש מספר רכב" aria-label="חיפוש מספר רכב">
     <select id="opSel" aria-label="מפעיל" hidden></select>
-    <button class="btn" id="bSettings">הגדרות</button>
-    <button class="btn" id="bUsers" hidden>משתמשים</button>
+    <button class="btn iconbtn" id="bSettings" title="הגדרות" aria-label="הגדרות"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <button class="btn withicon" id="bCtl" hidden title="חדר בקרה: משתמשים והרשאות"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5z"/><circle cx="12" cy="10" r="2.5"/><path d="M8 16.5c.8-1.8 2.3-2.7 4-2.7s3.2.9 4 2.7"/></svg>חדר בקרה</button>
     <div class="who" id="who"></div>
-    <button class="btn" id="bEdit">יציאה</button>
+    <button class="btn ghost withicon" id="bEdit" title="יציאה מהמערכת"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h12"/></svg>יציאה</button>
   </div>
 </header>
 <section class="cards">
@@ -216,9 +225,9 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
   <aside class="panel" id="side" aria-live="polite"><div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div></aside>
 </main>
 
-<dialog id="dlgUsers" aria-labelledby="usersTitle">
-  <div class="dlg-h"><h3 id="usersTitle">משתמשים</h3><button class="btn small" id="usersClose">סגירה</button></div>
-  <div class="dlg-b" id="usersBody"></div>
+<dialog id="dlgCtl" aria-labelledby="ctlTitle">
+  <div class="dlg-h"><h3 id="ctlTitle">חדר בקרה · משתמשים והרשאות</h3><button class="btn small" id="ctlClose">סגירה</button></div>
+  <div class="dlg-b" id="ctlBody"></div>
 </dialog>
 
 <dialog id="dlgRein" aria-labelledby="reinTitle">
@@ -228,7 +237,8 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 </dialog>
 <dialog id="dlgSet" aria-labelledby="setTitle">
   <div class="dlg-h"><h3 id="setTitle">הגדרות</h3><button class="btn small" id="setClose">סגירה</button></div>
-  <div class="tabs" role="tablist">
+  <div class="secsw" role="group" aria-label="סוג ההגדרות"><button class="btn on" data-sec="sys">הגדרות מערכת</button><button class="btn" data-sec="view">הגדרות תצוגה</button></div>
+  <div class="tabs" role="tablist" id="sysTabs">
     <button data-tab="depots" class="on" role="tab">חניונים</button>
     <button data-tab="fuel_stations" role="tab">תחנות דלק וגז</button>
     <button data-tab="driver_change_points" role="tab">נקודות החלפת נהגים</button>
@@ -236,7 +246,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <button data-tab="vehicles" role="tab">רכבים</button>
   </div>
   <div class="dlg-b" id="setBody"></div>
-  <div class="dlg-f"><button class="btn primary" id="setSave">שמירה</button><span class="msg" id="setMsg" aria-live="polite"></span></div>
+  <div class="dlg-f" id="setFoot"><button class="btn primary" id="setSave">שמירה</button><span class="msg" id="setMsg" aria-live="polite"></span></div>
 </dialog>
 
 <script>
@@ -369,25 +379,25 @@ const getRows=(t,qs)=>sb(`/rest/v1/${t}?${qs}`);
 const upsert=(t,rows,on)=>sb(`/rest/v1/${t}?on_conflict=${on}`,{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(rows)});
 const delRows=(t,qs)=>sb(`/rest/v1/${t}?${qs}`,{method:"DELETE",headers:{Prefer:"return=minimal"}});
 const opq=()=>"operator_id=eq."+OP.id, dq=d=>"day=eq."+d, vq=v=>"veh=eq."+encodeURIComponent(v);
-const ERR={invalid_credentials:"אימייל או סיסמה שגויים","Invalid login credentials":"אימייל או סיסמה שגויים",email_not_confirmed:"החשבון עוד לא אושר. פתח את קישור ההזמנה מהמייל",
+const DOMAIN="users.yalla-sa.app"; // internal sign-in address <username>@DOMAIN: never shown, never mailed
+const ERR={invalid_credentials:"שם משתמש או סיסמה שגויים","Invalid login credentials":"שם משתמש או סיסמה שגויים",user_banned:"החשבון הושבת. פנה למנהל המערכת",disabled:"החשבון הושבת. פנה למנהל המערכת",
   "row-level security":"אין לך הרשאה לשנות את זה",not_allowed:"אין לך הרשאה לפעולה הזו","42501":"אין לך הרשאה לשנות את זה",not_signed_in:"צריך להיכנס מחדש",
-  weak_password:"הסיסמה חלשה מדי. בחר סיסמה ארוכה יותר","Password should be":"הסיסמה צריכה להיות לפחות 8 תווים",same_password:"הסיסמה החדשה זהה לישנה",
-  over_email_send_rate_limit:"נשלחו יותר מדי מיילים. נסה שוב בעוד שעה","rate limit":"יותר מדי ניסיונות. נסה שוב מאוחר יותר",over_request_rate_limit:"יותר מדי ניסיונות. נסה שוב מאוחר יותר",
-  signup_disabled:"ההרשמה סגורה. רק מי שהוזמן יכול להיכנס","Signups not allowed":"ההרשמה סגורה. רק מי שהוזמן יכול להיכנס",
-  email_failed:"שליחת המייל נכשלה. אפשר ליצור קישור הזמנה ולשלוח אותו בעצמך",already_member:"המשתמש כבר משויך למפעיל הזה",not_self:"אי אפשר לשנות או להסיר את עצמך",
-  already_active:"המשתמש כבר נכנס למערכת. הוא יכול לבחור \"שכחתי סיסמה\" במסך הכניסה",bad_input:"הנתונים לא תקינים",server_error:"שגיאה בשרת. נסה שוב",
+  weak_password:"הסיסמה חלשה מדי. בחר סיסמה ארוכה יותר (לפחות 8 תווים)","Password should be":"הסיסמה צריכה להיות לפחות 8 תווים",same_password:"הסיסמה החדשה זהה לישנה",
+  wrong_password:"הסיסמה הנוכחית שגויה",bad_username:"שם משתמש: 3–32 תווים, אותיות באנגלית, ספרות, נקודה, מקף או קו תחתון",username_taken:"שם המשתמש הזה כבר תפוס",
+  bootstrap_done:"חשבון מנהל ראשי כבר נוצר. היכנס עם שם משתמש וסיסמה","rate limit":"יותר מדי ניסיונות. נסה שוב בעוד כמה דקות",over_request_rate_limit:"יותר מדי ניסיונות. נסה שוב בעוד כמה דקות",
+  signup_disabled:"אין הרשמה עצמית. מנהל המערכת יוצר את המשתמשים",bad_input:"הנתונים לא תקינים",server_error:"שגיאה בשרת. נסה שוב",
   no_key:"אין גישה לנתוני המפעיל",too_large:"הנתונים גדולים מדי",missing_line:"צריך לבחור קו לתגבור"};
 const errText=e=>{const m=String(e&&e.message||e);for(const k in ERR) if(m.includes(k)) return ERR[k];return /abort/i.test(m)?"אין תשובה מהשרת. נסה שוב":m};
 
 // ---- operator (tenant) and role ----
-let OP=null,OPS=[],ROLE=null,PLATFORM=false,ME=null;
+let OP=null,OPS=[],ROLE=null,PLATFORM=false,ME=null,PROFILE=null,MS=[];
 const ROLEHE={admin:"מנהל",editor:"עורך",viewer:"צופה"};
-const canEdit=()=>PLATFORM||ROLE==="editor"||ROLE==="admin", canManage=()=>PLATFORM||ROLE==="admin";
+const canEdit=()=>PLATFORM||ROLE==="editor"||ROLE==="admin", canManage=()=>PLATFORM||MS.some(m=>m.role==="admin");
 async function loadAccess(){
   ME=SES.user&&SES.user.id?SES.user:await http(SB+"/auth/v1/user",{headers:{apikey:KEY,Authorization:"Bearer "+await token()}});
   if(!SES.user){SES.user=ME;lsSet(SKEY,JSON.stringify(SES))}
-  const [pa,ms,ops]=await Promise.all([getRows("platform_admins","select=user_id&user_id=eq."+ME.id),getRows("memberships","select=operator_id,role&user_id=eq."+ME.id),getRows("operators","select=id,slug,name,logo_url&order=name")]);
-  PLATFORM=pa.length>0; OPS=ops||[];
+  const [pr,pa,ms,ops]=await Promise.all([getRows("profiles","select=username,display_name,must_change_password,disabled&user_id=eq."+ME.id),getRows("platform_admins","select=user_id&user_id=eq."+ME.id),getRows("memberships","select=operator_id,role&user_id=eq."+ME.id),getRows("operators","select=id,slug,name,logo_url&order=name")]);
+  PROFILE=pr[0]||null; PLATFORM=pa.length>0; OPS=ops||[]; MS=ms||[];
   const want=QP.get("op")||lsGet("ys_op"); OP=OPS.find(o=>o.slug===want)||OPS[0]||null;
   ROLE=OP?(ms.find(m=>m.operator_id===OP.id)?.role||(PLATFORM?"admin":null)):null;
   if(OP) lsSet("ys_op",OP.slug);
@@ -396,8 +406,8 @@ function applyOperator(){
   $("#op").textContent=OP.name; document.title=`יאללה־סע · נסיעות ריקות · ${OP.name}`;
   const lb=$("#opLogo"); lb.hidden=!OP.logo_url; lb.innerHTML=OP.logo_url?`<img src="${esc(OP.logo_url)}" alt="${esc(OP.name)}">`:"";
   const os=$("#opSel"); os.hidden=OPS.length<2; os.innerHTML=OPS.map(o=>`<option value="${esc(o.slug)}" ${o.id===OP.id?"selected":""}>${esc(o.name)}</option>`).join("");
-  $("#bUsers").hidden=!canManage();
-  $("#who").innerHTML=`${esc(ME.email||"")}<br>${PLATFORM?"מנהל מערכת":esc(ROLEHE[ROLE]||"")}`;
+  $("#bCtl").hidden=!canManage();
+  $("#who").innerHTML=`${esc((PROFILE&&(PROFILE.display_name||PROFILE.username))||"")}<br>${PLATFORM?"מנהל מערכת":esc(ROLEHE[ROLE]||"")}`;
 }
 document.getElementById("opSel").onchange=e=>{lsSet("ys_op",e.target.value);location.replace(location.pathname+"?op="+encodeURIComponent(e.target.value))};
 
@@ -704,15 +714,22 @@ function parseLoc(s){ // Waze ll=, Google @lat,lon / q= / !3d..!4d.., or plain "
   return null;}
 const LISTS={
   depots:{cols:[["name","שם"],["addr","כתובת או קישור"],["lat","קו רוחב"],["lon","קו אורך"],["cities","שיוך אוטומטי לפי ערים (מופרד בפסיקים)"]],
-    hint:"רכב בלי חניון מוגדר משויך לפי העיר שבה הוא מתחיל או מסיים את היום."},
+    hint:"רכב בלי חניון מוגדר משויך לפי העיר שבה הוא מתחיל או מסיים את היום."}, // later: capacity etc. as extra fields on each depot row
   fuel_stations:{cols:[["name","שם"],["fuel","סוג"],["addr","כתובת או קישור"],["lat","קו רוחב"],["lon","קו אורך"]],hint:"סוג: סולר או גז. ישמש לחישוב התדלוק בשלב הבא."},
   driver_change_points:{cols:[["name","שם המקום"],["addr","כתובת או קישור"],["lat","קו רוחב"],["lon","קו אורך"],["from","משעה"],["to","עד שעה"]],
     hint:"מותר להחליף נהג רק בנקודות האלה. בלי שעות = כל היום. ישמש את הצעות החיסכון."}
 };
 let tab="depots", draft=null, look=null;
 const LOCHINT="<b>איך מכניסים מיקום:</b> בשדה \"כתובת או קישור\" כותבים כתובת רגילה (למשל: מבצע קדש, בני ברק) ולוחצים \"איתור\". אפשר גם להדביק קישור מלא מ־Waze או מגוגל מפות, או שני מספרים שהועתקו בקליק ימני בגוגל מפות. שמות מקומות כמו \"חניון אפיקים\" לא תמיד נמצאים בחיפוש, ואז עדיף קישור או כתובת. החיפוש נעשה ב־OpenStreetMap.";
-function openSettings(){draft=clone(S);look=null;$("#setMsg").textContent="";showTab("depots");$("#dlgSet").showModal()}
-function showTab(t){tab=t;document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
+// two sections: system settings (substance: depots, fuel, driver change points, branches, defaults, vehicles) and
+// display settings (colors etc., later). Depot rows keep unknown fields, so later attributes (capacity …) fit in as-is.
+function openSettings(){draft=clone(S);look=null;$("#setMsg").textContent="";setSec("sys");$("#dlgSet").showModal()}
+function setSec(sec){document.querySelectorAll(".secsw .btn").forEach(b=>b.classList.toggle("on",b.dataset.sec===sec));
+  $("#sysTabs").hidden=$("#setFoot").hidden=sec!=="sys";
+  if(sec==="sys") showTab(tab||"depots");
+  else $("#setBody").innerHTML=`<p class="hint">כאן יוגדרו בהמשך צבעים ותצוגה (למשל צבעי הנסיעות בציר הזמן). עוד אין הגדרות בחלק הזה.</p>`}
+document.querySelectorAll(".secsw .btn").forEach(b=>b.onclick=()=>setSec(b.dataset.sec));
+function showTab(t){tab=t;document.querySelectorAll("#sysTabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   const ro=!canEdit(); let h=ro?`<p class="hint" style="color:var(--warn)">צפייה בלבד: ההרשאה שלך היא לצפייה. לשינויים פנה למנהל המפעיל.</p>`:"";
   if(LISTS[t]){const L=LISTS[t],rows=draft[t]||[];
     h+=`<p class="hint">${LOCHINT}</p><p class="hint">${L.hint}</p><table class="ed"><thead><tr>${L.cols.map(c=>`<th>${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>`+
@@ -740,7 +757,7 @@ function showTab(t){tab=t;document.querySelectorAll(".tabs button").forEach(b=>b
   $("#setBody").innerHTML=h;
   const vq=$("#vq"); if(vq) vq.oninput=()=>document.querySelectorAll("#vrows tr").forEach(r=>r.hidden=!r.dataset.v.includes(vq.value.trim()));
 }
-document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{$("#setMsg").textContent="";look=null;showTab(b.dataset.tab)});
+document.querySelectorAll("#sysTabs button").forEach(b=>b.onclick=()=>{$("#setMsg").textContent="";look=null;showTab(b.dataset.tab)});
 $("#setBody").addEventListener("input",e=>{
   const el=e.target;
   if(el.dataset.i!=null){const r=draft[tab][+el.dataset.i],k=el.dataset.k;
@@ -792,54 +809,70 @@ $("#q").oninput=render; $("#sort").onchange=render; $("#br").onchange=render; $(
 addEventListener("resize",()=>{clearTimeout(window._rt);window._rt=setTimeout(render,150)});
 $("#bToday").onclick=()=>loadDay(today); $("#bYest").onclick=()=>loadDay(yest);
 const QP=new URLSearchParams(location.search);
-// ---- users (operator admins and platform admin): manage_users Edge Function ----
+// ---- control room (חדר בקרה): platform admin = all users; operator admin = users of his operators. Server: manage_users ----
 const ROLEHINT="צופה: רואה הכול. עורך: גם משנה הגדרות, תגבורים ומעברי לילה. מנהל: גם מנהל את המשתמשים של המפעיל.";
+const USERRE=/^[a-z0-9._-]{3,32}$/;
 const roleSel=(cur,attrs="")=>`<select ${attrs}>${["viewer","editor","admin"].map(r=>`<option value="${r}" ${r===cur?"selected":""}>${ROLEHE[r]}</option>`).join("")}</select>`;
-async function mu(body){return http(SB+"/functions/v1/manage_users",{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json",Authorization:"Bearer "+await token()},
-  body:JSON.stringify({operator_id:OP.id,redirect_to:SITE,...body})},30000)}
-const umsg=(t,cls="")=>{const m=$("#usersMsg");if(m){m.className="msg "+cls;m.textContent=t}};
-function showLink(link,who){$("#usersLink").innerHTML=`<div class="copyrow"><input readonly value="${esc(link)}" aria-label="קישור כניסה"><button class="btn small" data-copy>העתקה</button></div>
-  <p class="hint" style="color:var(--warn)">הקישור הוא כמו מפתח לחשבון של ${esc(who)}: שולחים אותו רק לו (וואטסאפ או מייל). הוא עובד פעם אחת ולזמן מוגבל. אם פג תוקפו, יוצרים קישור חדש.</p>`}
-async function drawUsers(){
-  const box=$("#usersBody"); box.innerHTML='<div class="empty-state">טוען…</div>';
-  let r; try{r=await mu({action:"list"})}catch(e){box.innerHTML=`<p class="msg err">${esc(errText(e))}</p>`;return}
-  const dt=x=>x?new Date(x).toLocaleDateString("he-IL"):"";
-  box.innerHTML=`<p class="hint">משתמשים של <b>${esc(OP.name)}</b>. ${ROLEHINT}</p>
-    <table class="ed"><thead><tr><th>אימייל</th><th>הרשאה</th><th>מצב</th><th></th></tr></thead><tbody>`+
-    r.users.map(u=>`<tr data-u="${esc(u.user_id)}" data-email="${esc(u.email)}"><td dir="ltr" style="text-align:right">${esc(u.email)}${u.me?" (אתה)":""}</td>
-      <td>${roleSel(u.role,`data-role aria-label="הרשאה של ${esc(u.email)}" ${u.me&&!PLATFORM?"disabled":""}`)}</td>
-      <td>${u.pending?'<span class="muted">הוזמן, עוד לא נכנס</span>':"נכנס לאחרונה "+dt(u.last_sign_in)}</td>
-      <td>${u.pending||PLATFORM?`<button class="btn small" data-link>קישור כניסה חדש</button> `:""}${u.me?"":`<button class="btn small danger" data-rm>הסרה</button>`}</td></tr>`).join("")+
-    `</tbody></table>${r.users.length?"":'<p class="muted">אין עדיין משתמשים.</p>'}
-    <h4>הזמנת משתמש</h4>
-    <div class="inv"><div class="field"><label for="invEmail">אימייל</label><input id="invEmail" type="email" dir="ltr" autocomplete="off" style="width:240px"></div>
-      <div class="field"><label for="invRole">הרשאה</label>${roleSel("viewer",'id="invRole"')}</div>
-      <button class="btn primary" data-inv="link">יצירת קישור הזמנה</button><button class="btn" data-inv="email">שליחת הזמנה במייל</button></div>
-    <p class="hint">מי שמוזמן בוחר סיסמה משלו בכניסה הראשונה. "קישור הזמנה" מעתיקים ושולחים בעצמך. שליחה במייל עובדת רק אם הוגדר במערכת שירות מייל.</p>
-    <div class="msg" id="usersMsg" aria-live="polite"></div><div id="usersLink"></div>`;
+const fnCall=async(body,auth=true)=>http(SB+"/functions/v1/manage_users",{method:"POST",
+  headers:{apikey:KEY,"Content-Type":"application/json",...(auth?{Authorization:"Bearer "+await token()}:{})},body:JSON.stringify(body)},30000);
+const adminOps=()=>OPS.filter(o=>PLATFORM||MS.some(m=>m.operator_id===o.id&&m.role==="admin"));
+const opName=id=>(OPS.find(o=>o.id===id)||{}).name||"מפעיל אחר";
+function suggestPw(){const a="abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789",r=crypto.getRandomValues(new Uint32Array(12));return [...r].map(x=>a[x%a.length]).join("")}
+const cmsg=(t,cls="")=>{const m=$("#ctlMsg");if(m){m.className="msg "+cls;m.textContent=t}};
+let CTL=null;
+async function drawCtl(){
+  const box=$("#ctlBody"); if(!CTL) box.innerHTML='<div class="empty-state">טוען…</div>';
+  try{CTL=await fnCall({action:"list"})}catch(e){box.innerHTML=`<p class="msg err">${esc(errText(e))}</p>`;return}
+  const AO=adminOps(), dt=x=>x?new Date(x).toLocaleDateString("he-IL"):"";
+  const status=u=>u.disabled?'<span class="msg err">מושבת</span>':u.must_change?'<span class="muted">צריך להחליף סיסמה בכניסה</span>':u.last_sign_in?"נכנס לאחרונה "+dt(u.last_sign_in):'<span class="muted">עוד לא נכנס</span>';
+  const access=u=>u.platform?"<b>מנהל מערכת</b> (הכול)":(u.memberships.map(m=>`<div class="mrow">${esc(opName(m.operator_id))}: ${u.manageable?roleSel(m.role,`data-mrole="${esc(m.operator_id)}" aria-label="הרשאה ב${esc(opName(m.operator_id))}"`)+
+      `<button class="btn small" data-mdel="${esc(m.operator_id)}" title="הסרת הגישה למפעיל הזה" aria-label="הסרת הגישה ל${esc(opName(m.operator_id))}">✕</button>`:esc(ROLEHE[m.role])}</div>`).join("")||'<span class="muted">אין גישה</span>')+
+      (u.other_access?'<div class="muted">+ גישה למפעילים אחרים</div>':"")+
+      (u.manageable&&AO.some(o=>!u.memberships.some(m=>m.operator_id===o.id))?`<div class="mrow"><select data-madd aria-label="הוספת גישה למפעיל"><option value="">+ הוספת מפעיל</option>${AO.filter(o=>!u.memberships.some(m=>m.operator_id===o.id)).map(o=>`<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("")}</select></div>`:"");
+  box.innerHTML=`<p class="hint">${ROLEHINT} אין שחזור סיסמה עצמי: מי ששכח סיסמה פונה אליך, ואתה קובע לו סיסמה זמנית. בכניסה הבאה הוא יבחר סיסמה חדשה.</p>
+    <table class="ed"><thead><tr><th>שם משתמש</th><th>שם</th><th>גישה והרשאה</th><th>מצב</th><th>פעולות</th></tr></thead><tbody>`+
+    CTL.users.map(u=>`<tr data-u="${esc(u.user_id)}" data-name="${esc(u.username)}"><td dir="ltr" style="text-align:right"><b>${esc(u.username)}</b>${u.me?" (אתה)":""}</td><td>${esc(u.display_name)}</td>
+      <td>${access(u)}</td><td>${status(u)}</td>
+      <td>${u.manageable?`<button class="btn small" data-reset>סיסמה זמנית</button> <button class="btn small" data-dis="${u.disabled?0:1}">${u.disabled?"הפעלה":"השבתה"}</button> <button class="btn small danger" data-delu>מחיקה</button><div data-resetbox></div>`:""}</td></tr>`).join("")+
+    `</tbody></table>
+    <h4>משתמש חדש</h4>
+    <form class="inv" id="ctlNew" autocomplete="off">
+      <div class="field"><label for="nUser">שם משתמש (אנגלית/ספרות)</label><input id="nUser" dir="ltr" required pattern="[A-Za-z0-9._\\-]{3,32}" style="width:170px" autocomplete="off"></div>
+      <div class="field"><label for="nName">שם לתצוגה</label><input id="nName" style="width:170px"></div>
+      <div class="field"><label for="nOp">מפעיל</label><select id="nOp">${AO.map(o=>`<option value="${esc(o.id)}" ${o.id===OP.id?"selected":""}>${esc(o.name)}</option>`).join("")}</select></div>
+      <div class="field"><label for="nRole">הרשאה</label>${roleSel("viewer",'id="nRole"')}</div>
+      <div class="field"><label for="nPw">סיסמה זמנית</label><div style="display:flex;gap:4px"><input id="nPw" dir="ltr" required minlength="8" style="width:150px" autocomplete="new-password"><button type="button" class="btn small" id="nGen">הצעה</button></div></div>
+      <button class="btn primary">יצירת משתמש</button>
+    </form>
+    <p class="hint">מעבירים למשתמש את שם המשתמש והסיסמה הזמנית בעצמך. בכניסה הראשונה הוא חייב לבחור סיסמה חדשה, ועד אז הוא לא רואה נתונים.</p>
+    <div class="msg" id="ctlMsg" aria-live="polite"></div>`;
 }
-$("#bUsers").onclick=()=>{$("#dlgUsers").showModal();drawUsers()};
-$("#usersClose").onclick=()=>$("#dlgUsers").close();
-$("#usersBody").addEventListener("change",async e=>{if(e.target.dataset.role==null) return;const tr=e.target.closest("tr");
-  umsg("שומר…");try{await mu({action:"set_role",user_id:tr.dataset.u,role:e.target.value});umsg("ההרשאה של "+tr.dataset.email+" עודכנה","ok")}catch(err){umsg(errText(err),"err");drawUsers()}});
-$("#usersBody").addEventListener("click",async e=>{const t=e.target,tr=t.closest("tr");
-  if(t.dataset.copy!=null){const i=t.previousElementSibling;i.select();try{await navigator.clipboard.writeText(i.value);t.textContent="הועתק"}catch{document.execCommand&&document.execCommand("copy");t.textContent="הועתק"}return}
-  if(t.dataset.rm!=null){if(!confirm(`להסיר את ${tr.dataset.email} מ${OP.name}? הוא לא יוכל להיכנס יותר לנתוני המפעיל.`)) return;
-    try{await mu({action:"remove",user_id:tr.dataset.u});await drawUsers();umsg(tr.dataset.email+" הוסר","ok")}catch(err){umsg(errText(err),"err")}return}
-  if(t.dataset.link!=null){t.disabled=true;try{const r=await mu({action:"link",user_id:tr.dataset.u});showLink(r.link,tr.dataset.email);umsg("נוצר קישור כניסה חדש","ok")}catch(err){umsg(errText(err),"err")}t.disabled=false;return}
-  if(t.dataset.inv){const email=$("#invEmail").value.trim(),role=$("#invRole").value;
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){umsg("כתובת מייל לא תקינה","err");$("#invEmail").focus();return}
-    t.disabled=true;umsg(t.dataset.inv==="email"?"שולח…":"יוצר קישור…");
-    try{const r=await mu({action:"invite",email,role,send:t.dataset.inv});await drawUsers();
-      if(r.link){showLink(r.link,email);umsg(`${email} נוסף כ${ROLEHE[role]}. העתק את הקישור ושלח לו.`,"ok")}
-      else if(r.sent) umsg(`נשלחה הזמנה במייל ל־${email}`,"ok");
-      else umsg(`${email} כבר רשום במערכת ושויך ל${OP.name}. הוא נכנס עם הסיסמה שלו.`,"ok")}
-    catch(err){t.disabled=false;umsg(errText(err),"err")}}
+async function ctlDo(body,okText){cmsg("שומר…");try{await fnCall(body);await drawCtl();cmsg(okText,"ok");return true}catch(e){cmsg(errText(e),"err");return false}}
+$("#bCtl").onclick=()=>{CTL=null;$("#dlgCtl").showModal();drawCtl()};
+$("#ctlClose").onclick=()=>$("#dlgCtl").close();
+$("#ctlBody").addEventListener("change",e=>{const t=e.target,tr=t.closest("tr");if(!tr) return;
+  if(t.dataset.mrole) ctlDo({action:"set_membership",user_id:tr.dataset.u,operator_id:t.dataset.mrole,role:t.value},`ההרשאה של ${tr.dataset.name} עודכנה`);
+  if(t.dataset.madd!=null&&t.value) ctlDo({action:"set_membership",user_id:tr.dataset.u,operator_id:t.value,role:"viewer"},`${tr.dataset.name} קיבל גישת צפייה ל${opName(t.value)}`)});
+$("#ctlBody").addEventListener("click",async e=>{const t=e.target,tr=t.closest("tr");
+  if(t.id==="nGen"){$("#nPw").value=suggestPw();return}
+  if(!tr) return; const u=tr.dataset.u,n=tr.dataset.name;
+  if(t.dataset.mdel){if(confirm(`להסיר את הגישה של ${n} ל${opName(t.dataset.mdel)}?`)) ctlDo({action:"remove_membership",user_id:u,operator_id:t.dataset.mdel},`הגישה של ${n} הוסרה`);return}
+  if(t.dataset.dis!=null){const off=t.dataset.dis==="1";if(off&&!confirm(`להשבית את ${n}? הוא לא יוכל להיכנס עד שיופעל שוב.`)) return;
+    ctlDo({action:"set_disabled",user_id:u,disabled:off},off?`${n} הושבת`:`${n} הופעל`);return}
+  if(t.dataset.delu!=null){if(confirm(`למחוק את המשתמש ${n} לצמיתות? אי אפשר לבטל.`)) ctlDo({action:"delete",user_id:u},`${n} נמחק`);return}
+  if(t.dataset.reset!=null){const b=tr.querySelector("[data-resetbox]");b.innerHTML=`<div class="copyrow"><input data-rpw dir="ltr" value="${suggestPw()}" aria-label="סיסמה זמנית ל${esc(n)}" autocomplete="off"><button class="btn small primary" data-rsave>קביעה</button></div>`;b.querySelector("input").focus();return}
+  if(t.dataset.rsave!=null){const pw=tr.querySelector("[data-rpw]").value;if(pw.length<8){cmsg(ERR["Password should be"],"err");return}
+    if(await ctlDo({action:"reset_password",user_id:u,password:pw},"")) cmsg(`נקבעה סיסמה זמנית ל־${n}: ${pw} . העבר לו אותה. בכניסה הבאה הוא יבחר סיסמה חדשה.`,"ok")}
 });
+$("#ctlBody").addEventListener("submit",async e=>{e.preventDefault();const user=$("#nUser").value.trim().toLowerCase(),pw=$("#nPw").value;
+  if(!USERRE.test(user)){cmsg(ERR.bad_username,"err");return} if(pw.length<8){cmsg(ERR["Password should be"],"err");return}
+  if(await ctlDo({action:"create",username:user,display_name:$("#nName").value.trim(),operator_id:$("#nOp").value,role:$("#nRole").value,password:pw},""))
+    cmsg(`נוצר המשתמש ${user} עם הסיסמה הזמנית ${pw} . העבר לו את שניהם. בכניסה הראשונה הוא יבחר סיסמה חדשה.`,"ok")});
 
-// ---- entry: login, forgot password, choosing a password (invite / reset link), no access ----
+// ---- entry: first platform admin (once), login, forced password change, no access ----
 async function unlock(){
   await loadAccess();
+  if(PROFILE&&PROFILE.must_change_password){gateMode("changepw");return false}
   if(!OP){gateMode("noaccess");return false}
   const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k) throw new Error("no_key");
   CKEY=await crypto.subtle.importKey("raw",b64(k),"AES-GCM",false,["decrypt"]);
@@ -855,60 +888,60 @@ async function unlock(){
 // entry screen intro: the header logo moves into the gate, plays large, then the form fades in
 const LOGO=$("#logoBtn"), LOGO_HOME=[LOGO.parentNode,LOGO.nextSibling];
 function logoHome(){if(LOGO.parentNode!==LOGO_HOME[0]){LOGO_HOME[0].insertBefore(LOGO,LOGO_HOME[1]);LOGO.removeAttribute("aria-hidden");LOGO.tabIndex=0}}
-let introEnd=Promise.resolve(), introOver=false, AUTO=false, GMODE="login";
+let introEnd=Promise.resolve(), introOver=false, AUTO=false, GMODE="login", LASTPW=null;
 const showForm=()=>{const g=$("#gate");if(g&&!g.classList.contains("ready")){g.classList.add("ready");g.querySelector("#gateFields input:not([hidden]),#gateBtn")?.focus()}};
 function gateIntro(){const g=$("#gate");let done=false,res;introEnd=new Promise(r=>res=r);
   const show=()=>{if(done) return;done=true;introOver=true;clearTimeout(tm);removeEventListener("keydown",show,true);g.removeEventListener("pointerdown",show);res();if(!AUTO) showForm()};
   g.insertBefore(LOGO,g.firstChild); LOGO.setAttribute("aria-hidden","true"); LOGO.tabIndex=-1; g.classList.add("intro");
   window.playLogo(); const tm=setTimeout(show,window.LOGO_MS);
   addEventListener("keydown",show,true); g.addEventListener("pointerdown",show);}
-const fld=(id,label,type,ac,extra="")=>`<div class="field" style="text-align:right;margin-top:14px"><label for="${id}">${label}</label><input id="${id}" type="${type}" autocomplete="${ac}" ${type==="email"?'dir="ltr"':""} required ${extra}></div>`;
+const fld=(id,label,type,ac,extra="")=>`<div class="field" style="text-align:right;margin-top:14px"><label for="${id}">${label}</label><input id="${id}" type="${type}" autocomplete="${ac}" ${type!=="password"&&id!=="gName"?'dir="ltr"':""} required ${extra}></div>`;
+const userFld=v=>fld("gUser","שם משתמש","text","username",`value="${esc(v)}" autocapitalize="off" spellcheck="false"`);
 function gateMode(m,{msg="",err=""}={}){
-  GMODE=m; const email=(SES&&SES.user&&SES.user.email)||lsGet("ys_email")||"";
+  GMODE=m; const uname=(PROFILE&&PROFILE.username)||lsGet("ys_user")||"";
   const F=$("#gateFields"),A=$("#gateAlt"),B=$("#gateBtn"),S=$("#gateSub"); B.disabled=false;
   const legacy=`<a class="linkbtn dim" href="legacy.html">כניסה בסיסמה המשותפת (זמני)</a>`;
-  if(m==="login"){S.textContent="כניסה עם אימייל וסיסמה";F.innerHTML=fld("gEmail","אימייל","email","username",`value="${esc(email)}"`)+fld("gpw","סיסמה","password","current-password");
-    B.textContent="כניסה";A.innerHTML=`<button type="button" class="linkbtn" data-gm="forgot">שכחתי סיסמה</button>${legacy}`}
-  else if(m==="forgot"){S.textContent="נשלח אליך קישור לבחירת סיסמה חדשה";F.innerHTML=fld("gEmail","אימייל","email","username",`value="${esc(email)}"`);
-    B.textContent="שליחת קישור";A.innerHTML=`<button type="button" class="linkbtn" data-gm="login">חזרה לכניסה</button>`}
-  else if(m==="setpw"){S.textContent=`בחירת סיסמה${email?" לחשבון "+email:""}`;
-    F.innerHTML=`<input type="email" autocomplete="username" value="${esc(email)}" hidden>`+fld("gpw","סיסמה חדשה (לפחות 8 תווים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
-    B.textContent="שמירת הסיסמה וכניסה";A.innerHTML=""}
-  else if(m==="noaccess"){S.textContent=`החשבון ${email} עוד לא שויך לאף מפעיל. פנה למנהל המערכת.`;F.innerHTML="";B.textContent="יציאה";A.innerHTML=""}
+  if(m==="login"){S.textContent="כניסה עם שם משתמש וסיסמה";F.innerHTML=userFld(uname)+fld("gpw","סיסמה","password","current-password");
+    B.textContent="כניסה";A.innerHTML=`<span class="muted">שכחת סיסמה? פנה למנהל המערכת.</span>${legacy}`}
+  else if(m==="bootstrap"){S.textContent="יצירת חשבון מנהל ראשי (פעם אחת בלבד)";
+    F.innerHTML=userFld("")+fld("gName","שם לתצוגה","text","name",'maxlength="80"')+fld("gpw","סיסמה (לפחות 8 תווים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
+    B.textContent="יצירת החשבון וכניסה";A.innerHTML=`<span class="muted">שם משתמש: אותיות באנגלית, ספרות, נקודה, מקף או קו תחתון.</span>`}
+  else if(m==="changepw"){S.textContent=`צריך לבחור סיסמה חדשה${uname?" לחשבון "+uname:""}`;
+    F.innerHTML=`<input type="text" autocomplete="username" value="${esc(uname)}" hidden>`+(LASTPW?"":fld("gpw0","הסיסמה הנוכחית (הזמנית)","password","current-password"))+
+      fld("gpw","סיסמה חדשה (לפחות 8 תווים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
+    B.textContent="שמירת הסיסמה וכניסה";A.innerHTML=`<button type="button" class="linkbtn dim" data-gm="logout">יציאה</button>`}
+  else if(m==="noaccess"){S.textContent=`החשבון ${uname} עוד לא שויך לאף מפעיל. פנה למנהל המערכת.`;F.innerHTML="";B.textContent="יציאה";A.innerHTML=""}
   const gm=$("#gateMsg"); gm.className="msg"+(err?" err":msg?" ok":""); gm.textContent=err||msg;
   if(introOver) {showForm();(F.querySelector("input:not([hidden])")||B).focus()}
 }
-$("#gateAlt").addEventListener("click",e=>{const m=e.target.dataset.gm;if(m) gateMode(m)});
+const signOut=async()=>{try{await authPost("logout",{},SES&&SES.access_token)}catch{} setSes(null);LASTPW=null};
+const signIn=async(user,pw)=>{setSes(await authPost("token?grant_type=password",{email:user.toLowerCase()+"@"+DOMAIN,password:pw}));lsSet("ys_user",user.toLowerCase());PROFILE=null};
+$("#gateAlt").addEventListener("click",async e=>{const m=e.target.dataset.gm;if(m==="logout"){await signOut();gateMode("login")}});
 $("#gateForm").addEventListener("submit",async e=>{
   e.preventDefault(); const m=$("#gateMsg"); m.className="msg"; m.textContent="רגע…"; $("#gateBtn").disabled=true;
-  const fail=err=>{m.className="msg err";m.textContent=errText(err);$("#gateBtn").disabled=false};
   try{
-    if(GMODE==="login"){const email=$("#gEmail").value.trim(); lsSet("ys_email",email);
-      setSes(await authPost("token?grant_type=password",{email,password:$("#gpw").value}));
-      if(!(await unlock())) return;}
-    else if(GMODE==="forgot"){const email=$("#gEmail").value.trim(); lsSet("ys_email",email);
-      await authPost("recover?redirect_to="+encodeURIComponent(SITE),{email});
-      gateMode("login",{msg:"אם הכתובת רשומה במערכת, נשלח אליה קישור. לא הגיע מייל תוך כמה דקות? בקש ממנהל המפעיל קישור כניסה חדש."})}
-    else if(GMODE==="setpw"){const p=$("#gpw").value; if(p.length<8) throw new Error("Password should be"); if(p!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
-      const u=await http(SB+"/auth/v1/user",{method:"PUT",headers:{apikey:KEY,"Content-Type":"application/json",Authorization:"Bearer "+await token()},body:JSON.stringify({password:p})});
-      if(u&&u.id){SES.user=u;lsSet(SKEY,JSON.stringify(SES))}
-      if(!(await unlock())) return;}
-    else if(GMODE==="noaccess"){$("#bEdit").onclick()}
-  }catch(err){fail(err);if(GMODE==="login") $("#gpw")?.select()}
+    if(GMODE==="login"){const user=$("#gUser").value.trim(),pw=$("#gpw").value; await signIn(user,pw); LASTPW=pw;
+      if(!(await unlock())) return; LASTPW=null}
+    else if(GMODE==="bootstrap"){const user=$("#gUser").value.trim().toLowerCase(),pw=$("#gpw").value;
+      if(!USERRE.test(user)) throw new Error("bad_username"); if(pw.length<8) throw new Error("Password should be"); if(pw!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
+      await fnCall({action:"bootstrap",username:user,display_name:$("#gName").value.trim(),password:pw},false);
+      await signIn(user,pw); if(!(await unlock())) return}
+    else if(GMODE==="changepw"){const cur=LASTPW||$("#gpw0").value,pw=$("#gpw").value;
+      if(pw.length<8) throw new Error("Password should be"); if(pw!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
+      await fnCall({action:"change_password",current_password:cur,new_password:pw});
+      await signIn(lsGet("ys_user")||PROFILE?.username||"",pw); LASTPW=null; // a password change ends the old sessions
+      if(!(await unlock())) return}
+    else if(GMODE==="noaccess"){await signOut();gateMode("login")}
+  }catch(err){m.className="msg err";m.textContent=errText(err);$("#gateBtn").disabled=false;if(GMODE==="login") $("#gpw")?.select()}
 });
 (async()=>{
-  const h=new URLSearchParams(location.hash.slice(1)); let linkType=null;
-  if(h.get("error")||h.get("error_code")){history.replaceState(null,"",location.pathname+location.search); gateIntro();
-    gateMode("login",{err:h.get("error_code")==="otp_expired"?"הקישור פג תוקף או שכבר השתמשו בו. בקש ממנהל המפעיל קישור חדש, או לחץ \"שכחתי סיסמה\".":"הכניסה מהקישור נכשלה. "+(h.get("error_description")||"")});return}
-  if(h.get("access_token")){setSes({access_token:h.get("access_token"),refresh_token:h.get("refresh_token"),expires_at:h.get("expires_at"),expires_in:h.get("expires_in")});
-    linkType=h.get("type"); history.replaceState(null,"",location.pathname+location.search)}
-  if(["invite","recovery","magiclink","signup"].includes(linkType)){gateIntro();
-    try{const u=await http(SB+"/auth/v1/user",{headers:{apikey:KEY,Authorization:"Bearer "+await token()}});SES.user=u;lsSet(SKEY,JSON.stringify(SES))}catch(e){setSes(null);gateMode("login",{err:errText(e)});return}
-    gateMode("setpw");return}
+  if(location.hash) history.replaceState(null,"",location.pathname+location.search);
   if(SES){AUTO=true; gateIntro(); // signed in before: play the intro, then straight to the dashboard
-    try{if(await unlock()) return}catch(e){console.warn(e); if(e.status===401||e.message==="not_signed_in") setSes(null)}
-    AUTO=false; if(GMODE!=="noaccess") gateMode("login",SES?{err:"לא ניתן לטעון את הנתונים. נסה שוב."}:{}); else if(introOver) showForm()}
-  else {gateIntro(); gateMode("login")}
+    try{if(await unlock()) return}catch(e){console.warn(e); if(e.status===401||e.status===403||e.message==="not_signed_in") setSes(null)}
+    AUTO=false; if(GMODE==="changepw"||GMODE==="noaccess"){if(introOver) showForm();return}
+    gateMode("login",SES?{err:"לא ניתן לטעון את הנתונים. נסה שוב."}:{});return}
+  gateIntro(); gateMode("login");
+  try{if((await fnCall({action:"bootstrap_status"},false)).needed) gateMode("bootstrap")}catch(e){console.warn("bootstrap status",e)}
 })();
 </script>
 </body>
