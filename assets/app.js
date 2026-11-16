@@ -480,7 +480,7 @@ function routeProblems(){const g=new Map();if(!D) return [];
   return [...g.values()].sort((x,y)=>(y.kinds.has("time")-x.kinds.has("time"))||y.legs.length-x.legs.length||y.km/Math.max(y.air,.1)-x.km/Math.max(x.air,.1))}
 function drawRouteBar(){RP=routeProblems();const b=$("#rwBar");if(!b) return;const nl=RP.reduce((s,g)=>s+g.legs.length,0);
   b.hidden=!RP.length;b.innerHTML=RP.length?`<button type="button" class="rwbtn" data-rwopen aria-haspopup="dialog">⚠ ${nf(RP.length)} בעיות מסלול ביום הזה</button><span class="rwsub">${nf(nl)} נסיעות ריקות · ${[...new Set(RP.flatMap(g=>[...g.kinds]))].map(k=>RPTXT[k]).join(" · ")}</span>`:"";
-  if($("#dlgRw")&&$("#dlgRw").open) drawRouteList()}
+  const dl=$("#dlgRw");if(dl&&dl.open&&!(dl.contains(document.activeElement)&&/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName))) drawRouteList()}
 document.addEventListener("click",e=>{if(e.target.closest("[data-rwopen]")) openRouteList()});
 function rwDlg(){let d=$("#dlgRw");if(d) return d;d=document.createElement("dialog");d.id="dlgRw";d.className="rwdlg";d.setAttribute("aria-labelledby","rwT");
   d.innerHTML=`<div class="maphd"><h3 id="rwT">בעיות מסלול</h3><button type="button" class="btn small" data-rwclose>✕ סגירה</button></div><p class="hint">נסיעות ריקות שלא נכנסות בזמן, עם עיקוף גדול (כביש פי 2.5 מקו אווירי ויותר מ־4 ק״מ) או מסלול חשוד. כל שורה היא זוג מוצא ← יעד. "שלח לבדיקה" ו"הערה" נשמרים כטיוטה ונשלחים ב"שמירה".</p><div id="rwList"></div>`;
@@ -988,7 +988,8 @@ $("#gantt").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){cons
 const knownVeh=q=>/^\d{4,}$/.test(q)&&(D&&D.vehicles.some(v=>v.veh===q)||Object.values(ENDS).some(d=>d[q]));
 $("#q").oninput=async()=>{const q=$("#q").value.trim();if(knownVeh(q)&&q!==sel&&!(await selectVehicle(q))) return;
   if(lineQ(q)) openFind(q,false); render()}; $("#sort").onchange=render; $("#br").onchange=render; $("#acc").onchange=render; $("#day").onchange=e=>loadDay(e.target.value);
-addEventListener("resize",()=>{clearTimeout(window._rt);window._rt=setTimeout(render,150)});
+// a phone keyboard changes only the height: re-render only when the width changes (a re-render would drop the focused field)
+let _rw=innerWidth;addEventListener("resize",()=>{if(innerWidth===_rw) return;_rw=innerWidth;clearTimeout(window._rt);window._rt=setTimeout(render,150)});
 $("#bToday").onclick=()=>loadDay(today); $("#bYest").onclick=()=>loadDay(yest);
 const QP=new URLSearchParams(location.search);
 // ---- control room (חדר בקרה): platform admin = all users; operator admin = users of his operators. Server: manage_users ----
