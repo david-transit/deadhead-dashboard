@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-16.18";
+const APP_VER="2026-11-16.19";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -132,18 +132,22 @@ function anchors(){const L=(eff().S.stop_anchors||[]).filter(x=>hasLoc(x)&&(x.na
     for(const d of Object.values(ENDS)) for(const e of Object.values(d)){see([e[1],e[2]],e[4]);see([e[6],e[7]],e[9])}}
   ANC={k,m};return m}
 const sub=p=>p&&anchors().get(pk(p))||p;
-const roadOf=(a,b)=>ROAD.get(roadKey(sub(a),sub(b)))||null;
+// a leg from / to an anchored stop is routed from the anchor, except a move inside the terminal (the other end within
+// ANCH_LOCAL_KM of the stop, e.g. drop-off platform -> departure platform): that one stays as it is
+const ANCH_LOCAL_KM=0.5;
+function subPair(a,b){let A=sub(a),B=sub(b);if(A!==a&&b&&hav(a,b)<ANCH_LOCAL_KM) A=a;if(B!==b&&a&&hav(a,b)<ANCH_LOCAL_KM) B=b;return [A,B]}
+const roadOf=(a,b)=>ROAD.get(roadKey(...subPair(a,b)))||null;
 // day legs from / to an anchored stop: road km from the anchor (pipeline km kept as km_file); "wait" until computed
 function anchorDay(J){if(!anchors().size) return J;let ch=false;
   const vs=J.vehicles.map(v=>{let vc=false;
-    const items=v.items.map(i=>{if(i.kind!=="empty"||!i.a||!i.b||i.edited) return i;const A=sub(i.a),B=sub(i.b);if(A===i.a&&B===i.b) return i;
+    const items=v.items.map(i=>{if(i.kind!=="empty"||!i.a||!i.b||i.edited) return i;const [A,B]=subPair(i.a,i.b);if(A===i.a&&B===i.b) return i;
       vc=true;const r=ROAD.get(roadKey(A,B));if(!r) return {...i,anch:"wait"};
       const n={...i,km:r.km,drive_min:r.min,anch:true,km_file:i.km,rt:r.meta&&(r.meta.fix||r.meta.u)?r.meta:undefined},gap=n.end-n.start;delete n.tight;
       if(!n.overlap&&n.km>2&&(n.drive_min>gap+10||gap===0||n.km/(gap/60)>100)) n.tight=true;return n});
     if(!vc) return v;ch=true;
     return {...v,items,empty_day_km:Math.round(items.filter(i=>i.kind==="empty"&&!i.overlap).reduce((s,i)=>s+(+i.km||0),0)*10)/10}});
   return ch?{...J,vehicles:vs}:J}
-function nightPairs(){const out=new Map(),put=(a,b)=>{a=sub(a);b=sub(b);out.set(roadKey(a,b),[a,b])};if(!D) return out;model();
+function nightPairs(){const out=new Map(),put=(a,b)=>{[a,b]=subPair(a,b);out.set(roadKey(a,b),[a,b])};if(!D) return out;model();
   for(const v of D.vehicles){for(const l of vstats(v).n) if(l.a&&l.b&&!l.road) put(l.a,l.b);
     for(const i of v.items) if(i.kind==="empty"&&(i.est||i.anch==="wait")&&i.a&&i.b) put(i.a,i.b)} // legs of edited blocks, legs waiting for an anchor route
   return out}
