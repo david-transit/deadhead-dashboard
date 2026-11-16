@@ -304,6 +304,8 @@ Deno.serve(async (req) => {
     const { data: mine } = await admin.from("memberships").select("operator_id").eq("user_id", uid).eq("role", "admin");
     const adminOps = new Set((mine || []).map((x) => x.operator_id));
     if (!isPlatform && !adminOps.size) throw new Fail("not_allowed", 403);
+    // every admin (platform or operator admin) must use two-step verification: no control room from a password-only session
+    if (claims.aal !== "aal2") throw new Fail("mfa_enroll_required", 403);
     const canOp = (op: string) => isPlatform || adminOps.has(op);
     const membershipsOf = async (user: string) =>
       (await admin.from("memberships").select("operator_id, role").eq("user_id", user)).data || [];

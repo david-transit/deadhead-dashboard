@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-16.22";
+const APP_VER="2026-11-16.23";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -49,7 +49,7 @@ const ERR={invalid_credentials:"שם משתמש או סיסמה שגויים","I
   wrong_password:"הסיסמה הנוכחית שגויה",not_recovery:"הקישור מהמייל לא תקף או שפג תוקפו (10 דקות). בקש קישור חדש.",bad_username:"שם משתמש: 3–32 תווים, אותיות באנגלית, ספרות, נקודה, מקף או קו תחתון",username_taken:"שם המשתמש הזה כבר תפוס",
   bootstrap_done:"חשבון מנהל ראשי כבר נוצר. היכנס עם שם משתמש וסיסמה","rate limit":"יותר מדי ניסיונות. נסה שוב בעוד כמה דקות",over_request_rate_limit:"יותר מדי ניסיונות. נסה שוב בעוד כמה דקות",
   signup_disabled:"אין הרשמה עצמית. מנהל המערכת יוצר את המשתמשים",bad_input:"הנתונים לא תקינים",server_error:"שגיאה בשרת. נסה שוב",
-  no_key:"אין גישה לנתוני המפעיל",mfa_required:"צריך להיכנס מחדש עם קוד האימות הדו־שלבי",
+  no_key:"אין גישה לנתוני המפעיל",mfa_required:"צריך להיכנס מחדש עם קוד האימות הדו־שלבי",mfa_enroll_required:"מנהל חייב אימות דו־שלבי: צא והיכנס שוב כדי להפעיל אותו",
   "Invalid TOTP code":"הקוד שגוי או שפג תוקפו. הקלד את הקוד שמוצג עכשיו באפליקציה",mfa_verification_failed:"הקוד שגוי או שפג תוקפו. הקלד את הקוד שמוצג עכשיו באפליקציה",
   password_change_not_allowed:"שינוי סיסמה רק דרך המסך של האתר",mfa_change_not_allowed:"לשינוי האימות הדו־שלבי צריך להיכנס עם קוד האימות",last_platform_admin:"חייב להישאר לפחות מנהל מערכת פעיל אחד",
   bad_code:"שם המשתמש או קוד השחזור שגויים, או שהקוד כבר נוצל",bad_email:"כתובת המייל לא תקינה",email_taken:"המייל הזה כבר משויך לחשבון אחר",too_large:"הנתונים גדולים מדי",missing_line:"צריך לבחור קו לתגבור"};
@@ -493,7 +493,7 @@ function drawRouteList(){const box=$("#rwList");if(!box) return;
       <div class="rwveh">${g.legs.map(x=>`<button type="button" class="btn small" data-rgv="${esc(x.veh)}">${esc(x.veh)} · ${fmt(x.start)}</button>`).join("")}</div>
       <div class="rwact"><button type="button" class="btn small" data-rgmap="${n}">הצג על מפה</button>${canEdit()?`<button type="button" class="btn small" data-rgvia="${n}">הצע נקודת מעבר</button><button type="button" class="btn small" data-rgnote="${n}">הערה</button><button type="button" class="btn small primary" data-rgsend="${n}" ${dr||RSENT[k]?"disabled":""}>${RSENT[k]?"נשלח לבדיקה":dr?"בטיוטה":"שלח לבדיקה"}</button>`:""}</div>
       ${dr?`<div class="sub edtm">טיוטה: ${esc(dr.text||"לבדיקה")}${dr.proposed_via?" · הוצעה נקודת מעבר":""} · תישלח ב"שמירה"</div>`:""}
-      <div class="rwnote" hidden><textarea rows="2" maxlength="2000" aria-label="הערה על המסלול"></textarea><button type="button" class="btn small" data-rgnoteok="${n}">הוספה לטיוטה</button></div></section>`}).join(""):`<p class="muted">אין בעיות מסלול ביום הזה.</p>`}
+      <div class="rwnote" hidden><textarea rows="2" maxlength="2000" aria-label="הערה על המסלול" placeholder="בלי שמות של אנשים ובלי כתובות פרטיות"></textarea><button type="button" class="btn small" data-rgnoteok="${n}">הוספה לטיוטה</button></div></section>`}).join(""):`<p class="muted">אין בעיות מסלול ביום הזה.</p>`}
 function rpDraft(g,patch){const k=rpKey(g),cur=DRAFT.reports[k]||{day:D.day,origin:g.frm,destination:g.to,
     legs:g.legs.map(x=>({veh:x.veh,start:x.start,end:x.end,km:x.km,min:x.min})),text:null,proposed_via:null};
   DRAFT.reports[k]={...cur,...patch};touched();drawRouteList()}
@@ -858,6 +858,7 @@ const LISTS={
     hint:"נקודת עיגון = המקום שבו האוטובוס באמת עולה לכביש ליד התחנה (למשל היציאה ממסוף). כל נסיעה ריקה מהתחנה או אליה (גם בלילה) תחושב לפי כביש מהנקודה הזו. מתאים לתחנות שבהן המסלול נצמד לכביש הלא נכון. את שם התחנה בוחרים מהרשימה שנפתחת בהקלדה."}
 };
 let tab="depots", draft=null, look=null;
+const PRIVHINT="<b>פרטיות:</b> רק כתובות של חניונים, מסופים ואתרי החברה. לא כתובות מגורים של אנשים (הכתובת נשלחת לשירות המפות OpenStreetMap).";
 const LOCHINT="<b>איך מכניסים מיקום:</b> בשדה \"כתובת או קישור\" כותבים כתובת רגילה (למשל: מבצע קדש, בני ברק) ולוחצים \"איתור\". אפשר גם להדביק קישור מלא מ־Waze או מגוגל מפות, או שני מספרים שהועתקו בקליק ימני בגוגל מפות. שמות מקומות כמו \"חניון אפיקים\" לא תמיד נמצאים בחיפוש, ואז עדיף קישור או כתובת. החיפוש נעשה ב־OpenStreetMap.";
 // two sections: system settings (substance: depots, fuel, driver change points, branches, defaults, vehicles) and
 // display settings (colors etc., later). Depot rows keep unknown fields, so later attributes (capacity …) fit in as-is.
@@ -870,9 +871,9 @@ document.querySelectorAll(".secsw .btn").forEach(b=>b.onclick=()=>setSec(b.datas
 function showTab(t){tab=t;document.querySelectorAll("#sysTabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   const ro=!canEdit(); let h=ro?`<p class="hint" style="color:var(--warn)">צפייה בלבד: ההרשאה שלך היא לצפייה. לשינויים פנה למנהל המפעיל.</p>`:"";
   if(LISTS[t]){const L=LISTS[t],rows=draft[t]||[];
-    h+=`<p class="hint">${LOCHINT}</p><p class="hint">${L.hint}</p><table class="ed"><thead><tr>${L.cols.map(c=>`<th>${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>`+
+    h+=`<p class="hint">${LOCHINT}</p><p class="hint">${PRIVHINT}</p><p class="hint">${L.hint}</p><table class="ed"><thead><tr>${L.cols.map(c=>`<th>${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>`+
       rows.map((r,i)=>`<tr>${L.cols.map(([k])=>`<td>${k==="fuel"?`<select data-i="${i}" data-k="${k}" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${r[k]===f?"selected":""}>${f}</option>`).join("")}</select>`
-        :k==="addr"?`<div style="display:flex;gap:4px"><input data-i="${i}" data-k="addr" value="${esc(r.addr??"")}" placeholder="כתובת, קישור Waze/גוגל או מספרים" style="min-width:200px" ${ro?"disabled":""}>${ro?"":`<button class="btn small" data-find="${i}">איתור</button>`}</div>${look&&look.i===i?`<div class="look">${look.html}</div>`:""}`
+        :k==="addr"?`<div style="display:flex;gap:4px"><input data-i="${i}" data-k="addr" value="${esc(r.addr??"")}" placeholder="כתובת חניון או מסוף, קישור Waze/גוגל או מספרים" style="min-width:200px" ${ro?"disabled":""}>${ro?"":`<button class="btn small" data-find="${i}">איתור</button>`}</div>${look&&look.i===i?`<div class="look">${look.html}</div>`:""}`
         :`<input data-i="${i}" data-k="${k}" value="${esc(r[k]??"")}" ${t==="stop_anchors"&&k==="name"?'list="stopNames" style="min-width:220px"':""} ${["lat","lon"].includes(k)?'class="num" inputmode="decimal" dir="ltr"':["from","to"].includes(k)?'type="time"':""} ${ro?"disabled":""}>`}</td>`).join("")}
         <td>${ro?"":`<button class="btn small danger" data-del="${i}">מחיקה</button>`}</td></tr>`).join("")+
       `</tbody></table>${rows.length?"":`<p class="muted">עוד לא הוגדר כלום.</p>`}${ro?"":`<button class="btn small" id="addRow" style="margin-top:8px">+ הוספה</button>`}`;}
@@ -1046,7 +1047,7 @@ $("#ctlBody").addEventListener("click",async e=>{const t=e.target,tr=t.closest("
       ctlDo({action:"set_platform",user_id:u,on},on?`${n} הוא עכשיו מנהל מערכת`:`${n} כבר לא מנהל מערכת`);return}
   if(t.dataset.dis!=null){const off=t.dataset.dis==="1";if(off&&!confirm(`להשבית את ${n}? הוא לא יוכל להיכנס עד שיופעל שוב.`)) return;
     ctlDo({action:"set_disabled",user_id:u,disabled:off},off?`${n} הושבת`:`${n} הופעל`);return}
-  if(t.dataset.mfar!=null){if(confirm(`לאפס את האימות הדו־שלבי של ${n}? (למשל טלפון שאבד). בכניסה הבאה הוא יכנס בסיסמה בלבד${CTL.users.find(x=>x.user_id===u)?.platform?" ויחויב להפעיל אימות חדש":""}.`))
+  if(t.dataset.mfar!=null){if(confirm(`לאפס את האימות הדו־שלבי של ${n}? (למשל טלפון שאבד). בכניסה הבאה הוא יכנס בסיסמה בלבד${(()=>{const x=CTL.users.find(x=>x.user_id===u);return x&&(x.platform||x.role==="admin"||(x.memberships||[]).some(m=>m.role==="admin"))})()?" ויחויב להפעיל אימות חדש":""}.`))
     ctlDo({action:"reset_mfa",user_id:u},`האימות הדו־שלבי של ${n} אופס`);return}
   if(t.dataset.delu!=null){if(confirm(`למחוק את המשתמש ${n} לצמיתות? אי אפשר לבטל.`)) ctlDo({action:"delete",user_id:u},`${n} נמחק`);return}
   if(t.dataset.reset!=null){const b=tr.querySelector("[data-resetbox]");b.innerHTML=`<div class="copyrow"><input data-rpw dir="ltr" value="${suggestPw()}" aria-label="סיסמה זמנית ל${esc(n)}" autocomplete="off"><button class="btn small primary" data-rsave>קביעה</button></div>`;b.querySelector("input").focus();return}
@@ -1136,7 +1137,7 @@ function meDraw(view,data={}){const b=$("#meBody");
       <form id="meMfaForm" class="inv"><div class="field"><label for="meOtp">קוד מהאפליקציה</label><input id="meOtp" dir="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength="7" style="width:120px"></div>
       <button class="btn primary">הפעלה</button></form><span class="msg" id="meMsg" aria-live="polite"></span>`;return}
     b.innerHTML=data.on?`<p><b>פעיל.</b> בכל כניסה, אחרי הסיסמה, מקלידים קוד מאפליקציית האימות.</p>
-      ${PLATFORM?'<p class="hint">למנהל מערכת זו חובה: אם תסיר, תתבקש להפעיל מחדש בכניסה הבאה.</p>':""}
+      ${isAdminAny()?'<p class="hint">למנהלים זו חובה: אם תסיר, תתבקש להפעיל מחדש בכניסה הבאה.</p>':""}
       <button class="btn small danger" id="meMfaOff">הסרת האימות הדו־שלבי</button> <span class="msg" id="meMsg" aria-live="polite"></span>`
       :`<p>לא פעיל. עם אימות דו־שלבי, מי שגילה את הסיסמה שלך עדיין לא יכול להיכנס בלי הטלפון שלך.</p>
       <button class="btn small primary" id="meMfaOn">הפעלה</button> <span class="msg" id="meMsg" aria-live="polite"></span>`;return}
@@ -1211,6 +1212,7 @@ const qrSrc=q=>String(q).startsWith("data:")?q:"data:image/svg+xml;charset=utf-8
 const mfaBox=e=>`<div class="mfaqr"><img src="${esc(qrSrc(e.totp.qr_code))}" alt="קוד QR לאפליקציית האימות" width="180" height="180"></div>
   <p class="hint">אין אפשרות לסרוק? הקלד באפליקציה את המפתח: <b dir="ltr" class="mono">${esc(e.totp.secret)}</b></p>`;
 let MFAF=null, ENR=null;
+const isAdminAny=()=>PLATFORM||(MS||[]).some(m=>m.role==="admin"); // any admin must use two-step verification (privacy procedure §3)
 
 // ---- entry: first platform admin (once), login, two-step code, forced password change, no access ----
 async function unlock(){
@@ -1218,7 +1220,7 @@ async function unlock(){
   const fs=await myFactors(), ver=fs.filter(f=>f.status==="verified");
   if(ver.length&&aal()!=="aal2"){MFAF=ver[0].id;gateMode("mfa");return false}
   if(PROFILE&&PROFILE.must_change_password){gateMode("changepw");return false}
-  if(PLATFORM&&!ver.length){gateMode("mfa_enroll");return false}
+  if(isAdminAny()&&!ver.length){gateMode("mfa_enroll");return false}
   if(!OP){gateMode("noaccess");return false}
   const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k||!k.keys||!Object.keys(k.keys).length) throw new Error("no_key");
   CKEYS={};for(const [kid,v] of Object.entries(k.keys)) CKEYS[kid]=await crypto.subtle.importKey("raw",b64(v),"AES-GCM",false,["decrypt"]);
@@ -1247,6 +1249,8 @@ function gateIntro(){const g=$("#gate");let done=false,res;introEnd=new Promise(
   addEventListener("keydown",show,true); g.addEventListener("pointerdown",show);}
 const fld=(id,label,type,ac,extra="")=>`<div class="field" style="text-align:right;margin-top:14px"><label for="${id}">${label}</label><input id="${id}" type="${type}" autocomplete="${ac}" ${type!=="password"&&id!=="gName"?'dir="ltr"':""} required ${extra}></div>`;
 const userFld=v=>fld("gUser","שם משתמש","text","username",`value="${esc(v)}" autocapitalize="off" spellcheck="false"`);
+// short notice under section 11 of the Privacy Protection Law, shown at the first sign-in (draft until a lawyer approves it)
+const PRIVNOTE=`<div class="gpnote"><b>פרטיות (טיוטה):</b> לצורך כניסה מאובטחת והרשאות לפי מפעיל נשמרים עליך שם משתמש, שם לתצוגה, ההרשאה, פרטי אבטחה ותיעוד כניסות ועריכות. אין חובה חוקית למסור, אבל בלי זה אין חשבון. המנהלים אצל המפעיל שלך רואים את פרטי החשבון והעריכות. האחסון אצל Supabase (גרמניה). אפשר לבקש לעיין במידע ולתקן אותו. <a href="privacy.html" target="_blank" rel="noopener">מדיניות הפרטיות</a></div>`;
 function gateMode(m,{msg="",err=""}={}){
   GMODE=m; const uname=(PROFILE&&PROFILE.username)||lsGet("ys_user")||"";
   const F=$("#gateFields"),A=$("#gateAlt"),B=$("#gateBtn"),S=$("#gateSub"); B.disabled=false;
@@ -1266,12 +1270,13 @@ function gateMode(m,{msg="",err=""}={}){
   else if(m==="changepw"){S.textContent=`צריך לבחור סיסמה חדשה${uname?" לחשבון "+uname:""}`;
     F.innerHTML=`<input type="text" autocomplete="username" value="${esc(uname)}" hidden>`+(LASTPW?"":fld("gpw0","הסיסמה הנוכחית (הזמנית)","password","current-password"))+
       fld("gpw","סיסמה חדשה (לפחות 8 תווים, עם אותיות ומספרים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
+    F.insertAdjacentHTML("afterbegin",PRIVNOTE);
     B.textContent="שמירת הסיסמה וכניסה";A.innerHTML=`<button type="button" class="linkbtn dim" data-gm="logout">יציאה</button>`}
   else if(m==="noaccess"){S.textContent=`החשבון ${uname} עוד לא שויך לאף מפעיל. פנה למנהל המערכת.`;F.innerHTML="";B.textContent="יציאה";A.innerHTML=""}
   else if(m==="mfa"){S.textContent="אימות דו־שלבי: הקלד את הקוד שמוצג עכשיו באפליקציית האימות בטלפון";
     F.innerHTML=fld("gOtp","קוד בן 6 ספרות","text","one-time-code",'inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7"');
     B.textContent="אישור";A.innerHTML=`<span class="muted">הטלפון לא איתך? מנהל מערכת יכול לאפס לך את האימות, או כניסה עם קוד שחזור.</span><button type="button" class="linkbtn dim" data-gm="code">קוד שחזור</button><button type="button" class="linkbtn dim" data-gm="logout">יציאה</button>`}
-  else if(m==="mfa_enroll"){S.textContent="מנהל מערכת חייב אימות דו־שלבי. סרוק את הקוד באפליקציית אימות (Google Authenticator, Microsoft Authenticator וכדומה) והקלד את הקוד שהיא מציגה.";
+  else if(m==="mfa_enroll"){S.textContent="מנהל חייב אימות דו־שלבי. סרוק את הקוד באפליקציית אימות (Google Authenticator, Microsoft Authenticator וכדומה) והקלד את הקוד שהיא מציגה.";
     F.innerHTML=`<div id="gQr" class="empty-state">מכין קוד…</div>`+fld("gOtp","קוד בן 6 ספרות מהאפליקציה","text","one-time-code",'inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7"');
     B.textContent="הפעלה וכניסה";A.innerHTML=`<button type="button" class="linkbtn dim" data-gm="logout">יציאה</button>`;
     ENR=null;mfaEnroll().then(e=>{ENR=e;const q=$("#gQr");if(q){q.className="";q.innerHTML=mfaBox(e);fitGate()}}).catch(e=>{const q=$("#gQr");if(q) q.textContent=errText(e)})}

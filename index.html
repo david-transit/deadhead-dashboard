@@ -210,6 +210,8 @@ table.ed input.num{width:110px}
 #gate #logo{height:min(55vh,480px);transition:height .5s ease}
 #gate.ready #logo{height:var(--logoH,min(26vh,220px))}
 #gate form{flex:none}
+.gpnote{text-align:right;font-size:13px;line-height:1.5;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:12px}
+.gpriv{margin-top:10px;font-size:12px}.gpriv a{color:var(--muted)}
 #gate.intro:not(.ready) form{opacity:0;visibility:hidden}
 #gate.intro.ready form{transition:opacity .5s ease}
 @media (prefers-reduced-motion:reduce){#gate #logo,#gate.intro form{transition:none}}
@@ -254,6 +256,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <button class="btn primary" type="submit" id="gateBtn">כניסה</button>
     <div class="msg" id="gateMsg" aria-live="polite" style="margin-top:10px;min-height:1.2em"></div>
     <div class="alt" id="gateAlt"></div>
+    <div class="gpriv"><a href="privacy.html" target="_blank" rel="noopener">מדיניות פרטיות (טיוטה)</a></div>
   </form>
 </div>
 <header>
@@ -392,8 +395,8 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 </dialog>
 <dialog id="dlgNote" class="small" aria-labelledby="noteTitle" style="max-width:480px">
   <div class="dlg-h"><h3 id="noteTitle">הערה על הנסיעה הריקה</h3><button class="btn small" id="noteClose">סגירה</button></div>
-  <div class="dlg-b"><div class="hint" id="noteHead"></div><textarea id="noteText" rows="5" maxlength="2000" style="width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px"></textarea>
-    <p class="hint">ההערה מגיעה לצוות המוצר בלבד, ולא מוצגת למשתמשים אחרים. היא תישלח בלחיצה על "שמירה".</p></div>
+  <div class="dlg-b"><div class="hint" id="noteHead"></div><textarea id="noteText" rows="5" maxlength="2000" placeholder="בלי שמות של אנשים ובלי כתובות פרטיות" style="width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px"></textarea>
+    <p class="hint">ההערה מגיעה לצוות המוצר בלבד, ולא מוצגת למשתמשים אחרים. היא תישלח בלחיצה על "שמירה".</p><p class="hint"><b>פרטיות:</b> בלי שמות של נהגים או נוסעים ובלי כתובות פרטיות.</p></div>
   <div class="dlg-f"><button class="btn primary" id="noteOk">הוספה</button><span class="msg" id="noteMsg"></span></div>
 </dialog>
 <dialog id="dlgMe" class="small" aria-labelledby="meTitle" style="max-width:520px">

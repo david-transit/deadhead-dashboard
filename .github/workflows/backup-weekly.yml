@@ -1,0 +1,116 @@
+name: backup-weekly
+# Weekly encrypted backup of the Supabase DB (schemas public, private, auth) + an automatic restore test.
+# - DB connection: secret SUPABASE_DB_URL (session pooler URI with the DB password), entered by David only.
+# - The dump is encrypted to the public certificate pipeline/backup/backup-cert.pem (openssl CMS, AES-256 + RSA-4096).
+#   The private key is NOT in GitHub: only David has it, so the artifact is useless to anyone else, even though the
+#   repo is public. How to restore: yalla-sa-portal/docs/privacy/backup-restore.md.
+# - Every run restores the plain dump into a throw-away Postgres 17 and compares row counts with the source.
+
+on:
+  schedule:
+    - cron: "30 2 * * 0"   # Sunday 04:30 Israel (winter)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-weekly
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      pg:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: restoretest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Postgres 17 client
+        run: |
+          set -eu
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq postgresql-client-17 >/dev/null
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Dump
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DB_URL:-}" ]; then
+            echo "::error::Secret SUPABASE_DB_URL is missing (see yalla-sa-portal/docs/privacy/backup-restore.md)"; exit 1
+          fi
+          umask 077
+          PG=/usr/lib/postgresql/17/bin
+          "$PG/pg_dump" "$DB_URL" --schema=public --schema=private --schema=auth --no-owner --no-privileges \
+            --format=custom --file="$RUNNER_TEMP/db.dump"
+          # row counts of the source (table name|count), for the restore test
+          "$PG/psql" "$DB_URL" -At -F'|' -f pipeline/backup/count_rows.sql > "$RUNNER_TEMP/src_counts.txt"
+          ls -l "$RUNNER_TEMP/db.dump"; wc -l < "$RUNNER_TEMP/src_counts.txt"
+
+      - name: Restore test (throw-away Postgres)
+        env:
+          T: postgres://postgres:restoretest@localhost:5432/postgres
+        run: |
+          set -uo pipefail
+          PG=/usr/lib/postgresql/17/bin
+          # what the Supabase objects expect to exist
+          "$PG/psql" "$T" -q -v ON_ERROR_STOP=1 <<'SQL'
+          do $$ begin
+            if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;
+            if not exists (select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if;
+            if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin bypassrls; end if;
+            if not exists (select 1 from pg_roles where rolname='supabase_auth_admin') then create role supabase_auth_admin nologin; end if;
+          end $$;
+          create schema if not exists extensions;
+          create extension if not exists pgcrypto with schema extensions;
+          create extension if not exists "uuid-ossp" with schema extensions;
+          SQL
+          "$PG/pg_restore" --no-owner --no-privileges -d "$T" "$RUNNER_TEMP/db.dump" 2> "$RUNNER_TEMP/restore_err.txt" || echo "pg_restore reported errors (checked below by row counts)"
+          echo "restore warnings/errors: $(grep -c 'error:' "$RUNNER_TEMP/restore_err.txt" || true)"
+          head -20 "$RUNNER_TEMP/restore_err.txt" | sed -E 's/(password|secret)[^ ]*/[redacted]/Ig' || true
+          "$PG/psql" "$T" -At -F'|' -f pipeline/backup/count_rows.sql > "$RUNNER_TEMP/dst_counts.txt"
+          # tables that change by themselves between the dump and the count (sessions, tokens, rate-limit and event logs)
+          V='^(auth\.(refresh_tokens|sessions|mfa_challenges|mfa_amr_claims|one_time_tokens|flow_state|audit_log_entries)|private\.(auth_attempts|auth_events|pw_change_allow|mfa_change_allow|signup_allow))\|'
+          if diff <(grep -Ev "$V" "$RUNNER_TEMP/src_counts.txt") <(grep -Ev "$V" "$RUNNER_TEMP/dst_counts.txt") > "$RUNNER_TEMP/diff.txt"; then
+            RESULT="OK: every table restored with the same row count"
+          else
+            RESULT="FAILED: row counts differ"; cat "$RUNNER_TEMP/diff.txt"
+          fi
+          {
+            echo "## Weekly backup $(date -u +%Y-%m-%d)"
+            echo "- Restore test: $RESULT"
+            echo "- Tables: $(wc -l < "$RUNNER_TEMP/src_counts.txt"), rows: $(awk -F'|' '{s+=$2} END {print s}' "$RUNNER_TEMP/src_counts.txt")"
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$RESULT" in OK*) ;; *) exit 1;; esac
+
+      - name: Encrypt (public certificate only) and remove the plain dump
+        run: |
+          set -euo pipefail
+          umask 077
+          D=$(date -u +%Y-%m-%d)
+          mkdir -p out
+          openssl cms -encrypt -binary -aes256 -in "$RUNNER_TEMP/db.dump" -outform DER \
+            -out "out/yalla-sa-db-$D.dump.cms" pipeline/backup/backup-cert.pem
+          shred -u "$RUNNER_TEMP/db.dump"
+          (cd out && sha256sum "yalla-sa-db-$D.dump.cms" > "yalla-sa-db-$D.sha256")
+          echo "- Encrypted file: yalla-sa-db-$D.dump.cms ($(stat -c %s "out/yalla-sa-db-$D.dump.cms") bytes), kept 35 days" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: db-backup
+          path: out/
+          retention-days: 35
+          if-no-files-found: error
