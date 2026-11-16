@@ -1,0 +1,6 @@
+data/*.json
+design/
+config/
+*.py
+image-prompt.md
+*.sh
