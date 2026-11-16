@@ -135,7 +135,9 @@ const sub=p=>p&&anchors().get(pk(p))||p;
 // a leg from / to an anchored stop is routed from the anchor, except a move inside the terminal (the other end within
 // ANCH_LOCAL_KM of the stop, e.g. drop-off platform -> departure platform): that one stays as it is
 const ANCH_LOCAL_KM=0.5;
-function subPair(a,b){let A=sub(a),B=sub(b);if(A!==a&&b&&hav(a,b)<ANCH_LOCAL_KM) A=a;if(B!==b&&a&&hav(a,b)<ANCH_LOCAL_KM) B=b;return [A,B]}
+// only the origin is anchored (David, 16.11): an anchor is the exit a bus takes out of the terminal; arrivals are routed to
+// the stop itself (e.g. HaMag -> Arazim drop-off 3.5 km via Golda Meir, not 5.3 km around to the exit point)
+function subPair(a,b){let A=sub(a);if(A!==a&&b&&hav(a,b)<ANCH_LOCAL_KM) A=a;return [A,b]}
 // ---- approved bus-only links ("נקודות מעבר מאושרות", table via_links): only approved ones are used for routing.
 // A cached road km is valid only if it was computed with the same set of relevant approved links (meta.vpc). ----
 let VIAL=[], VIAOK=[];
