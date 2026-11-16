@@ -100,7 +100,7 @@
 
   /* one vehicle: the side panel full screen, as a vertical list */
   body:not(.m-veh) #side,body:not(.m-veh) #mVehBar{display:none!important}
-  body.m-veh #mTop,body.m-veh #orph{display:none!important}
+  body.m-veh #mTop,body.m-veh #orph,body.m-veh #rwBar{display:none!important}
   #mVehBar{position:sticky;top:calc(61px + env(safe-area-inset-top));z-index:25;display:flex!important;align-items:center;gap:6px;background:var(--card);border-bottom:1px solid var(--line);padding:6px 8px}
   #mVehBar[hidden]{display:none!important}
   #mBack{border:0;background:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--text);cursor:pointer;flex:none}
