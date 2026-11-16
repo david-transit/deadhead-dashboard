@@ -4,7 +4,7 @@
 //   strict  : our bus-strict OSRM on 127.0.0.1:5000 through assets/route.js smart() (exactly what the nightly would do)
 //   relaxed : our bus-relaxed OSRM on 127.0.0.1:5001, plain route (ways the strict profile blocks are marked "dimlimit")
 //   car     : the public car OSRM, plain route (no snapping check), for reference
-// and writes the result ENCRYPTED with the operator key (same format as a day file, name "bus-compare"); the repository
+// (OSM node ids of each route where they differ, annotations=nodes) and writes the result ENCRYPTED with the operator key (same format as a day file, name "bus-compare"); the repository
 // is public, so nothing in plaintext leaves the runner. Decrypt locally: node pipeline/decrypt.js <key> <out.js>.
 const fs = require("fs"), path = require("path");
 const K = require(path.join(__dirname, "..", "keys"));
@@ -25,13 +25,14 @@ async function get(u, ms, gap) {
 }
 const ll = p => `${(+p[1]).toFixed(6)},${(+p[0]).toFixed(6)}`;
 const plain = async (base, a, b, curb, gap) => {
-  const j = await get(`${base}/route/v1/driving/${ll(a)};${ll(b)}?overview=full&geometries=polyline6&steps=true${curb ? "&approaches=curb;curb" : ""}`, 20000, gap);
+  const j = await get(`${base}/route/v1/driving/${ll(a)};${ll(b)}?overview=full&geometries=polyline6&steps=true&annotations=nodes${curb ? "&approaches=curb;curb" : ""}`, 20000, gap);
   if (!j || j.code !== "Ok") return j ? { code: j.code } : null;
   const r = j.routes[0], steps = r.legs.flatMap(l => l.steps || []);
   const names = [...new Set(steps.map(s => [s.name, s.ref].filter(Boolean).join(" ")).filter(Boolean))];
   const dim = [...new Set(steps.map(s => s.ref || "").filter(x => x.startsWith("dimlimit")))];
   const uturn = steps.some(s => s.maneuver && s.maneuver.modifier === "uturn" && s.maneuver.type !== "depart" && s.maneuver.type !== "arrive");
-  return { km: +(r.distance / 1000).toFixed(3), min: +(r.duration / 60).toFixed(2), g: r.geometry, names, dim, uturn,
+  const nodes = []; for (const l of r.legs) for (const n of (l.annotation && l.annotation.nodes) || []) if (nodes[nodes.length - 1] !== n) nodes.push(n);
+  return { nodes, km: +(r.distance / 1000).toFixed(3), min: +(r.duration / 60).toFixed(2), g: r.geometry, names, dim, uturn,
            s: j.waypoints.map(w => Math.round(w.distance || 0)) };
 };
 
@@ -63,6 +64,10 @@ const plain = async (base, a, b, curb, gap) => {
     p.relaxed = await plain(RELAXED, p.a, p.b, false, 0);
     p.strict_plain = await plain(STRICT, p.a, p.b, false, 0);
     p.car = await plain(PUBLIC, p.a, p.b, false, 150);
+    // OSM node ids only where the routes differ (to find the exact way / node that makes the difference)
+    const kms = [p.bus && p.bus.km, p.relaxed && p.relaxed.km, p.car && p.car.km, p.strict_plain && p.strict_plain.km, ...p.legs.map(l => l[3])].filter(x => x != null);
+    const differ = kms.length && Math.max(...kms) - Math.min(...kms) > 0.2;
+    for (const x of [p.bus && p.bus.geo, p.relaxed, p.car, p.strict_plain]) if (x && !differ) delete x.nodes;
     if (++n % 250 === 0) console.log("routed", n, "of", L.length, Math.round((Date.now() - t0) / 1000), "s");
   }
   const plainText = Buffer.from(JSON.stringify({ built: new Date().toISOString(), pairs: L }));
