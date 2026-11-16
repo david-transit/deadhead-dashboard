@@ -32,6 +32,7 @@ FALSE_START_MIN = 12   # a ride this short (or < 25% of its route) ...
 FALSE_START_GAP = 20   # ... followed within 20 min by a ride of the same line it could reach = one trip (התחלה כפולה)
 LATE_M = 1500          # first GPS point further along the route than this = logged in late
 TIGHT_MIN = 10         # empty leg needing more than gap + 10 min of driving (or > 100 km/h) is flagged "tight" (data warning)
+ROUTE_V = 3            # assets/route.js V: cached routes checked by an older version are routed again
 IL = (29.0, 34.0, 34.0, 36.5)  # valid GPS (lat/lon box); SIRI sends -1,-1 for "no position"
 
 
@@ -42,34 +43,47 @@ def hav(a, b):
 
 
 def osrm_router(cache_file):
+    """Road km/min between two points: cache, then OSRM through assets/route.js (pipeline/route.js, one node process),
+    which flags and fixes bad snapping (U-turns, revisits, far snaps, motorway at a terminal). Cache entries:
+    [km, min, meta]; entries without meta or with an older route check version (meta.v < ROUTE_V) are routed again."""
     cache = json.load(open(cache_file, encoding="utf-8")) if os.path.exists(cache_file) else {}
-    miss = [0]
+    miss = [0]; proc = [None]; stat = collections.Counter()
 
-    def road(p, q):
+    def ask(p, q, term):
+        if proc[0] is None:
+            proc[0] = subprocess.Popen(["node", os.path.join(HERE, "route.js")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                       text=True, encoding="utf-8", bufsize=1)
+        proc[0].stdin.write(json.dumps(dict(a=p, b=q, t=term)) + "\n"); proc[0].stdin.flush()
+        return json.loads(proc[0].stdout.readline() or "null")
+
+    def road(p, q, term=(True, True)):
+        """-> (km, min, meta) ; meta = {s:[snap m], fix?, km0?, via?, u?, ok?, why?} ; (None, None, None) when OSRM failed."""
         if hav(p, q) < 0.05:
-            return 0.0, 0.0
+            return 0.0, 0.0, None
         k = f"{p[0]:.5f},{p[1]:.5f};{q[0]:.5f},{q[1]:.5f}"  # same rounding as the browser's road_cache key
-        old = f"{p[0]:.6f},{p[1]:.6f};{q[0]:.6f},{q[1]:.6f}"
-        if k not in cache and old in cache:
-            cache[k] = cache[old]
-        if k not in cache:
-            u = f"https://router.project-osrm.org/route/v1/driving/{p[1]},{p[0]};{q[1]},{q[0]}?overview=false"
-            for i in range(4):
-                try:
-                    with urllib.request.urlopen(u, timeout=60) as r:
-                        x = json.load(r)["routes"][0]
-                    cache[k] = [round(x["distance"] / 1000, 2), round(x["duration"] / 60, 1)]
-                    break
-                except Exception:
-                    time.sleep(3 * (i + 1))
-            else:
+        c = cache.get(k)
+        if not c or len(c) < 3 or (c[2] or {}).get("v", 0) < ROUTE_V:
+            r = ask([round(p[0], 5), round(p[1], 5)], [round(q[0], 5), round(q[1], 5)], list(term))
+            if not r:
                 miss[0] += 1
-                return None, None
-            time.sleep(0.15)
-        return cache[k]
+                return None, None, None
+            old = c[0] if c else None
+            meta = {x: r[x] for x in ("v", "s", "fix", "km0", "via", "u", "ok", "why") if x in r}
+            cache[k] = c = [r["km"], r["min"], meta]
+            stat["routed"] += 1
+            if stat["routed"] % 200 == 0:  # keep the work if the run is cut short (CI timeout)
+                json.dump(cache, open(cache_file, "w", encoding="utf-8"))
+                print("routes so far:", dict(stat), flush=True)
+            if r.get("why"): stat["suspicious"] += 1
+            if r.get("fix"): stat["fixed"] += 1
+            if old is not None and abs(old - r["km"]) > 0.05: stat["changed"] += 1; stat["delta_km"] += r["km"] - old
+        return c[0], c[1], c[2]
 
     def save():
+        if proc[0] is not None:
+            proc[0].stdin.close(); proc[0].wait(); proc[0] = None
         json.dump(cache, open(cache_file, "w", encoding="utf-8"))
+        if stat: print("routes:", dict(stat))
 
     return road, save, miss
 
@@ -254,8 +268,12 @@ def build(day):
         for i, t in enumerate(ts):
             if i:
                 p = ts[i - 1]; gap = t["start"] - p["end"]
-                km, mn = road(p["b"], t["a"])
-                leg = dict(kind="empty", start=p["end"], end=t["start"], km=km, drive_min=mn, frm=p["to"], to=t["frm"], next_sched=t["sched"])
+                term = (not p["to"].startswith(("ליד", "מיקום")), not t["frm"].startswith(("ליד", "מיקום")))  # snapped to a terminal stop
+                km, mn, rt = road(p["b"], t["a"], term)
+                leg = dict(kind="empty", start=p["end"], end=t["start"], km=km, drive_min=mn, frm=p["to"], to=t["frm"], next_sched=t["sched"],
+                           a=p["b"], b=t["a"])
+                if rt and (rt.get("fix") or rt.get("u") or max(rt.get("s") or [0]) > 30):
+                    leg["rt"] = {x: rt[x] for x in ("s", "fix", "km0", "u", "ok") if x in rt}  # route check (assets/route.js)
                 if km is None:  # OSRM failed: a marked estimate, never dropped
                     km = round(hav(p["b"], t["a"]) * 1.35, 1); leg.update(km=km, drive_min=round(km / 40 * 60, 1), est=True)
                 if gap < 0:

@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="יאללה־סע">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link href="assets/fonts/fonts.css?v=2026-11-16.16" rel="stylesheet">
+<link href="assets/fonts/fonts.css?v=2026-11-16.18" rel="stylesheet">
 <style>
 :root{--gold:#B8860B;--char:#4A5059;--blue:#1F6FEB;--dim:#D9DDE2;--bg:#F5F6F8;--card:#fff;--line:#E3E6EB;--text:#1d2330;--muted:#6b7280;--svc:#1F4E9A;--empty:#E8871E;--depot:#5B3A8C;--rein:#2E8B57;--sel:#E8F0FC;--warn:#C62828;--ok:#2E9E4F}
 *{box-sizing:border-box}
@@ -79,6 +79,9 @@ body.dense .row .lab .fuelb{display:none}
 .badge{font-size:11px;border-radius:6px;padding:1px 6px;border:1px solid var(--line);font-weight:400;white-space:nowrap}
 .badge.urb{background:#EAF6EE;border-color:#BFE3CB}
 .badge.ic{background:#EAF0FB;border-color:#C5D5F0}
+.acc{display:inline-flex;vertical-align:-2px;margin-inline-start:4px;line-height:0}
+.acck{display:inline-flex;gap:4px;align-items:center;white-space:nowrap}
+.badge.errb{background:#FDECEA;border-color:#F2B8B0;color:#9B2C1F;font-weight:600;margin-inline-end:4px}
 .badge.br{background:#F3EFFA;border-color:#D3C6EA;color:var(--depot)}
 .badge.br.auto{background:transparent;border-style:dashed;color:var(--muted)}
 .brrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 10px;font-size:13px}
@@ -223,7 +226,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 @media (max-width:900px){body{height:auto}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
 </style>
-<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-16.16">
+<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-16.18">
 </head>
 <body class="locked">
 <div id="gate" class="intro">
@@ -280,7 +283,8 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <select id="day" class="keep" aria-label="תאריך"></select>
     <select id="cls" aria-label="סוג שירות"></select>
     <select id="br" aria-label="סניף"></select>
-    <select id="sort" aria-label="מיון"><option value="veh">מיון: מספר רכב</option><option value="empty">מיון: הכי הרבה ריק</option><option value="start">מיון: שעת יציאה</option></select>
+    <select id="acc" aria-label="נגישות"><option value="">נגישות: הכול</option><option value="yes">נגישים</option><option value="no">לא נגישים</option></select>
+    <select id="sort" aria-label="מיון"><option value="veh">מיון: מספר רכב</option><option value="empty">מיון: הכי הרבה ריק</option><option value="start">מיון: שעת יציאה</option><option value="err">מיון: שגיאות נתונים תחילה</option></select>
     <input type="search" id="q" class="keep" placeholder="רכב או קו" aria-label="חיפוש מספר רכב, או מספר קו לחיפוש נסיעה">
     <button class="btn keep" id="bFind" aria-haspopup="dialog" aria-controls="dlgFind" title="מי ביצע נסיעה: קו, כיוון ושעה">חיפוש נסיעה</button>
     <button class="btn small keep linef" id="bLineF" hidden title="הסרת הסינון לפי קו"></button>
@@ -390,6 +394,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <button data-tab="depots" class="on" role="tab">חניונים</button>
     <button data-tab="fuel_stations" role="tab">תחנות דלק וגז</button>
     <button data-tab="driver_change_points" role="tab">נקודות החלפת נהגים</button>
+    <button data-tab="stop_anchors" role="tab">נקודות עיגון לתחנות</button>
     <button data-tab="defaults" role="tab">ברירות מחדל</button>
     <button data-tab="vehicles" role="tab">רכבים</button>
   </div>
@@ -397,9 +402,10 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
   <div class="dlg-f" id="setFoot"><button class="btn primary" id="setSave">החלה</button><span class="msg" id="setMsg" aria-live="polite"></span></div>
 </dialog>
 
-<script src="assets/logo.js?v=2026-11-16.16"></script>
-<script src="assets/core.js?v=2026-11-16.16"></script>
-<script src="assets/app.js?v=2026-11-16.16"></script>
-<script src="mobile/mobile.js?v=2026-11-16.16"></script>
+<script src="assets/logo.js?v=2026-11-16.18"></script>
+<script src="assets/core.js?v=2026-11-16.18"></script>
+<script src="assets/route.js?v=2026-11-16.18"></script>
+<script src="assets/app.js?v=2026-11-16.18"></script>
+<script src="mobile/mobile.js?v=2026-11-16.18"></script>
 </body>
 </html>

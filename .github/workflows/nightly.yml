@@ -122,7 +122,7 @@ jobs:
           (umask 077; printf '%s' "$DATA_KEY" > "$DATA_KEY_FILE")
           for d in $DAYS; do
             echo "== $d"
-            timeout 50m python pipeline/build_day.py "$d" --op "$SLUG"
+            timeout 110m python pipeline/build_day.py "$d" --op "$SLUG"  # first run after the route check (v3) re-routes the whole cache
           done
           rm -f "$DATA_KEY_FILE" data/*/day_*.json data/*/ends_*.json
 

@@ -42,6 +42,7 @@
     <div class="m-grab" aria-hidden="true"></div><h3 id="mSheetT">סינון</h3>
     <div class="m-seg" id="mCls" role="group" aria-label="סוג שירות"></div>
     <label class="m-sel"><select id="mBr" aria-label="סניף"></select></label>
+    <label class="m-sel"><select id="mAcc" aria-label="נגישות"></select></label>
     <label class="m-sel"><select id="mSort" aria-label="מיון"></select></label>
     <button class="btn primary m-go" id="mGo" type="button">הצגת תוצאות</button>
   </dialog>`);
@@ -81,10 +82,12 @@
   $("#mCls").onclick = e => { const b = e.target.closest("[data-cls]"); if (!b) return; $("#cls").value = b.dataset.cls; fire("#cls", "change"); drawSheet(); };
   // (#br / #sort call the original render directly, not the wrapped one: redraw the mobile view after them)
   $("#mBr").onchange = e => { $("#br").value = e.target.value; fire("#br", "change"); drawTop(); };
+  $("#mAcc").onchange = e => { $("#acc").value = e.target.value; fire("#acc", "change"); drawTop(); };
   $("#mSort").onchange = e => { $("#sort").value = e.target.value; fire("#sort", "change"); drawTop(); };
   function drawSheet() {
     $("#mCls").innerHTML = [...document.querySelectorAll("#cls option")].map(o => `<button type="button" class="${o.selected ? "on" : ""}" data-cls="${esc(o.value)}">${esc(o.textContent.replace(/^סוג: /, ""))}</button>`).join("");
     $("#mBr").innerHTML = $("#br").innerHTML; $("#mBr").value = $("#br").value;
+    $("#mAcc").innerHTML = $("#acc").innerHTML; $("#mAcc").value = $("#acc").value;
     $("#mSort").innerHTML = $("#sort").innerHTML; $("#mSort").value = $("#sort").value;
   }
 
@@ -118,8 +121,8 @@
     let h = "";
     for (const [v, s] of V.vs.slice(0, shown)) {
       const tot = s.emp + s.nk;
-      h += `<button type="button" class="m-vc${v.veh === sel ? " sel" : ""}" role="listitem" data-v="${esc(v.veh)}" aria-label="רכב ${esc(v.veh)}, ${esc(v.cls)}, ${nf(tot)} ק״מ ריק">
-        <span class="m-vmain"><span class="m-vtop"><b>${esc(v.veh)}</b><span class="badge ${v.cls === "עירוני" ? "urb" : "ic"}">${esc(v.cls)}</span>${brBadge(v)}</span>${timeline(v, s)}</span>
+      h += `<button type="button" class="m-vc${v.veh === sel ? " sel" : ""}" role="listitem" data-v="${esc(v.veh)}" aria-label="רכב ${esc(v.veh)}${isAcc(v.veh) ? ", נגיש" : ""}, ${esc(v.cls)}, ${nf(tot)} ק״מ ריק">
+        <span class="m-vmain"><span class="m-vtop"><b>${esc(v.veh)}</b>${accIcon(v.veh)}<span class="badge ${v.cls === "עירוני" ? "urb" : "ic"}">${esc(v.cls)}</span>${brBadge(v)}${errBadge(v)}</span>${timeline(v, s)}</span>
         <span class="m-vkm"><span>ריק</span><b>${nf(tot)}</b><span>ק״מ</span></span></button>`;
     }
     if (!V.vs.length) h = '<div class="empty-state">לא נמצאו רכבים</div>';
@@ -137,7 +140,7 @@
     $("#mDay").value = d.value;
     for (const [m, o] of [["#mYest", "#bYest"], ["#mToday", "#bToday"]]) { $(m).disabled = $(o).disabled; $(m).classList.toggle("on", $(o).classList.contains("on")); $(m).title = $(o).title; }
     if (document.activeElement !== $("#mQ")) $("#mQ").value = $("#q").value;
-    const n = (cls ? 1 : 0) + ($("#br").value ? 1 : 0) + ($("#sort").value !== "veh" ? 1 : 0);
+    const n = (cls ? 1 : 0) + ($("#br").value ? 1 : 0) + ($("#acc").value ? 1 : 0) + ($("#sort").value !== "veh" ? 1 : 0);
     $("#mFn").textContent = n ? `(${n})` : ""; $("#mFilter").classList.toggle("on", n > 0);
     const lf = $("#bLineF"); $("#mLineF").hidden = !lf || lf.hidden; if (lf && !lf.hidden) { $("#mLineF").textContent = lf.textContent; $("#mLineF").setAttribute("aria-label", "הסרת הסינון: " + lf.textContent.replace(" ✕", "")); }
     const lq = findArg(); $("#mLineQ").hidden = !lq; if (lq) $("#mLineQ").textContent = `נסיעות של קו ${lq} ביום הזה ›`;
@@ -158,7 +161,10 @@
   }
   addEventListener("popstate", () => { if (document.body.classList.contains("m-veh")) { pushed = false; closeVeh(true); } });
   $("#mBack").onclick = () => closeVeh(false);
-  function drawVehTitle() { const h = $("#side h2"); $("#mVehTitle").textContent = h ? h.textContent : ""; }
+  // sticky top bar: "רכב X · סוג · יום א' 15.11" (the date stays visible while scrolling the vehicle's day)
+  const DOW = ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"];
+  const dayTxt = d => d ? `יום ${DOW[new Date(d + "T12:00:00Z").getUTCDay()]} ${d.slice(8, 10)}.${d.slice(5, 7)}` : "";
+  function drawVehTitle() { const h = $("#side h2"); $("#mVehTitle").innerHTML = h ? h.innerHTML + (D && D.day ? ` · ${dayTxt(D.day)}` : "") : ""; } // h2 is built with esc() in app.js
 
   // ---- unsaved changes: sticky bar only while there are drafts ----
   function drawSave() {
