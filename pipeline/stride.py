@@ -90,3 +90,24 @@ def update_route_ends(rides, cache_file):
         print("route ends:", i + 15, "/", len(ids), file=sys.stderr)
         json.dump(ends, open(cache_file, "w", encoding="utf-8"), ensure_ascii=False)
     return ends
+
+
+def fetch_locations(rides, cache_file):
+    """First + last SIRI vehicle location of every ride (actual GPS start/end), batched by id and cached per day.
+    Returns {location_id: [recorded_at_iso, lat, lon, distance_from_journey_start_m]}."""
+    cache = json.load(open(cache_file, encoding="utf-8")) if os.path.exists(cache_file) else {}
+    ids = sorted({str(i) for x in rides for i in (x.get("first_vehicle_location_id"), x.get("last_vehicle_location_id")) if i})
+    need = [i for i in ids if i not in cache]
+    print("vehicle locations:", len(ids), "to fetch:", len(need), file=sys.stderr)
+    for k in range(0, len(need), 100):
+        part = need[k:k + 100]
+        for x in get("/siri_vehicle_locations/list", {"limit": 500, "siri_vehicle_location_ids": ",".join(part)}):
+            cache[str(x["id"])] = [x["recorded_at_time"], x["lat"], x["lon"], x["distance_from_journey_start"]]
+        for i in part:
+            cache.setdefault(i, None)  # not returned: remember, do not ask again
+        if k // 100 % 10 == 9:
+            print("locations:", k + 100, "/", len(need), file=sys.stderr)
+    tmp = cache_file + ".tmp"
+    json.dump(cache, open(tmp, "w", encoding="utf-8"))
+    os.replace(tmp, cache_file)
+    return cache

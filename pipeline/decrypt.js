@@ -1,4 +1,4 @@
-// node decrypt.js <keyfile> <day_X.js>  ->  prints the day's plaintext JSON to stdout (used to read the previous day)
+// node decrypt.js <keyfile> <day_X.js or ends_YYYY-MM.js>  ->  prints the plaintext JSON to stdout
 const fs = require("fs"), crypto = require("crypto");
 const [keyFile, file] = process.argv.slice(2);
 const key = Buffer.from(fs.readFileSync(keyFile, "utf8").trim(), "base64");
