@@ -12,7 +12,10 @@
  *   fetchRoad(pairs [[a,b]], onProgress(done,total)) -> Promise   fills road_cache (cache -> OSRM -> upsert)
  *   branchOf(veh) -> string   depotOf(veh) -> [lat,lon] | null   dcp() -> settings.driver_change_points
  *   getRows(table, query) -> Promise<rows>   rpc(fn, args) -> Promise
- *   onDraft(dirty:boolean)?          the app's unsaved-changes indicator
+ *   onDraft(dirty:boolean)?          the app's unsaved-changes indicator (stand-alone mode)
+ *   getDraftRules() / setDraftRules(ruleset|null)?  the app's draft model: when given, rule edits are app drafts
+ *                                    saved by the app's own "שמירה" (it calls rpc save_rule_set); the panel has no save button.
+ *                                    After the app saves: ui.reloadRules(); after it drops drafts: ui.syncDraft().
  *   getBlocks(day)?                  returns the day with manual block edits applied (block_edits); runs in the page
  *   workerUrl?                       default "savings/worker.js"
  */
@@ -54,15 +57,17 @@
         const n = E.normalizeRuleset(rs);
         // keep only what differs from the defaults at operator level, overrides as given
         S.saved = { operator: diffDefaults(n.operator), lines: n.lines };
-        S.draft = clone(S.saved);
+        S.draft = appDraft() || clone(S.saved);
       } catch (e) { S.err = "טעינת הכללים נכשלה: " + (e.message || e); }
     }
     const diffDefaults = op => Object.fromEntries(Object.entries(op).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(E.DEFAULT_RULES[k])));
     const dirty = () => JSON.stringify(S.draft) !== JSON.stringify(S.saved);
     async function getDay(d) {
       // manual block edits are applied here, in the page (functions cannot be sent to the worker)
-      if (!days.has(d)) { const raw = await host.loadDay(d); days.set(d, raw && host.getBlocks ? host.getBlocks(raw) || raw : raw); }
-      return days.get(d);
+      // raw files are cached; block edits are applied at every run (they may change between runs)
+      if (!days.has(d)) days.set(d, await host.loadDay(d));
+      const raw = days.get(d);
+      return raw && host.getBlocks ? host.getBlocks(raw) || raw : raw;
     }
     // stability candidates: up to 4 nearest same-weekday days + the day before and after (the engine picks)
     function compareCandidates(day) {
@@ -162,7 +167,9 @@
       a.href = URL.createObjectURL(blob); a.download = `הצעות-חיסכון-${S.result.day}.csv`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     }
-    const notifyDraft = () => host.onDraft && host.onDraft(dirty());
+    const appMode = typeof host.setDraftRules === "function";
+    function appDraft() { const d = appMode && host.getDraftRules ? host.getDraftRules() : null; return d ? clone(d) : null; }
+    const notifyDraft = () => { if (appMode) host.setDraftRules(dirty() ? clone(S.draft) : null); else if (host.onDraft) host.onDraft(dirty()); };
 
     // ------------------------------------------------------------ events
     function onClick(e) {
@@ -379,8 +386,8 @@
         <div class="sv-rules-h"><h3>כללי ההצעות</h3>
           <span class="edit-state sv-draft" ${dirty() ? "" : "hidden"}>טיוטה: יש שינויים שלא נשמרו. ההרצה משתמשת בטיוטה.</span>
           ${ro ? `<span class="muted">צפייה בלבד: שינוי כללים זמין לעורכים ומנהלים.</span>` : `
-          <button class="btn" data-act="revert" ${dirty() ? "" : "disabled"}>ביטול שינויים</button>
-          <button class="btn primary" data-act="save" ${dirty() ? "" : "disabled"}>שמירה</button>`}
+          <button class="btn" data-act="revert" ${dirty() ? "" : "disabled"}>ביטול שינויים בכללים</button>
+          ${appMode ? `<span class="muted">השמירה בכפתור "שמירה" בראש הדף.</span>` : `<button class="btn primary" data-act="save" ${dirty() ? "" : "disabled"}>שמירה</button>`}`}
         </div>
         <div class="hint">כללי המפעיל חלים על כל הקווים. כלל של קו מחליף את ערך המפעיל לאותו קו; כשבדיקה נוגעת בכמה קווים, הערך המחמיר מביניהם קובע.</div>
         <div class="sv-rules-grid">
@@ -410,6 +417,7 @@
       setDay() { S.result = null; S.detail = null; S.err = ""; render(); },
       blocksChanged() { days.clear(); S.result = null; S.detail = null; render(); }, // call after a block edit is saved
       reloadRules: () => loadRules().then(render),
+      syncDraft() { S.draft = appDraft() || clone(S.saved); render(); },
       isDirty: dirty,
       destroy() { if (worker) worker.terminate(); el.innerHTML = ""; el.classList.remove("sv"); },
     };

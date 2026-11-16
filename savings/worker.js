@@ -3,7 +3,7 @@
  * out: {id, ok:true, result} | {id, ok:false, error}
  * Day data arrives already decrypted from the page and never leaves this worker except as the result. */
 /* global importScripts, SavingsEngine */
-importScripts("engine.js");
+importScripts("engine.js" + (self.location.search || "")); // same ?v= as the worker (cache busting)
 self.onmessage = e => {
   const m = e.data || {};
   try {

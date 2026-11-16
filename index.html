@@ -96,6 +96,7 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;
 .muted{color:var(--muted)}
 .empty-state{padding:30px;text-align:center;color:var(--muted)}
 dialog{border:1px solid var(--line);border-radius:10px;padding:0;max-width:min(980px,96vw);width:100%;color:var(--text)}
+#dlgSav{max-width:min(1320px,98vw)}#savBody{padding:0}
 dialog::backdrop{background:rgba(20,25,35,.45)}
 dialog.small{max-width:420px}
 .dlg-h{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
@@ -218,6 +219,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <select id="sort" aria-label="מיון"><option value="veh">מיון: מספר רכב</option><option value="empty">מיון: הכי הרבה ק״מ ריקים</option><option value="start">מיון: שעת יציאה</option></select>
     <input type="search" id="q" placeholder="חיפוש מספר רכב" aria-label="חיפוש מספר רכב">
     <select id="opSel" aria-label="מפעיל" hidden></select>
+    <button class="btn iconbtn" id="bSav" title="הצעות חיסכון" aria-label="הצעות חיסכון"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l-4 4 4 4"/><path d="M3 8h13"/><path d="M17 20l4-4-4-4"/><path d="M21 16H8"/></svg></button>
     <button class="btn iconbtn" id="bSettings" title="הגדרות" aria-label="הגדרות"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button class="btn withicon" id="bCtl" hidden title="חדר בקרה: משתמשים והרשאות"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5z"/><circle cx="12" cy="10" r="2.5"/><path d="M8 16.5c.8-1.8 2.3-2.7 4-2.7s3.2.9 4 2.7"/></svg>חדר בקרה</button>
     <div class="savebar" id="saveBar" hidden><button class="btn primary" id="bSave" disabled>שמירה <span id="nDraft"></span></button><button class="btn" id="bUndo" disabled>ביטול שינויים</button><span class="msg" id="saveMsg" aria-live="polite"></span></div>
@@ -250,6 +252,11 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
   </div>
   <aside class="panel" id="side" aria-live="polite"><div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div></aside>
 </main>
+
+<dialog id="dlgSav" aria-labelledby="savTitle">
+  <div class="dlg-h"><h3 id="savTitle">הצעות חיסכון</h3><button class="btn small" id="savClose">סגירה</button></div>
+  <div class="dlg-b" id="savBody"></div>
+</dialog>
 
 <dialog id="dlgCtl" aria-labelledby="ctlTitle">
   <div class="dlg-h"><h3 id="ctlTitle">חדר בקרה · משתמשים והרשאות</h3><button class="btn small" id="ctlClose">סגירה</button></div>
@@ -402,11 +409,11 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 })();
 
 </script>
-<script src="assets/core.js?v=2026-11-16.4"></script>
+<script src="assets/core.js?v=2026-11-16.5"></script>
 <script>
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-16.4";
+const APP_VER="2026-11-16.5";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -796,7 +803,7 @@ function chooseNight(N,veh,mode){
   setDraft("ovn",N+"|"+veh,{day:N,veh,mode:"depot",detail:{depot_in:li&&idOf(li.depot),depot_out:lo&&idOf(lo.depot)},note:null});render();ensureRoad()}
 // ---- drafts: every edit (settings, reinforcement, overnight, branch, automatic reinforcement) changes the view at once
 // but nothing is written until "שמירה". Drafts stay when the day changes. value null = remove the saved value. ----
-const DRAFT={settings:{},veh:{},ovn:{},rein:{},autor:{},blk:{}};
+const DRAFT={settings:{},veh:{},ovn:{},rein:{},autor:{},blk:{},rules:{}}; // rules: {set: savings rule set} (savings panel)
 let DV=0,EFF=null,EFFV=-1;
 const same=(a,b)=>JSON.stringify(a??null)===JSON.stringify(b??null);
 const baseOf=t=>t==="ovn"?OVN:t==="rein"?REIN:t==="autor"?AUTOR:t==="blk"?BLK:null;
@@ -836,15 +843,17 @@ async function saveAll(){
     for(const [k,x] of Object.entries(DRAFT.ovn)){const [day,veh]=k.split("|");ch.ovn.push(x==null?{day,veh,delete:true}:{day,veh,mode:x.mode,detail:x.detail||null,note:x.note||null})}
     for(const [k,x] of Object.entries(DRAFT.rein)){const [day,veh,sm]=k.split("|");ch.rein.push(x==null?{day,veh,start_min:+sm,delete:true}:{...x,day,veh,start_min:+sm})}
     for(const [k,x] of Object.entries(DRAFT.autor)){const [day,veh,sm]=k.split("|");ch.autor.push(x==null?{day,veh,start_min:+sm,delete:true}:{day,veh,start_min:+sm,status:x})}
-    const n=nDraft(), res=await rpc("save_changes",{p_operator:OP.id,p_changes:ch});
+    const n=nDraft();
+    if(DRAFT.rules.set) await rpc("save_rule_set",{p_operator:OP.id,p_operator_rules:DRAFT.rules.set.operator||{},p_lines:DRAFT.rules.set.lines||{}});
+    const res=await rpc("save_changes",{p_operator:OP.id,p_changes:ch});
     for(const x of ch.settings) S[x.key]=clone(x.value);
     const ap=(base,d)=>{for(const [k,x] of Object.entries(d)) if(x==null) delete base[k]; else base[k]=x};
     ap(OVN,DRAFT.ovn);ap(REIN,DRAFT.rein);ap(AUTOR,DRAFT.autor);ap(BLK,DRAFT.blk);
     for(const t in DRAFT) DRAFT[t]={};
-    touched(); render(); msg.className="msg ok"; msg.textContent=`נשמר (${nf(res&&res.saved||n)})`; setTimeout(()=>{if(msg.textContent.startsWith("נשמר")) msg.textContent=""},5000);
+    touched(); render(); if(SAV) SAV.ui.reloadRules(); msg.className="msg ok"; msg.textContent=`נשמר (${nf(res&&res.saved||n)})`; setTimeout(()=>{if(msg.textContent.startsWith("נשמר")) msg.textContent=""},5000);
     ensureRoad(); return true}
   catch(err){msg.className="msg err";msg.textContent="השמירה נכשלה: "+errText(err);drawSaveBar();return false}}
-function undoAll(){for(const t in DRAFT) DRAFT[t]={};touched();render();ensureRoad();$("#saveMsg").textContent=""}
+function undoAll(){for(const t in DRAFT) DRAFT[t]={};touched();render();ensureRoad();$("#saveMsg").textContent="";if(SAV) SAV.ui.syncDraft()}
 $("#bSave").onclick=saveAll;
 $("#bUndo").onclick=()=>{if(confirm(`לבטל ${nDraft()} שינויים שלא נשמרו?`)) undoAll()};
 addEventListener("beforeunload",e=>{if(nDraft()){e.preventDefault();e.returnValue=""}});
@@ -884,6 +893,30 @@ function loadEditedNeighbours(day){const n=DH.dayNum(day);
     if(d!==day&&days.includes(d)&&Math.abs(DH.dayNum(d)-n)<=DH.LOOKBACK&&!(window.DAY_DATA&&window.DAY_DATA[d])) ensureDayLoaded(d).then(()=>{EDC.k="";render()},()=>{})}
 // the same view for the savings engine (its getBlocks host hook): a day file object -> with that day's block edits applied
 window.YS_HOST=Object.assign(window.YS_HOST||{},{getBlocks:dayObj=>{const es=editsOf(dayObj.day);return es.length?DH.applyBlockEdits(dayObj,es,{road:roadOf}):dayObj}});
+// ---- savings suggestions (savings/*.js, loaded on first open): the panel gets everything through this host ----
+let SAV=null;
+const loadJs=src=>new Promise((ok,bad)=>{const s=document.createElement("script");s.src=src+"?v="+APP_VER;s.onload=ok;s.onerror=bad;document.head.appendChild(s)});
+async function openSavings(){
+  if(!window.SavingsPanel){const l=document.createElement("link");l.rel="stylesheet";l.href="savings/panel.css?v="+APP_VER;document.head.appendChild(l);
+    await loadJs("savings/engine.js");await loadJs("savings/panel.js")}
+  if(SAV&&SAV.op!==OP.id){SAV.ui.destroy();SAV=null}
+  if(!SAV){const H=window.YS_HOST;
+    SAV={op:OP.id,ui:SavingsPanel.mount($("#savBody"),{operatorId:OP.id,canEdit,days:()=>days,currentDay:()=>D&&D.day,
+      loadDay:async day=>{await ensureDayLoaded(day);return window.DAY_DATA[day]},getBlocks:H.getBlocks,
+      roadEntries:()=>[...ROAD].map(([k,v])=>[k,v.km,v.min]),
+      fetchRoad:async(pairs,cb)=>{const rows=[];let i=0; // same path as the night legs: shared cache, then OSRM; new results saved for everyone
+        for(const [a,b] of pairs){const had=ROAD.has(roadKey(a,b)),r=await roadKm(a,b);
+          if(r.road&&!had) rows.push({a_lat:+(+a[0]).toFixed(5),a_lon:+(+a[1]).toFixed(5),b_lat:+(+b[0]).toFixed(5),b_lon:+(+b[1]).toFixed(5),km:+(+r.km).toFixed(2),min:+(+r.min).toFixed(1)});
+          cb(++i,pairs.length);if(!had) await new Promise(r=>setTimeout(r,150))}
+        if(rows.length&&canEdit()) for(let k=0;k<rows.length;k+=50) try{await upsert("road_cache",rows.slice(k,k+50),"a_lat,a_lon,b_lat,b_lon")}catch(e){console.warn("road save",e)}},
+      branchOf:veh=>{try{return MODEL.branchOf(veh,D.day).b||""}catch{return ""}},
+      depotOf:veh=>{const d=MODEL&&MODEL.depotFor(veh,"in",null);return d&&d.lat!==""&&d.lat!=null&&d.lon!==""&&d.lon!=null?[+d.lat,+d.lon]:null},
+      dcp:()=>eff().S.driver_change_points||[],getRows,rpc,workerUrl:"savings/worker.js?v="+APP_VER,
+      getDraftRules:()=>DRAFT.rules.set||null,
+      setDraftRules:rs=>{if(!canEdit()) return;if(rs) DRAFT.rules.set=rs; else delete DRAFT.rules.set;touched()}})}}
+  $("#dlgSav").showModal()}
+$("#bSav").onclick=()=>openSavings().catch(e=>alert("טעינת הצעות החיסכון נכשלה: "+errText(e)));
+$("#savClose").onclick=()=>$("#dlgSav").close();
 const EDNAME={delete:"מחיקה",replace:"החלפה",add:"הוספה",times:"שעות",move:"העברה"};
 function edDesc(e){const p=e.payload||{};
   return e.action==="delete"?`נמחקה הנסיעה של ${fmt(+p.sched)}`:e.action==="times"?`הנסיעה של ${fmt(+p.sched)} → ${fmt(+p.start)}–${fmt(+p.end)}`
