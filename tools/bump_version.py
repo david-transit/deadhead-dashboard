@@ -8,7 +8,7 @@ day = dt.date.today().isoformat()
 n = int(cur.split(".")[-1]) + 1 if cur.startswith(day + ".") else 1
 v = f"{day}.{n}"
 s = s.replace(f'const APP_VER="{cur}"', f'const APP_VER="{v}"')
-s = re.sub(r'(src="assets/[^"?]+\.js)\?v=[^"]*"', lambda m: f'{m.group(1)}?v={v}"', s)  # local scripts
+s = re.sub(r'((?:src|href)="(?:assets|mobile)/[^"?]+\.(?:js|css))\?v=[^"]*"', lambda m: f'{m.group(1)}?v={v}"', s)  # local scripts + styles
 open(p, "w", encoding="utf-8").write(s)
 json.dump({"v": v}, open(os.path.join(HERE, "version.json"), "w"))
 print(cur, "->", v)

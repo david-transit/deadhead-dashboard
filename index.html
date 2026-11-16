@@ -7,6 +7,13 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>יאללה־סע · נסיעות ריקות</title>
+<link rel="manifest" href="mobile/manifest.webmanifest">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="mobile/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="mobile/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="יאללה־סע">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&family=Montserrat:wght@800&family=Rubik:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -160,6 +167,7 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 @media (max-width:900px){body{height:auto}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
 </style>
+<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-16.6">
 </head>
 <body class="locked">
 <div id="gate" class="intro">
@@ -671,6 +679,7 @@ function render(){
     h+=`<div class="row${v.veh===sel?" sel":""}" role="listitem" tabindex="0" data-v="${esc(v.veh)}"><div class="lab">${esc(v.veh)} ${brBadge(v)}<span class="badge ${v.cls==="עירוני"?"urb":"ic"}">${esc(v.cls)}</span>${f?`<span class="badge">${esc(f)}</span>`:""}</div><div class="track">${grid}${b}</div></div>`;
   }
   if(!vs.length) h+='<div class="empty-state">לא נמצאו רכבים</div>';
+  window.YS_VIEW={vs,vsAll}; // mobile/mobile.js draws its list from the same filtered + sorted view
   $("#gantt").innerHTML=h;
   side(sel);
 }
@@ -1406,5 +1415,6 @@ $("#gateForm").addEventListener("submit",async e=>{
   try{if((await fnCall({action:"bootstrap_status"},false)).needed) gateMode("bootstrap")}catch(e){console.warn("bootstrap status",e)}
 })();
 </script>
+<script src="mobile/mobile.js?v=2026-11-16.6"></script>
 </body>
 </html>
