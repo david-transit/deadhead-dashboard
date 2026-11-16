@@ -4,6 +4,9 @@ name: bus-compare
 # Routes every unique empty leg of the LIVE day files (main) with bus-strict, bus-relaxed and the public car server, and
 # uploads the result encrypted with the operator key (artifact bus-compare, 3 days). Nothing is committed.
 on:
+  push:   # the review branch only (a new workflow cannot be dispatched before it is on main)
+    branches: [bus-osrm]
+    paths: [".github/workflows/bus-compare.yml", "pipeline/osrm/**"]
   workflow_dispatch:
     inputs:
       operator:
@@ -29,7 +32,7 @@ jobs:
 
       - name: Live day files from main
         env:
-          SLUG: ${{ inputs.operator }}
+          SLUG: ${{ inputs.operator || 'derech-egged' }}
         run: |
           set -eu
           [[ "$SLUG" =~ ^[a-z0-9-]+$ ]] || { echo "bad operator slug"; exit 1; }
@@ -78,7 +81,7 @@ jobs:
       - name: Route every unique leg (encrypted output)
         env:
           DATA_KEY: ${{ secrets.DATA_KEY }}   # derech-egged (pipeline/operators.json)
-          SLUG: ${{ inputs.operator }}
+          SLUG: ${{ inputs.operator || 'derech-egged' }}
           OK: ${{ steps.strict.outputs.osrm == 'ok' && steps.relaxed.outputs.osrm == 'ok' }}
         run: |
           set -eu
