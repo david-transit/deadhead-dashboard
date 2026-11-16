@@ -94,6 +94,20 @@ body.dense .row .lab .fuelb{display:none}
 .tick.day{border-left:1px dashed #8C939D}
 .axis .tick .dl{left:auto;right:3px;font-size:10.5px;color:var(--text);white-space:nowrap}
 .savemsg:empty{display:none}
+.findpop{position:fixed;inset-block-start:64px;inset-inline-end:auto;inset-inline-start:auto;left:16px;margin:0;width:min(640px,96vw);max-height:calc(100vh - 90px);box-shadow:0 12px 32px rgba(20,25,35,.22);z-index:40}
+.findpop .dlg-b{max-height:calc(100vh - 170px)}
+@media (max-width:768px){.findpop{inset:0;left:0;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;border-radius:0;box-shadow:none}
+  .findpop .dlg-b{max-height:calc(100dvh - 60px)}.findpop .inv{flex-wrap:wrap}.fdrow{grid-template-columns:78px 40px 1fr;font-size:13px}
+  .fdrow>span:nth-child(4){grid-column:1/-1;text-align:right!important}}
+.fdonly{display:flex;gap:6px;align-items:center;font-size:13px;margin:2px 0 6px}
+.fdrow{display:grid;grid-template-columns:96px 52px 1fr 92px;gap:8px;align-items:center;width:100%;text-align:right;border:0;border-bottom:1px solid #EEF0F3;background:none;padding:7px 6px;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+.fdrow:hover,.fdrow:focus-visible{background:var(--sel)}
+.fdrow .t{direction:ltr;text-align:right;font-weight:500}
+.fdrow .fl{grid-column:1/-1;display:flex;gap:4px;flex-wrap:wrap}
+.fdrow .fl:empty{display:none}
+.linef{background:var(--sel);border-color:#C5D5F0}
+.bar.hl{outline:3px solid #F5C542;outline-offset:1px;z-index:1}
+.it.hl{box-shadow:inset 4px 0 0 #F5C542;background:#FFF8E6}
 .menu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
 .menu [aria-checked="true"]::before{content:"✓ "}
 #bCollapse svg{transition:transform .2s ease}
@@ -263,7 +277,9 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <select id="cls" aria-label="סוג שירות"></select>
     <select id="br" aria-label="סניף"></select>
     <select id="sort" aria-label="מיון"><option value="veh">מיון: מספר רכב</option><option value="empty">מיון: הכי הרבה ריק</option><option value="start">מיון: שעת יציאה</option></select>
-    <input type="search" id="q" class="keep" placeholder="חיפוש רכב" aria-label="חיפוש מספר רכב">
+    <input type="search" id="q" class="keep" placeholder="רכב או קו" aria-label="חיפוש מספר רכב, או מספר קו לחיפוש נסיעה">
+    <button class="btn keep" id="bFind" aria-haspopup="dialog" aria-controls="dlgFind" title="מי ביצע נסיעה: קו, כיוון ושעה">חיפוש נסיעה</button>
+    <button class="btn small keep linef" id="bLineF" hidden title="הסרת הסינון לפי קו"></button>
     <select id="opSel" aria-label="מפעיל" hidden></select>
     <button class="btn iconbtn" id="bSav" title="הצעות חיסכון" aria-label="הצעות חיסכון"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l-4 4 4 4"/><path d="M3 8h13"/><path d="M17 20l4-4-4-4"/><path d="M21 16H8"/></svg></button>
     <button class="btn iconbtn" id="bSettings" title="הגדרות" aria-label="הגדרות"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -334,6 +350,20 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
     <div id="trPickBox"><input type="search" id="trQ" placeholder="סינון לפי מספר קו או מקום" style="margin:8px 0;width:260px"><div id="trList" style="max-height:40vh;overflow:auto"></div></div>
   </div>
   <div class="dlg-f"><span class="msg" id="trMsg" style="flex:1"></span><button class="btn primary" id="trOk">עריכה</button></div>
+</dialog>
+<dialog id="dlgFind" class="findpop" aria-labelledby="fdTitle">
+  <div class="dlg-h"><h3 id="fdTitle">חיפוש נסיעה</h3><button class="btn small" id="fdClose">סגירה</button></div>
+  <div class="dlg-b">
+    <div class="inv">
+      <div class="field"><label for="fdLine">קו</label><input id="fdLine" list="fdLines" dir="ltr" style="width:84px" autocomplete="off"><datalist id="fdLines"></datalist></div>
+      <div class="field"><label for="fdDir">כיוון</label><select id="fdDir" style="max-width:300px"></select></div>
+      <div class="field"><label for="fdTime">שעת יציאה</label><input id="fdTime" dir="ltr" placeholder="16:00" style="width:74px" autocomplete="off"></div>
+      <div class="field"><label for="fdWin">טווח</label><select id="fdWin"><option value="0">בדיוק</option><option value="5">± 5 דק׳</option><option value="15" selected>± 15 דק׳</option><option value="30">± 30 דק׳</option><option value="60">± שעה</option></select></div>
+    </div>
+    <label class="fdonly"><input type="checkbox" id="fdOnly"> הצג בציר הזמן רק רכבים שביצעו את הקו</label>
+    <div class="hint" id="fdSum" aria-live="polite"></div>
+    <div id="fdRes" role="list" aria-label="תוצאות"></div>
+  </div>
 </dialog>
 <dialog id="dlgNote" class="small" aria-labelledby="noteTitle" style="max-width:480px">
   <div class="dlg-h"><h3 id="noteTitle">הערה על הנסיעה הריקה</h3><button class="btn small" id="noteClose">סגירה</button></div>
@@ -644,7 +674,7 @@ function loadDay(day,after){
   $("#day").value=day; $("#bToday").classList.toggle("on",day===today); $("#bYest").classList.toggle("on",day===yest);
   const go=async()=>{window.DAY_DATA=window.DAY_DATA||{};try{if(!window.DAY_DATA[day]) window.DAY_DATA[day]=await decryptDay(day)}catch(e){$("#gantt").innerHTML='<div class="empty-state">לא ניתן לפענח את נתוני היום הזה</div>';return}
     D=effDay(day);{const q=$("#q").value.trim();if(knownVeh(q)) sel=q}
-    loadEditedNeighbours(day);
+    loadEditedNeighbours(day); if($("#dlgFind").open){const l=$("#fdLine").value;fillDirs();$("#fdLine").value=l;setTimeout(drawFind,0)}
     render();ensureRoad();if(sel) document.querySelector(`.row[data-v="${CSS.escape(sel)}"]`)?.scrollIntoView({block:"nearest"});after&&after()};
   if((window.DAY_DATA&&window.DAY_DATA[day])||(window.ENC_DAY&&window.ENC_DAY[day])) return go();
   $("#gantt").innerHTML='<div class="empty-state">טוען…</div>';
@@ -669,7 +699,7 @@ function render(){
   if(!D) return;
   D=effDay(D.day)||D; model(); fillBr(); fillCls(); const br=$("#br").value, q=$("#q").value.trim();
   const all=D.vehicles.map(v=>[v,vstats(v)]);
-  const vsAll=all.filter(([v])=>(!cls||v.cls===cls)&&v.veh.includes(q)&&(!br||(br==="__none"?!branchOf(v).b:branchOf(v).b===br)));
+  const vsAll=all.filter(([v])=>(!cls||v.cls===cls)&&(lineQ(q)||v.veh.includes(q))&&lineOk(v)&&(!br||(br==="__none"?!branchOf(v).b:branchOf(v).b===br)));
   const sum=f=>vsAll.reduce((a,[v,s])=>a+f(v,s),0);
   const emp=sum((v,s)=>s.emp), rein=sum((v,s)=>s.rein), nk=sum((v,s)=>s.nk), est=sum((v,s)=>s.est);
   const nOver=sum(v=>v.items.filter(i=>i.overlap).length), nDup=sum(v=>v.items.filter(i=>i.kind==="dup").length), nInc=sum(v=>v.items.filter(i=>i.incomplete).length);
@@ -702,13 +732,13 @@ function render(){
   let h=`<div class="axis"><div class="lab">רכב <button class="linkbtn legbtn" data-legend aria-controls="legendPop" aria-expanded="${$("#legendPop").classList.contains("open")}">מקרא</button></div><div class="track">${ticks}</div></div>`;
   const grid=ticks.replace(/<span[^>]*>.*?<\/span>/g,"");
   for(const [v,s] of vs){
-    let b="";
+    let b="";const hlS=HL&&HL.veh===v.veh?HL.sched:null;
     for(const n of s.n) if(n.km>=1) b+=bar(n.kind==="rein"?"rein":"dep",n.start,n.end,n.kind==="rein"?n.line:"",legTitle(n),s.flags.includes("tight")?"bad":"");
     for(const i of v.items){
       if(i.kind==="ghost") continue;
       if(i.kind==="dup") b+=bar("dup",i.start,i.end,"",`${fmt(i.start)}–${fmt(i.end)} התחלה כפולה של קו ${i.line}: נסיעה קצרה שאוחדה עם הנסיעה הבאה (לא נסיעה, לא תגבור)`);
-      else if(i.kind==="trip"&&i.auto&&autoSt(v,i)!=="rejected") b+=bar("rein"+(i.edited?" edt":""),i.start,i.end,(i.edited?"✎":"")+i.line,`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)} תגבור אוטומטי (לא בלוח הרישוי) · קו ${i.line}: ${i.frm} ← ${i.to} · ${AUTOTXT[autoSt(v,i)]}${i.incomplete?" · לא הושלמה לפי GPS":""}`,i.incomplete?"inc":"");
-      else if(i.kind==="trip") b+=bar("svc"+(i.edited?" edt":""),i.start,i.end,(i.edited?"✎":"")+i.line,`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)} קו ${i.line}: ${i.frm} ← ${i.to}${i.incomplete?` · לא הושלמה לפי GPS (${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ)`:""}${i.no_gps?" · בלי GPS: לפי הלוח":""}`,i.incomplete?"inc":"");
+      else if(i.kind==="trip"&&i.auto&&autoSt(v,i)!=="rejected") b+=bar("rein"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line,`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)} תגבור אוטומטי (לא בלוח הרישוי) · קו ${i.line}: ${i.frm} ← ${i.to} · ${AUTOTXT[autoSt(v,i)]}${i.incomplete?" · לא הושלמה לפי GPS":""}`,i.incomplete?"inc":"");
+      else if(i.kind==="trip") b+=bar("svc"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line,`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)} קו ${i.line}: ${i.frm} ← ${i.to}${i.incomplete?` · לא הושלמה לפי GPS (${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ)`:""}${i.no_gps?" · בלי GPS: לפי הלוח":""}`,i.incomplete?"inc":"");
       else if(i.kind==="empty"&&reinOf(v,i)){const r=reinOf(v,i),m1=estMin(+r.before_km||0),m3=estMin(+r.after_km||0),m2=Math.max(i.end-i.start-m1-m3,5);
         if(+r.before_km>=1) b+=bar("emp",i.start,i.start+Math.max(m1,3),"",`ריק לפני התגבור ${nf(r.before_km)} ק״מ`);
         b+=bar("rein",i.start+m1,i.start+m1+m2,r.line,`תגבור קו ${r.line}: ${r.route_frm} ← ${r.route_to}, ${nf(r.rein_km)} ק״מ`);
@@ -769,10 +799,10 @@ function side(veh){
       :`<div class="it wait"><span>התחלה כפולה · קו ${esc(i.line)}<span class="sub">נסיעה של ${Math.round(i.end-i.start)} דק׳${fromPl(i.frm)} שהופסקה או נרשמה פעמיים, ואותו קו נסע מיד. אוחדה עם הנסיעה: לא נסיעה, לא תגבור, אין ריק.</span>${fixLink()}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;continue}
     const gpsTxt=i.kind==="trip"?(i.midroute?`<span class="sub">הצטרף לקו באמצע (ה־GPS ראה אותו לראשונה ${nf(i.midroute)} ק״מ מתחילת הקו). נספרים ${nf(i.km)} ק״מ.</span>`:"")+(i.late_login?`<span class="sub">נרשם באיחור ב־SIRI (${nf(i.late_login)} ק״מ אחרי תחילת הקו): תחילת הנסיעה מתחילת הקו, השעה משוערת</span>`:"")+(i.incomplete?`<span class="sub" style="color:var(--warn)">לא הושלמה לפי GPS: ${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ. נספרים ${nf(i.km)} ק״מ.</span>${fixLink()}`:i.no_gps?`<span class="sub">בלי GPS לנסיעה הזו: לפי הלוח</span>`:""):"";
     if(i.kind==="trip"&&i.auto){const st=autoSt(v,i),btn=(k,t)=>`<button class="btn small" data-ar="${i.sched}" data-st="${k}">${t}</button>`;
-      h+=`<div class="it ${st==="rejected"?"svc":"rein"}"><span>${st==="rejected"?"":"תגבור אוטומטי (לא בלוח הרישוי) · "}קו ${esc(i.line)}${i.unmapped?` (קו לא מזוהה, line_ref ${esc(i.line_ref)})`:""} · ${esc(i.frm)} ← ${esc(i.to)}
+      h+=`<div class="it ${st==="rejected"?"svc":"rein"}${HL&&HL.veh===v.veh&&HL.sched===i.sched?" hl":""}"><span>${st==="rejected"?"":"תגבור אוטומטי (לא בלוח הרישוי) · "}קו ${esc(i.line)}${i.unmapped?` (קו לא מזוהה, line_ref ${esc(i.line_ref)})`:""} · ${esc(i.frm)} ← ${esc(i.to)}
         <span class="sub">${AUTOTXT[st]} · ${i.km==null?"? ק״מ":nf(i.km)+" ק״מ"}${i.dur_est?" · משך משוער":""}</span>${gpsTxt}${tripExtra(i)}
         ${canEdit()?`<span class="sub">${st!=="confirmed"?btn("confirmed","אישור כתגבור"):""}${st!=="rejected"?btn("rejected","דחייה (נסיעה רגילה)"):""}${st!=="pending"?btn("auto","ביטול החלטה"):""}</span>`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
-    else if(i.kind==="trip") h+=`<div class="it svc${i.edited?" edt":""}"><span>קו ${esc(i.line)} · ${esc(i.frm)} ← ${esc(i.to)}${gpsTxt}${tripExtra(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
+    else if(i.kind==="trip") h+=`<div class="it svc${i.edited?" edt":""}${HL&&HL.veh===v.veh&&HL.sched===i.sched?" hl":""}"><span>קו ${esc(i.line)} · ${esc(i.frm)} ← ${esc(i.to)}${gpsTxt}${tripExtra(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
     else if(i.overlap) h+=`<div class="it emp" style="color:var(--warn)"><span>חפיפה בין נסיעות (${i.edited?"אחרי עריכה ידנית":"שגיאה בנתוני SIRI"})<span class="sub">0 ק״מ ריק</span>${fixLink()}</span><span class="t"></span></div>`;
     else if(i.km>=1){const r=reinOf(v,i);
       if(r) h+=`<div class="it rein"><span>תגבור קו ${esc(r.line)} · ${nf(r.rein_km)} ק״מ<span class="sub">${esc(r.route_frm)} ← ${esc(r.route_to)}</span>
@@ -800,6 +830,7 @@ function side(veh){
      <div><b>ק״מ ביום:</b> ${nf(s.day)} (בשירות ${nf(s.svc)})</div>
      ${r?`<div><b>מתוך טווח:</b> ${nf(r)} ק״מ · נשאר ${nf(Math.max(r-s.day,0))} ק״מ בסוף היום</div><div class="prog"><div style="width:${pc}%;background:${pc>90?"var(--warn)":pc>75?"var(--empty)":"var(--ok)"}"></div></div>${s.day>r?`<div style="color:var(--warn)">חורג מהטווח: צריך תדלוק במהלך היום</div>`:""}`:`<div class="muted">טווח נסיעה לא הוגדר</div>`}</div>`;
   box.innerHTML=h;
+  if(HL&&HL.veh===v.veh) box.querySelector(".it.hl")?.scrollIntoView({block:"nearest"});
 }
 // ---- reinforcement trip: a service line placed inside an empty leg; the gaps before/after stay empty ----
 let pick=null;
@@ -931,7 +962,7 @@ function askSave(goText){return new Promise(res=>{if(!nDraft()) return res("go")
 async function selectVehicle(veh){
   if(veh===sel) return true;
   if(sel&&nDraft()){const r=await askSave("המשך בלי לשמור");if(r==="back") return false;if(r==="save"&&!(await saveAll())) return false}
-  sel=veh;pick=null;BLKMODE=false;SHOWORIG=false;document.querySelectorAll(".row.sel").forEach(x=>x.classList.remove("sel"));
+  sel=veh;pick=null;BLKMODE=false;SHOWORIG=false;HL=null;document.querySelectorAll(".row.sel").forEach(x=>x.classList.remove("sel"));
   document.querySelector(`.row[data-v="${CSS.escape(veh)}"]`)?.classList.add("sel");side(sel);return true}
 
 // ---- manual block edits (fixing data errors): every edit is a draft override (block_edits) on the vehicle-day; the
@@ -1203,7 +1234,8 @@ $("#gantt").addEventListener("click",e=>{const r=e.target.closest(".row");if(r) 
 $("#gantt").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){const r=e.target.closest(".row");if(r){e.preventDefault();r.click()}}});
 // a full vehicle number in the search box selects that vehicle (also kept when the day changes)
 const knownVeh=q=>/^\d{4,}$/.test(q)&&(D&&D.vehicles.some(v=>v.veh===q)||Object.values(ENDS).some(d=>d[q]));
-$("#q").oninput=async()=>{const q=$("#q").value.trim();if(knownVeh(q)&&q!==sel&&!(await selectVehicle(q))) return;render()}; $("#sort").onchange=render; $("#br").onchange=render; $("#day").onchange=e=>loadDay(e.target.value);
+$("#q").oninput=async()=>{const q=$("#q").value.trim();if(knownVeh(q)&&q!==sel&&!(await selectVehicle(q))) return;
+  if(lineQ(q)) openFind(q,false); render()}; $("#sort").onchange=render; $("#br").onchange=render; $("#day").onchange=e=>loadDay(e.target.value);
 addEventListener("resize",()=>{clearTimeout(window._rt);window._rt=setTimeout(render,150)});
 $("#bToday").onclick=()=>loadDay(today); $("#bYest").onclick=()=>loadDay(yest);
 const QP=new URLSearchParams(location.search);
@@ -1271,6 +1303,51 @@ $("#ctlBody").addEventListener("submit",async e=>{e.preventDefault();const user=
   const role=$("#nRole").value;
   if(await ctlDo({action:"create",username:user,display_name:$("#nName").value.trim(),...(role==="platform"?{}:{operator_id:$("#nOp").value}),role,password:pw},""))
     cmsg(`נוצר המשתמש ${user} עם הסיסמה הזמנית ${pw} . העבר לו את שניהם. בכניסה הראשונה הוא יבחר סיסמה חדשה.`,"ok")});
+
+// ---- trip search: "who ran line L, direction X, at about HH:MM?" over the day as shown (block edits + drafts included) ----
+let HL=null, LINEF=null; // HL = highlighted trip {veh, sched}; LINEF = {line, dir} filter of the timeline
+const dayLines=()=>{const set=new Set();if(D) for(const v of D.vehicles) for(const i of v.items) if(i.kind==="trip"&&i.line&&i.line!=="?") set.add(String(i.line));
+  return [...set].sort((a,b)=>a.localeCompare(b,"he",{numeric:true}))};
+// a line number in the search box (short, and a line that ran that day) means "find a trip", not "filter vehicles"
+const lineQ=q=>!!q&&q.length<=4&&!!D&&dayLines().includes(q);
+// directions of a line: the day's routes catalog; a trip belongs to the direction whose ends are nearest to its own
+const dirsOf=line=>(D.routes||[]).filter(r=>String(r.line)===String(line));
+function dirOfTrip(t,dirs){let best=-1,bd=1e9;dirs.forEach((r,k)=>{if(!t.a||!t.b) return;const d=2*hav(t.a,r.o)+hav(t.b,r.d);if(d<bd){bd=d;best=k}});return best}
+function lineOk(v){if(!LINEF) return true;const dirs=dirsOf(LINEF.line);
+  return v.items.some(i=>i.kind==="trip"&&String(i.line)===LINEF.line&&(LINEF.dir<0||dirOfTrip(i,dirs)===LINEF.dir))}
+function drawLineF(){const b=$("#bLineF");b.hidden=!LINEF;if(LINEF){const r=dirsOf(LINEF.line)[LINEF.dir];b.textContent=`קו ${LINEF.line}${r?` · ${r.frm.split(",")[0]} ←`:""} ✕`}}
+$("#bLineF").onclick=()=>{LINEF=null;$("#fdOnly").checked=false;drawLineF();render()};
+function openFind(line,focus){const d=$("#dlgFind");
+  $("#fdLines").innerHTML=dayLines().map(l=>`<option value="${esc(l)}">`).join("");
+  if(line!=null&&$("#fdLine").value!==line){$("#fdLine").value=line;fillDirs()}
+  if(!d.open) d.show(); drawFind(); if(focus) ($("#fdLine").value?$("#fdTime"):$("#fdLine")).focus()}
+function fillDirs(){const ds=dirsOf($("#fdLine").value.trim());
+  $("#fdDir").innerHTML=`<option value="-1">כל הכיוונים</option>`+ds.map((r,k)=>`<option value="${k}">${esc(r.frm)} ← ${esc(r.to)}</option>`).join("")}
+function drawFind(){const line=$("#fdLine").value.trim(),dir=+$("#fdDir").value,t=tParse($("#fdTime").value),win=+$("#fdWin").value;
+  const box=$("#fdRes"),sum=$("#fdSum");
+  if($("#fdOnly").checked&&line){LINEF={line,dir};} else if(!$("#fdOnly").checked) LINEF=null; drawLineF();
+  if(!D||!line){box.innerHTML="";sum.textContent="מקלידים מספר קו, ואפשר לבחור כיוון ושעה.";return}
+  const dirs=dirsOf(line),out=[];
+  for(const v of D.vehicles) for(const i of v.items){
+    if(i.kind!=="trip"||String(i.line)!==line) continue;
+    if(dir>=0&&dirOfTrip(i,dirs)!==dir) continue;
+    const dt=t==null?0:Math.min(Math.abs(i.start-t),Math.abs((i.sched??i.start)-t));
+    if(t!=null&&dt>win) continue;
+    out.push({v,i,dt})}
+  out.sort((x,y)=>x.dt-y.dt||x.i.start-y.i.start);
+  sum.textContent=out.length?`${out.length===1?"נסיעה אחת":out.length+" נסיעות"}${t!=null?` סביב ${fmt(t)}`:" ביום"} · לחיצה בוחרת את הרכב ומסמנת את הנסיעה`:`לא נמצאה נסיעה של קו ${line}${t!=null?` סביב ${fmt(t)}`:""}${dir>=0?" בכיוון הזה":""}.`;
+  box.innerHTML=out.slice(0,200).map(({v,i})=>{const fl=[i.auto?(autoSt(v,i)==="rejected"?"":"תגבור אוטומטי"):"",i.edited?"✎ נערך ידנית":"",i.incomplete?"לא הושלמה לפי GPS":"",i.no_gps?"בלי GPS":"",i.late_login?"נרשם באיחור":""].filter(Boolean);
+    return `<button type="button" class="fdrow" role="listitem" data-v="${esc(v.veh)}" data-s="${i.sched}"><span class="t">${fmt(i.start)}–${fmt(i.end)}${i.sched!=null&&Math.abs(i.sched-i.start)>=2?`<span class="muted" style="display:block;font-weight:400;font-size:11px">בלוח ${fmt(i.sched)}</span>`:""}</span><b>${esc(i.line)}</b><span>${esc(i.frm)} ← ${esc(i.to)}</span><span dir="ltr" style="text-align:right">${esc(v.veh)}</span><span class="fl">${fl.map(f=>`<span class="badge">${f}</span>`).join("")}</span></button>`}).join("");
+  render()}
+["fdTime","fdWin","fdDir","fdOnly"].forEach(id=>$("#"+id).addEventListener(id==="fdTime"?"input":"change",drawFind));
+$("#fdLine").addEventListener("input",()=>{fillDirs();drawFind()});
+$("#bFind").onclick=()=>openFind(lineQ($("#q").value.trim())?$("#q").value.trim():null,true);
+$("#fdClose").onclick=()=>$("#dlgFind").close();
+$("#dlgFind").addEventListener("keydown",e=>{if(e.key==="Escape"){e.preventDefault();$("#dlgFind").close();$("#bFind").focus()}});
+$("#fdRes").addEventListener("click",async e=>{const b=e.target.closest(".fdrow");if(!b) return;const veh=b.dataset.v,sc=+b.dataset.s;
+  if(!(await selectVehicle(veh))) return; HL={veh,sched:sc}; render();
+  document.querySelector(`.row[data-v="${CSS.escape(veh)}"]`)?.scrollIntoView({block:"center"});
+  document.querySelector(`.row[data-v="${CSS.escape(veh)}"] .bar.hl`)?.scrollIntoView({block:"nearest",inline:"center"})});
 
 // ---- compact layout: summary popovers, legend popover, collapsible top area, density (per user, in this browser) ----
 document.querySelectorAll(".card[tabindex]").forEach(c=>{c.addEventListener("click",()=>{const o=!c.classList.contains("open");document.querySelectorAll(".card.open").forEach(x=>x.classList.remove("open"));c.classList.toggle("open",o)});
