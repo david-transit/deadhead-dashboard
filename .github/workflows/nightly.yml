@@ -15,6 +15,9 @@ on:
         description: "Rebuild days that already exist"
         type: boolean
         default: false
+      operator:
+        description: "Only this operator slug (empty = every active operator in pipeline/operators.json)"
+        required: false
 
 permissions:
   contents: write
@@ -24,9 +27,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      ops: ${{ steps.ops.outputs.ops }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ops
+        env:
+          ONLY: ${{ inputs.operator }}
+        run: |
+          set -eu
+          ops=$(python3 -c 'import json,os
+          only=os.environ.get("ONLY") or ""
+          ops=[dict(slug=o["slug"],secret=o["key_secret"]) for o in json.load(open("pipeline/operators.json",encoding="utf-8"))["operators"]
+               if o["active"] and (not only or o["slug"]==only)]
+          print(json.dumps(ops))')
+          [ "$ops" != "[]" ] || { echo "no active operator matches"; exit 1; }
+          echo "ops=$ops" >> "$GITHUB_OUTPUT"
+          echo "operators: $ops"
+
   build:
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        op: ${{ fromJSON(needs.plan.outputs.ops) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,7 +76,7 @@ jobs:
             pipeline/cache/route_ends.json
             pipeline/cache/osrm_cache.json
             pipeline/cache/line_refs.json
-          key: deadhead-cache-${{ github.run_id }}
+          key: deadhead-cache-${{ github.run_id }}-${{ matrix.op.slug }}
           restore-keys: deadhead-cache-
 
       - name: Pick days
@@ -56,13 +85,14 @@ jobs:
           FROM: ${{ inputs.from }}
           TO: ${{ inputs.to }}
           FORCE: ${{ inputs.force }}
+          SLUG: ${{ matrix.op.slug }}
         run: |
           set -eu
           if [ -z "${FROM:-}" ]; then FROM=$(TZ=Asia/Jerusalem date -d yesterday +%F); fi
           if [ -z "${TO:-}" ]; then TO=$FROM; fi
           d=$FROM; list=""
           while [ "$(date -d "$d" +%s)" -le "$(date -d "$TO" +%s)" ]; do
-            if [ -f "data/day_$d.js" ] && [ "${FORCE:-false}" != "true" ]; then echo "skip $d (already exists)"; else list="$list $d"; fi
+            if [ -f "data/$SLUG/day_$d.js" ] && [ "${FORCE:-false}" != "true" ]; then echo "skip $d (already exists)"; else list="$list $d"; fi
             d=$(date -d "$d +1 day" +%F)
           done
           echo "days=$list" >> "$GITHUB_OUTPUT"
@@ -71,19 +101,20 @@ jobs:
       - name: Build and encrypt
         if: steps.days.outputs.days != ''
         env:
-          DATA_KEY: ${{ secrets.DATA_KEY }}
+          DATA_KEY: ${{ secrets[matrix.op.secret] }}
+          SLUG: ${{ matrix.op.slug }}
           DAYS: ${{ steps.days.outputs.days }}
           PYTHONIOENCODING: utf-8
         run: |
           set -eu
-          [ -n "$DATA_KEY" ] || { echo "secret DATA_KEY is missing"; exit 1; }
+          [ -n "$DATA_KEY" ] || { echo "secret ${{ matrix.op.secret }} is missing"; exit 1; }
           export DATA_KEY_FILE="$RUNNER_TEMP/data_key"
           (umask 077; printf '%s' "$DATA_KEY" > "$DATA_KEY_FILE")
           for d in $DAYS; do
             echo "== $d"
-            timeout 50m python pipeline/build_day.py "$d"
+            timeout 50m python pipeline/build_day.py "$d" --op "$SLUG"
           done
-          rm -f "$DATA_KEY_FILE" data/day_*.json
+          rm -f "$DATA_KEY_FILE" data/*/day_*.json
 
       - name: Save caches
         if: always() && steps.days.outputs.days != ''
@@ -93,7 +124,7 @@ jobs:
             pipeline/cache/route_ends.json
             pipeline/cache/osrm_cache.json
             pipeline/cache/line_refs.json
-          key: deadhead-cache-${{ github.run_id }}
+          key: deadhead-cache-${{ github.run_id }}-${{ matrix.op.slug }}
 
       - name: Commit encrypted files
         if: steps.days.outputs.days != ''
@@ -101,9 +132,10 @@ jobs:
           set -eu
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/day_*.js data/days.js
+          git add data/*/day_*.js data/*/days.js
+          git add data/day_*.js data/days.js 2>/dev/null || true  # legacy mirror for legacy.html (until the switch)
           if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
-          git commit -m "Add day(s):${{ steps.days.outputs.days }}"
+          git commit -m "Add day(s) ${{ matrix.op.slug }}:${{ steps.days.outputs.days }}"
           for i in 1 2 3; do
             git pull --rebase && git push && exit 0
             sleep 10

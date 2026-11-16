@@ -1,22 +1,21 @@
-"""Build one day for the dashboard:  python pipeline/build_day.py YYYY-MM-DD [--force]
+"""Build one day for one operator:  python pipeline/build_day.py YYYY-MM-DD [--op derech-egged]
 
-Fetches Derech Egged rides (Open Bus Stride), finds route ends, computes trips and empty legs
-(OSRM road km), writes plaintext data/day_<day>.json (gitignored), encrypts it to data/day_<day>.js
-and rewrites data/days.js from the encrypted files present.
+Fetches the operator's rides (Open Bus Stride), finds route ends, computes trips and empty legs
+(OSRM road km), writes plaintext data/<slug>/day_<day>.json (gitignored), encrypts it to data/<slug>/day_<day>.js
+and rewrites data/<slug>/days.js from the encrypted files present. Operators: pipeline/operators.json.
 
-Caches (never committed): pipeline/cache/ or $DEADHEAD_CACHE.
-Data key: config/.data_key or $DATA_KEY_FILE (base64, 32 bytes).
+Caches (never committed, shared by all operators): pipeline/cache/ or $DEADHEAD_CACHE.
+Data key (per operator): $DATA_KEY_FILE or config/.data_key_<slug> (base64, 32 bytes).
 Night legs (depot <-> first/last stop) are computed in the browser from the Supabase settings."""
-import json, sys, os, glob, subprocess, datetime as dt, urllib.request, time, zipfile, csv, io, collections, statistics
+import json, sys, os, glob, shutil, subprocess, datetime as dt, urllib.request, time, zipfile, csv, io, collections, statistics
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from stride import TZ, DAY_START_H, fetch_rides, update_route_ends
+from stride import TZ, operator, fetch_rides, update_route_ends
 
 REPO = os.path.dirname(HERE)
-DATA = os.path.join(REPO, "data")
 CACHE_DIR = os.environ.get("DEADHEAD_CACHE") or os.path.join(HERE, "cache")
-KEY_FILE = os.environ.get("DATA_KEY_FILE") or os.path.join(REPO, "config", ".data_key")
+OP = DATA = KEY_FILE = DAY_START_H = None  # set per operator in main()
 
 
 def osrm_router(cache_file):
@@ -51,7 +50,7 @@ def osrm_router(cache_file):
 
 def load_prev(day):
     """Where each vehicle ended the previous service day (for the inferred overnight leg).
-    Reads data/day_<D-1>.json, or decrypts data/day_<D-1>.js with the data key."""
+    Reads data/<slug>/day_<D-1>.json, or decrypts data/<slug>/day_<D-1>.js with the data key."""
     pd = (dt.date.fromisoformat(day) - dt.timedelta(days=1)).isoformat()
     jf, ef = os.path.join(DATA, f"day_{pd}.json"), os.path.join(DATA, f"day_{pd}.js")
     try:
@@ -77,12 +76,12 @@ def load_prev(day):
 
 def build(day):
     os.makedirs(CACHE_DIR, exist_ok=True)
-    rf = os.path.join(CACHE_DIR, f"rides_{day}_h{DAY_START_H}.json")
-    raw = json.load(open(rf, encoding="utf-8")) if os.path.exists(rf) else fetch_rides(day, rf)
+    rf = os.path.join(CACHE_DIR, f"rides_{OP['slug']}_{day}_h{DAY_START_H}.json")
+    raw = json.load(open(rf, encoding="utf-8")) if os.path.exists(rf) else fetch_rides(day, rf, OP["operator_ref"], DAY_START_H)
     ends = update_route_ends(raw, os.path.join(CACHE_DIR, "route_ends.json"))
     z = zipfile.ZipFile(os.path.join(HERE, "ClusterToLine.zip")).read("ClusterToLine.txt").decode("utf-8-sig")
     CL = {x["OfficeLineId"]: ("עירוני" if x["LineTypeDesc"] == "עירוני" else "בינעירוני")
-          for x in csv.DictReader(io.StringIO(z)) if "דרך אגד" in x["OperatorName"]}
+          for x in csv.DictReader(io.StringIO(z)) if OP["cluster_operator_name"] in x["OperatorName"]}
     road, save_osrm, osrm_miss = osrm_router(os.path.join(CACHE_DIR, "osrm_cache.json"))
 
     midnight = dt.datetime.fromisoformat(day)  # local wall clock; times after the next midnight stay >= 1440
@@ -173,7 +172,7 @@ def build(day):
     if n_empty and osrm_miss[0] > 0.2 * n_empty:
         raise SystemExit(f"{day}: OSRM failed for {osrm_miss[0]}/{n_empty} empty legs")
 
-    out = dict(day=day, day_start_min=DAY_START_H * 60, operator="דרך אגד עוטף ירושלים", built=dt.datetime.now(TZ).isoformat(timespec="minutes"),
+    out = dict(day=day, day_start_min=DAY_START_H * 60, operator=OP["name"], operator_slug=OP["slug"], built=dt.datetime.now(TZ).isoformat(timespec="minutes"),
                routes=routes, summary=dict(vehicles=len(vehicles), trips=sum(len(v) for v in by.values()),
                empty_day_km=round(tot_day), skipped_rides=skipped, auto_rein=auto_n, auto_rein_unmapped=auto_unmapped), vehicles=vehicles)
     os.makedirs(DATA, exist_ok=True)
@@ -184,14 +183,34 @@ def build(day):
 def encrypt(day):
     subprocess.run(["node", os.path.join(HERE, "encrypt.js"), KEY_FILE, DATA, day], check=True)
     days = sorted(os.path.basename(f)[4:14] for f in glob.glob(os.path.join(DATA, "day_*.js")))
-    open(os.path.join(DATA, "days.js"), "w", encoding="utf-8").write("window.DAYS=" + json.dumps(days) + ";\n")
+    meta = dict(days=days, day_start_hour=DAY_START_H, name=OP["name"])
+    open(os.path.join(DATA, "days.js"), "w", encoding="utf-8").write(
+        f"(window.OPDAYS=window.OPDAYS||{{}})[{json.dumps(OP['slug'])}]=" + json.dumps(meta, ensure_ascii=False) + ";\n")
     print("days:", days)
+    if OP.get("legacy_mirror"):  # the old shared-password page (legacy.html) reads data/day_*.js; removed after the switch
+        root = os.path.dirname(DATA)
+        shutil.copy(os.path.join(DATA, f"day_{day}.js"), os.path.join(root, f"day_{day}.js"))
+        old = sorted(os.path.basename(f)[4:14] for f in glob.glob(os.path.join(root, "day_*.js")))
+        open(os.path.join(root, "days.js"), "w", encoding="utf-8").write("window.DAYS=" + json.dumps(old) + ";\n")
 
 
-if __name__ == "__main__":
-    day = sys.argv[1]
+def main():
+    global OP, DATA, KEY_FILE, DAY_START_H
+    args = sys.argv[1:]
+    slug = "derech-egged"
+    if "--op" in args:
+        i = args.index("--op"); slug = args[i + 1]; del args[i:i + 2]
+    day = args[0]
     dt.date.fromisoformat(day)
+    OP = operator(slug)
+    DAY_START_H = OP["service_day_start_hour"]
+    DATA = os.path.join(REPO, "data", slug)
+    KEY_FILE = os.environ.get("DATA_KEY_FILE") or os.path.join(REPO, "config", f".data_key_{slug}")
     if not os.path.exists(KEY_FILE):
         raise SystemExit("missing data key: " + KEY_FILE)
     build(day)
     encrypt(day)
+
+
+if __name__ == "__main__":
+    main()

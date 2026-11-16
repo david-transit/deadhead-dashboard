@@ -1,5 +1,5 @@
 # plaintext data and secrets are never committed
-data/*.json
+data/**/*.json
 config/
 pipeline/cache/
 *.tmp
