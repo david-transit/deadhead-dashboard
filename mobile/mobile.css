@@ -179,6 +179,4 @@
   #dlgSav #savBody .sv>*{flex:none}
   #dlgSav .panel{min-height:auto}
   #dlgSav .sv-rulesbox{display:block}
-  #dlgSav .sv-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-  #dlgSav .sv-tl-row{grid-template-columns:80px 1fr}
 }
