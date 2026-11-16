@@ -37,14 +37,21 @@ const savingsUI = SavingsPanel.mount(document.getElementById("savings"), {
   dcp: () => eff().S.driver_change_points,
   getRows, rpc,
   onDraft: dirty => markUnsaved("savings", dirty),  // מודל הטיוטה/שמירה של האפליקציה
+  getBlocks: day => applyBlockEdits(day),           // עריכות ידניות של continuity-fix (block_edits)
 });
+// אחרי שמירת עריכת בלוק: savingsUI.blocksChanged()
 // כשמחליפים יום: savingsUI.setDay()   · כשמחליפים מפעיל: savingsUI.destroy() ו־mount מחדש
 ```
 שמות הפונקציות בצד index.html (`loadDayDecrypted`, `markUnsaved`, `depotFor`) הם לפי מה שיהיה אחרי continuity-fix — לבדוק בזמן החיבור.
 
-## מתאם הנתונים
-כל קריאת שדות של קובץ יום נמצאת ב־`FIELDS` / `adaptDay()` ב־`engine.js`. נקודות הקצה של נסיעה: `a_gps`/`b_gps` אם קיימים, אחרת `a`/`b`,
-ובקבצים ישנים בלי קואורדינטות — מתוך `day.routes`. אם continuity-fix משנה שמות שדות, משנים רק שם (או מעבירים `fields` ל־`run`).
+## מתאם הנתונים: `getBlocks(day)`
+המנוע קורא בלוקים של רכבים רק דרך `getBlocks()` ב־`engine.js` (כולל `FIELDS`):
+- **עריכות ידניות** (`block_edits` של continuity-fix): ה־host מעביר `getBlocks: day => applyBlockEdits(day)` ב־`run` / ב־panel host; המנוע לא קורא את הטבלה בעצמו.
+- **נקודות קצה**: `a_gps`/`b_gps` אם קיימים, אחרת `a`/`b`, ובקבצים ישנים — מתוך `day.routes`.
+- **דגלים**: `false_start` ו־`dup` נזרקים; `edited`, `gps_incomplete`/`incomplete` נשמרים ומוצגים ("איכות נתונים", ✎ בציר הזמן).
+- **שגיאת נתונים לא פתורה** (ברמת רכב `data_errors`/`errors` בלי `resolved`, פריט `error`/`unresolved`, נסיעה בלי קואורדינטות,
+  נסיעה ריקה בלי ק"מ, נסיעות חופפות) ⇒ הרכב לא נבדק ומופיע ברשימה "לא נבדק: שגיאת נתונים" עם הסיבה.
+אם שמות השדות משתנים, משנים רק את `FIELDS` (או מעבירים `fields`).
 
 ## הנחות שמוצגות למשתמש
 - הנהג נשאר עם האוטובוס (אלא אם מפעילים "החלפה רק בנקודת החלפת נהגים").

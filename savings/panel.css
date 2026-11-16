@@ -65,3 +65,5 @@
 .sv-addline{display:flex;gap:6px;margin-bottom:10px}
 @media (max-width:1150px){.sv-rules-grid{grid-template-columns:1fr}}
 @media (max-width:900px){.sv-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.sv-tl-row{grid-template-columns:96px 1fr}}
+.sv-skipped ul{margin:4px 0;padding-inline-start:18px}
+.sv-skipped summary{cursor:pointer}

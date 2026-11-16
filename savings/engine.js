@@ -154,15 +154,28 @@
   }
 
   // ---------------------------------------------------------------- data adapter
-  // The ONLY place that reads day-file fields. continuity-fix may move trip endpoints to actual GPS:
-  // change FIELDS (or pass opts.fields) instead of touching the engine.
+  // getBlocks(day) is the ONLY place that reads day-file fields and vehicle blocks.
+  //  - opts.getBlocks(day) (host hook): returns the day with manual block edits applied (continuity-fix: block_edits
+  //    table: delete / replace / add / move trips). The engine never reads block_edits itself.
+  //  - endpoints: GPS (a_gps/b_gps) when present, else a/b, else day.routes (older files). Change FIELDS or pass opts.fields.
+  //  - trip flags: false_start / kind "dup" -> dropped; edited, gps_incomplete, incomplete -> kept and shown.
+  //  - a vehicle whose day still has an unresolved data error is skipped: "לא נבדק: שגיאת נתונים" + the reason.
   const FIELDS = {
     from: t => t.a_gps || t.a, to: t => t.b_gps || t.b,
     fromName: t => t.frm || "", toName: t => t.to || "",
     sched: t => t.sched != null ? t.sched : t.start,
+    dropped: t => t.kind === "dup" || !!t.false_start,
+    edited: t => !!(t.edited || t.edit_id),
+    gpsIncomplete: t => !!(t.gps_incomplete || t.incomplete),
+    // unresolved data errors (vehicle level / item level); resolved errors carry resolved:true
+    vehicleErrors: v => [].concat(v.data_errors || [], v.errors || []).filter(e => e && !e.resolved)
+      .map(e => typeof e === "string" ? e : e.why || e.message || e.code || "שגיאה"),
+    itemError: it => (it.kind === "error" || (it.error && !it.resolved) || it.unresolved) ? (it.why || it.error || it.message || "שגיאה בפריט") : null,
   };
-  function adaptDay(day, opts) {
+  const DATA_ERR = "לא נבדק: שגיאת נתונים";
+  function getBlocks(day, opts) {
     opts = opts || {};
+    if (typeof opts.getBlocks === "function") day = opts.getBlocks(day) || day;
     const F = Object.assign({}, FIELDS, opts.fields || {});
     const out = { day: day.day, dayStart: day.day_start_min != null ? day.day_start_min : 240, vehicles: [], skipped: [] };
     // older day files carry no coordinates on trips: take them from day.routes (line+from+to, then the stop name alone)
@@ -178,17 +191,27 @@
       const n = end ? it.to : it.frm;
       return (end ? byTo.get(n) || byFrom.get(n) : byFrom.get(n) || byTo.get(n)) || null;
     };
+    const fail = (v, detail) => out.skipped.push({ veh: String(v.veh), why: DATA_ERR, detail, dataError: true });
     for (const v of day.vehicles || []) {
+      const errs = F.vehicleErrors(v);
+      if (errs.length) { fail(v, errs.join("; ")); continue; }
       const trips = [], gaps = [];
-      let pend = null; // empties after the last trip
+      let pend = null, err = null; // pend = empties after the last trip
       for (const it of v.items || []) {
+        const ie = F.itemError(it);
+        if (ie) { err = ie; break; }
+        if (F.dropped(it)) continue;
         if (it.kind === "trip") {
           const a = F.from(it) || viaRoutes(it, false), b = F.to(it) || viaRoutes(it, true);
-          if (!a || !b) { out.skipped.push({ veh: v.veh, why: "נסיעה בלי קואורדינטות" }); trips.length = 0; break; }
-          if (trips.length) gaps.push(pend || { km: 0, min: 0, n: 0 });
+          if (!a || !b) { err = `נסיעה בלי קואורדינטות (${fmt(it.start)} קו ${it.line})`; break; }
+          if (trips.length) {
+            const g = pend || { km: 0, min: 0, n: 0 };
+            if (g.noKm) { err = `נסיעה ריקה בלי ק"מ לפני ${fmt(it.start)}`; break; }
+            gaps.push(g);
+          }
           trips.push({ i: trips.length, start: it.start, end: it.end, sched: F.sched(it), line: String(it.line || ""), lineRef: it.line_ref,
             cls: it.cls || v.cls, a: [+a[0], +a[1]], b: [+b[0], +b[1]], frm: F.fromName(it), to: F.toName(it), km: +it.km || 0,
-            auto: !!it.auto, incomplete: !!it.incomplete });
+            auto: !!it.auto, edited: F.edited(it), gpsIncomplete: F.gpsIncomplete(it) });
           pend = null;
         } else if (it.kind === "empty") {
           pend = pend || { km: 0, min: 0, n: 0 };
@@ -196,15 +219,16 @@
           if (it.km == null) pend.noKm = true;
         }
       }
-      if (trips.length < 2) { if (trips.length) out.skipped.push({ veh: v.veh, why: "פחות משתי נסיעות" }); continue; }
-      let bad = null;
-      for (let k = 1; k < trips.length; k++) if (trips[k].start < trips[k - 1].end) { bad = k; break; }
-      if (bad != null) { out.skipped.push({ veh: v.veh, why: "נסיעות חופפות בנתונים" }); continue; }
+      if (!err) for (let k = 1; k < trips.length; k++) if (trips[k].start < trips[k - 1].end) { err = `נסיעות חופפות (${fmt(trips[k - 1].start)}, ${fmt(trips[k].start)})`; break; }
+      if (err) { fail(v, err); continue; }
+      if (trips.length < 2) { if (trips.length) out.skipped.push({ veh: String(v.veh), why: "פחות משתי נסיעות" }); continue; }
       out.vehicles.push({ veh: String(v.veh), cls: v.cls || trips[0].cls, trips, gaps });
     }
     out.vehicles.sort((x, y) => x.veh < y.veh ? -1 : x.veh > y.veh ? 1 : 0);
+    out.skipped.sort((x, y) => cmpStr(x.veh, y.veh));
     return out;
   }
+  const adaptDay = getBlocks; // old name
 
   // ---------------------------------------------------------------- distances
   // ctx.road(a,b) -> {km,min} | null (shared road_cache, filled by OSRM in the page)
@@ -270,8 +294,9 @@
   function run(input) {
     const t0 = Date.now();
     const R = normalizeRuleset(input.ruleset);
-    const D = input.day.vehicles && input.day.vehicles[0] && input.day.vehicles[0].trips ? input.day : adaptDay(input.day, input);
-    const others = (input.others || []).map(o => o.vehicles && o.vehicles[0] && o.vehicles[0].trips ? o : adaptDay(o, input));
+    const isBlocks = d => d.vehicles && d.vehicles[0] && d.vehicles[0].trips;
+    const D = isBlocks(input.day) ? input.day : getBlocks(input.day, input);
+    const others = (input.others || []).map(o => isBlocks(o) ? o : getBlocks(o, input));
     const cmpDays = pickCompareDays(D.day, others.map(o => o.day), Math.max(1, Math.round(R.operator.stability_days)));
     const cmp = cmpDays.map(d => ({ day: d, links: linkSet(others.find(o => o.day === d)) }));
     const dist = makeDist(input, R);
@@ -509,6 +534,10 @@
       } else res("stability", true, "כבוי בהגדרות", { off: true });
       // distance source
       if (estUsed) chk("estimate", ruleFor(R, "allow_estimate", movedLines), "חלק מהמרחקים הם הערכה (אין עדיין מרחק כביש)", { warn: true });
+      // data quality: manually edited trips / incomplete GPS among the trips this move touches (shown, not blocking)
+      const touched = [...movedA, ...movedB, ...J.map(j => j.p), ...J.map(j => j.q)];
+      const ed = [...new Set(touched.filter(t => t.edited))], gi = [...new Set(touched.filter(t => t.gpsIncomplete))];
+      if (ed.length || gi.length) res("data_quality", true, [ed.length ? `${ed.length} נסיעות שנערכו ידנית` : "", gi.length ? `${gi.length} נסיעות עם GPS חלקי` : ""].filter(Boolean).join(" · "), { warn: true });
       // minimum saving (last: everything above explains "why not" even when the saving is small)
       const minSave = ruleFor(R, "min_saving_km", movedLines);
       chk("min_saving", saving >= minSave - 1e-9, `${r1(saving)} ק"מ (נדרש ${minSave})`);
@@ -532,7 +561,7 @@
         _links: links,
       };
     }
-    function tripOut(t) { return { start: t.start, end: t.end, sched: t.sched, line: t.line, frm: t.frm, to: t.to, km: t.km }; }
+    function tripOut(t) { return { start: t.start, end: t.end, sched: t.sched, line: t.line, frm: t.frm, to: t.to, km: t.km, edited: t.edited, gpsIncomplete: t.gpsIncomplete }; }
   }
   function contDrive(trips, gapMin, brk) {
     let acc = 0, worst = 0;
@@ -550,7 +579,7 @@
     enabled: "קו משתתף", cross_class: "אותו סוג שירות", cross_branch: "אותו סניף", tail_swap: "החלפת סוף יום",
     margin: "מרווח בנקודות ההחלפה", added_wait: "המתנה נוספת", max_wait: "המתנה מקסימלית", blocked_window: "חלונות חסומים",
     dcp: "נקודת החלפת נהגים", reg168: "תקנה 168(א)(3)", stability: "יציבות בין ימים", estimate: "מרחק כביש",
-    min_saving: "חיסכון מינימלי",
+    min_saving: "חיסכון מינימלי", data_quality: "איכות נתונים",
   };
   const fmtSigned = n => (n > 0 ? "+" : "") + n;
   const cmpStr = (a, b) => a < b ? -1 : a > b ? 1 : 0;
@@ -577,6 +606,6 @@
     return "﻿" + rows.map(r => r.map(q).join(",")).join("\r\n");
   }
 
-  return { VERSION, RULES_META, DEFAULT_RULES, RULE_LABEL, normalizeRuleset, ruleFor, adaptDay, run, toCSV, pickCompareDays,
+  return { VERSION, RULES_META, DEFAULT_RULES, RULE_LABEL, normalizeRuleset, ruleFor, getBlocks, adaptDay, DATA_ERR, run, toCSV, pickCompareDays,
     hav, estKm, estMin, roadKey, fmt, hm, contDrive, FIELDS };
 });

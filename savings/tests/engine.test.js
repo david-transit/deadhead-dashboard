@@ -178,7 +178,8 @@ test("adapter: coordinates from day.routes (older files), GPS endpoints when pre
   const o = synthDay("2026-11-10"); o.vehicles[0].items[2].start = 590;
   const ad = E.adaptDay(o);
   assert.equal(ad.vehicles.length, 1);
-  assert.equal(ad.skipped[0].why, "נסיעות חופפות בנתונים");
+  assert.equal(ad.skipped[0].why, "לא נבדק: שגיאת נתונים");
+  assert.match(ad.skipped[0].detail, /חופפות/);
 });
 
 test("rules: normalize ignores unknown keys and operator-only keys on lines", () => {
@@ -264,4 +265,31 @@ test("pair mode explains the best variant of two given vehicles, even when far f
   assert.equal(r.suggestions.length, 0);
   assert.equal(r.nearMisses.length, 1);
   assert.ok(r.nearMisses[0].failed.includes("min_saving"));
+});
+
+test("getBlocks: one adapter for edited blocks, flags and unresolved data errors", () => {
+  // host hook applies manual block edits (block_edits): here it deletes B's 11:10 trip -> B now has a 3h gap, no swap at 11:10
+  const hook = d => { d = JSON.parse(JSON.stringify(d)); const b = d.vehicles[1]; b.items = b.items.filter(i => !(i.kind === "trip" && i.start === 670)); return d; };
+  const ad = E.getBlocks(synthDay("2026-11-10"), { getBlocks: hook });
+  assert.equal(ad.vehicles.find(v => v.veh === "B1").trips.length, 3);
+  // false start dropped; edited + gps_incomplete kept and reported
+  const d = synthDay("2026-11-10");
+  d.vehicles[0].items.splice(1, 0, { kind: "trip", start: 600, end: 601, line: "100", a: P, b: P, false_start: true });
+  d.vehicles[1].items[2].edited = true; d.vehicles[1].items[2].gps_incomplete = true;
+  const ev = E.run({ day: d, others: [], ruleset: {}, only: CAND }).explained;
+  assert.equal(ev.ok, true, JSON.stringify(ev.failed));
+  assert.match(rule(ev, "data_quality").detail, /נערכו ידנית.*GPS חלקי/);
+  assert.equal(ev.timelines.A.proposed[1].edited, true);
+  // unresolved data errors -> vehicle skipped as "לא נבדק: שגיאת נתונים"; resolved ones do not block
+  const e1 = synthDay("2026-11-10"); e1.vehicles[1].data_errors = [{ code: "W2", why: "קצה לא מקושר" }];
+  let r = E.run({ day: e1, others: [], ruleset: {} });
+  assert.equal(r.suggestions.length, 0);
+  assert.deepEqual(r.skipped, [{ veh: "B1", why: "לא נבדק: שגיאת נתונים", detail: "קצה לא מקושר", dataError: true }]);
+  e1.vehicles[1].data_errors[0].resolved = true;
+  assert.equal(E.run({ day: e1, others: [], ruleset: {} }).suggestions.length, 1);
+  const e2 = synthDay("2026-11-10"); delete e2.vehicles[0].items[1].km;
+  r = E.run({ day: e2, others: [], ruleset: {} });
+  assert.match(r.skipped[0].detail, /בלי ק"מ/);
+  const e3 = synthDay("2026-11-10"); e3.vehicles[0].items[2].unresolved = true; e3.vehicles[0].items[2].why = "נסיעה מוטלת בספק";
+  assert.equal(E.run({ day: e3, others: [], ruleset: {} }).skipped[0].detail, "נסיעה מוטלת בספק");
 });

@@ -13,6 +13,7 @@
  *   branchOf(veh) -> string   depotOf(veh) -> [lat,lon] | null   dcp() -> settings.driver_change_points
  *   getRows(table, query) -> Promise<rows>   rpc(fn, args) -> Promise
  *   onDraft(dirty:boolean)?          the app's unsaved-changes indicator
+ *   getBlocks(day)?                  returns the day with manual block edits applied (block_edits); runs in the page
  *   workerUrl?                       default "savings/worker.js"
  */
 (function (root) {
@@ -59,7 +60,8 @@
     const diffDefaults = op => Object.fromEntries(Object.entries(op).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(E.DEFAULT_RULES[k])));
     const dirty = () => JSON.stringify(S.draft) !== JSON.stringify(S.saved);
     async function getDay(d) {
-      if (!days.has(d)) days.set(d, await host.loadDay(d));
+      // manual block edits are applied here, in the page (functions cannot be sent to the worker)
+      if (!days.has(d)) { const raw = await host.loadDay(d); days.set(d, raw && host.getBlocks ? host.getBlocks(raw) || raw : raw); }
       return days.get(d);
     }
     // stability candidates: up to 4 nearest same-weekday days + the day before and after (the engine picks)
@@ -257,7 +259,9 @@
       if (S.tab === "detail" && S.detail) body = detailHtml(S.detail);
       else if (r && S.tab === "miss") body = listHtml(r.nearMisses, true);
       else if (r) body = listHtml(r.suggestions, false);
-      const skipped = r && r.skipped.length ? `<div class="hint">${r.skipped.length} רכבים לא נבדקו בגלל נתונים חסרים או חופפים.</div>` : "";
+      const de = r ? r.skipped.filter(x => x.dataError) : [], few = r ? r.skipped.length - de.length : 0;
+      const skipped = r && r.skipped.length ? `<details class="hint sv-skipped"><summary>${de.length ? `${de.length} רכבים לא נבדקו: שגיאת נתונים` : ""}${de.length && few ? " · " : ""}${few ? `${few} עם פחות משתי נסיעות` : ""}</summary>
+        <ul>${de.map(x => `<li><b>${esc(x.veh)}</b>: ${esc(x.detail || "")}</li>`).join("")}</ul></details>` : "";
       return `<div class="panel sv-body">${tabs}<div class="sv-scroll">${body}${S.tab !== "detail" ? skipped : ""}</div></div>`;
     }
     function listHtml(list, miss) {
@@ -324,7 +328,7 @@
       const row = (label, trips, who, prop) => `<div class="sv-tl-row"><div class="sv-tl-lab">${label}</div><div class="track">${ticks.join("").replace(/<span>[^<]*<\/span>/g, "")}
         ${trips.map(t => { const k = t.start + "|" + t.line, other = !own[who].has(k);
           return `<div class="bar svc sv-bar ${other ? "other" : ""} ${movedKeys.has(k) ? "moved" : ""}" style="left:${pos(t.start)};width:calc(${pos(t.end)} - ${pos(t.start)})"
-            title="${esc(`${fmt(t.start)}–${fmt(t.end)} קו ${t.line}: ${t.frm} ← ${t.to}`)}">${esc(t.line)}</div>`; }).join("")}
+            title="${esc(`${fmt(t.start)}–${fmt(t.end)} קו ${t.line}: ${t.frm} ← ${t.to}${t.edited ? " · נערך ידנית" : ""}${t.gpsIncomplete ? " · GPS חלקי" : ""}`)}">${esc(t.line)}${t.edited ? "✎" : ""}</div>`; }).join("")}
         ${s.junctions.filter(j => prop && j.veh === (who === "A" ? s.A : s.B)).map(j => `<div class="sv-jn" style="left:${pos(j.arrive)};width:calc(${pos(j.depart)} - ${pos(j.arrive)})" title="${esc(`החלפה ${j.arriveText}–${j.departText}, מרווח ${j.margin} דק'`)}"></div>`).join("")}
         </div></div>`;
       return `<div class="sv-tl" aria-label="ציר זמן לפני ואחרי">
@@ -404,6 +408,7 @@
     return {
       run, explainPair, render,
       setDay() { S.result = null; S.detail = null; S.err = ""; render(); },
+      blocksChanged() { days.clear(); S.result = null; S.detail = null; render(); }, // call after a block edit is saved
       reloadRules: () => loadRules().then(render),
       isDirty: dirty,
       destroy() { if (worker) worker.terminate(); el.innerHTML = ""; el.classList.remove("sv"); },
