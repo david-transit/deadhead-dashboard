@@ -89,38 +89,65 @@ def build(day):
     P = lambda s: dt.datetime.fromisoformat(s).astimezone(TZ).replace(tzinfo=None)
     mins = lambda t: (t - midnight).total_seconds() / 60
 
-    by = collections.defaultdict(list); seen = set(); skipped = 0
+    # SIRI line_ref -> known GTFS route (from matched rides of this day and earlier days, cached)
+    lr_file = os.path.join(CACHE_DIR, "line_refs.json")
+    LR = json.load(open(lr_file, encoding="utf-8")) if os.path.exists(lr_file) else {}
     for x in raw:
-        e = ends.get(str(x["gtfs_ride__gtfs_route_id"]))
-        if not x["vehicle_ref"] or not e or not x["gtfs_ride__start_time"]:
+        if x["gtfs_ride_id"] and x["siri_route__line_ref"] and x["gtfs_ride__gtfs_route_id"]:
+            LR[str(x["siri_route__line_ref"])] = dict(route=x["gtfs_ride__gtfs_route_id"], line=x["gtfs_route__route_short_name"],
+                                                      mkt=x["gtfs_route__route_mkt"], seen=day)
+    json.dump(LR, open(lr_file, "w", encoding="utf-8"), ensure_ascii=False)
+
+    by = collections.defaultdict(list); seen = set(); skipped = 0; auto_n = 0; auto_unmapped = 0
+    for x in raw:
+        if not x["vehicle_ref"]:
             skipped += 1; continue
         k = (x["vehicle_ref"], x["scheduled_start_time"])
         if k in seen: continue
-        seen.add(k)
         st = P(x["scheduled_start_time"])
-        dur = (dt.datetime.fromisoformat(x["gtfs_ride__end_time"]) - dt.datetime.fromisoformat(x["gtfs_ride__start_time"])).total_seconds() / 60
-        by[x["vehicle_ref"]].append(dict(line=x["gtfs_route__route_short_name"], mkt=x["gtfs_route__route_mkt"],
-            start=round(mins(st)), end=round(mins(st) + dur), o=e["o"], d=e["d"], km=round(e["km"], 1),
-            cls=CL.get(x["gtfs_route__route_mkt"], "לא ידוע")))
+        if x["gtfs_ride_id"]:
+            e = ends.get(str(x["gtfs_ride__gtfs_route_id"]))
+            if not e or not x["gtfs_ride__start_time"]:
+                skipped += 1; continue
+            dur = (dt.datetime.fromisoformat(x["gtfs_ride__end_time"]) - dt.datetime.fromisoformat(x["gtfs_ride__start_time"])).total_seconds() / 60
+            t = dict(line=x["gtfs_route__route_short_name"], mkt=x["gtfs_route__route_mkt"], o=e["o"], d=e["d"], km=round(e["km"], 1))
+        else:
+            # ran in service but not in the licensed GTFS schedule -> automatic reinforcement candidate
+            info = LR.get(str(x["siri_route__line_ref"]))
+            e = ends.get(str(info["route"])) if info else None
+            dur = x["duration_minutes"] or 30
+            t = dict(line=info["line"] if info else "?", mkt=info["mkt"] if info else None,
+                     o=e["o"] if e else None, d=e["d"] if e else None, km=round(e["km"], 1) if e else None,
+                     auto=True, line_ref=x["siri_route__line_ref"], **({} if e else {"unmapped": True}),
+                     **({} if x["duration_minutes"] else {"dur_est": True}))
+            auto_n += 1; auto_unmapped += 0 if e else 1
+        seen.add(k)
+        t.update(start=round(mins(st)), end=round(mins(st) + dur), cls=CL.get(t["mkt"], "לא ידוע"))
+        by[x["vehicle_ref"]].append(t)
+    place = lambda q: f"{q[2]}, {q[3]}" if q else "לא ידוע"
 
     prev = load_prev(day)
     vehicles = []; tot_day = 0
     for v, ts in sorted(by.items()):
         ts.sort(key=lambda t: t["start"])
-        cls = collections.Counter(t["cls"] for t in ts).most_common(1)[0][0]
+        cls = collections.Counter(t["cls"] for t in ts if not t.get("auto")).most_common(1)
+        cls = cls[0][0] if cls else ts[0]["cls"]
         items = []
         for i, t in enumerate(ts):
             if i:
-                p = ts[i - 1]; km, mn = road(p["d"], t["o"])
+                p = ts[i - 1]; km, mn = road(p["d"], t["o"]) if p["d"] and t["o"] else (None, None)
                 items.append(dict(kind="empty", start=p["end"], end=t["start"], km=km, drive_min=mn, overlap=t["start"] < p["end"],
-                                  frm=f'{p["d"][2]}, {p["d"][3]}', to=f'{t["o"][2]}, {t["o"][3]}'))
+                                  frm=place(p["d"]), to=place(t["o"])))
                 if km: tot_day += km
             items.append(dict(kind="trip", start=t["start"], end=t["end"], line=t["line"], km=t["km"], cls=t["cls"],
-                              frm=f'{t["o"][2]}, {t["o"][3]}', to=f'{t["d"][2]}, {t["d"][3]}'))
+                              frm=place(t["o"]), to=place(t["d"]),
+                              **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est") if k in t}))
+        fo = next((t["o"] for t in ts if t["o"]), None); ld = next((t["d"] for t in reversed(ts) if t["d"]), None)
+        if not fo or not ld: continue
         vehicles.append(dict(veh=v, cls=cls,
-            first_o=[round(ts[0]["o"][0], 5), round(ts[0]["o"][1], 5), ts[0]["o"][3]],
-            last_d=[round(ts[-1]["d"][0], 5), round(ts[-1]["d"][1], 5), ts[-1]["d"][3]],
-            service_km=round(sum(t["km"] for t in ts), 1), items=items,
+            first_o=[round(fo[0], 5), round(fo[1], 5), fo[3]],
+            last_d=[round(ld[0], 5), round(ld[1], 5), ld[3]],
+            service_km=round(sum(t["km"] for t in ts if not t.get("auto")), 1), items=items,
             empty_day_km=round(sum(i["km"] or 0 for i in items if i["kind"] == "empty"), 1),
             **({"prev": prev[v]} if v in prev else {})))
 
@@ -128,6 +155,7 @@ def build(day):
     cat = {}
     for v, ts in by.items():
         for t in ts:
+            if t.get("auto"): continue
             k = (t["line"], t["o"][2], t["d"][2])
             c = cat.setdefault(k, dict(line=t["line"], frm=f'{t["o"][2]}, {t["o"][3]}', to=f'{t["d"][2]}, {t["d"][3]}',
                 o=[round(t["o"][0], 5), round(t["o"][1], 5)], d=[round(t["d"][0], 5), round(t["d"][1], 5)],
@@ -147,7 +175,7 @@ def build(day):
 
     out = dict(day=day, day_start_min=DAY_START_H * 60, operator="דרך אגד עוטף ירושלים", built=dt.datetime.now(TZ).isoformat(timespec="minutes"),
                routes=routes, summary=dict(vehicles=len(vehicles), trips=sum(len(v) for v in by.values()),
-               empty_day_km=round(tot_day), skipped_rides=skipped), vehicles=vehicles)
+               empty_day_km=round(tot_day), skipped_rides=skipped, auto_rein=auto_n, auto_rein_unmapped=auto_unmapped), vehicles=vehicles)
     os.makedirs(DATA, exist_ok=True)
     json.dump(out, open(os.path.join(DATA, f"day_{day}.json"), "w", encoding="utf-8"), ensure_ascii=False)
     print(json.dumps(out["summary"], ensure_ascii=False))

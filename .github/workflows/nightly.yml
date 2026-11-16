@@ -46,6 +46,7 @@ jobs:
           path: |
             pipeline/cache/route_ends.json
             pipeline/cache/osrm_cache.json
+            pipeline/cache/line_refs.json
           key: deadhead-cache-${{ github.run_id }}
           restore-keys: deadhead-cache-
 
@@ -91,6 +92,7 @@ jobs:
           path: |
             pipeline/cache/route_ends.json
             pipeline/cache/osrm_cache.json
+            pipeline/cache/line_refs.json
           key: deadhead-cache-${{ github.run_id }}
 
       - name: Commit encrypted files
