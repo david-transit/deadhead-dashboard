@@ -666,9 +666,11 @@ async function loadChoices(){
   NOTES={};try{(await getRows("leg_notes",`select=id,day,veh,leg_start_min,kind,text,created_at&${opq()}&created_by=eq.${ME.id}&order=created_at`)||[]).forEach(x=>NOTES[x.id]=x)}catch(e){console.warn("notes",e)}
   BLK={};(await loadAll("block_edits","id,day,veh,action,payload,note,created_at,created_by","day,created_at,id")).forEach(x=>BLK[x.id]=x);
   OVN={};o.forEach(x=>OVN[x.day+"|"+x.veh]=x); REIN={};r.forEach(x=>REIN[akey(x.day,x.veh,x.start_min)]=x); AUTOR={};a.forEach(x=>AUTOR[akey(x.day,x.veh,x.start_min)]=x.status)}
-let CKEY=null;
+let CKEYS={}; // key id -> CryptoKey (current + previous during a key rotation; pipeline/rotate_key.md)
 const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-async function decryptEnc(e){const buf=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64(e.iv)},CKEY,b64(e.ct));return JSON.parse(new TextDecoder().decode(buf))}
+async function decryptEnc(e){const iv=b64(e.iv),ct=b64(e.ct); // files carry the id of their key; older files have none
+  for(const k of e.kid&&CKEYS[e.kid]?[CKEYS[e.kid]]:Object.values(CKEYS)) try{return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv},k,ct)))}catch{}
+  throw new Error("decrypt")}
 const decryptDay=day=>decryptEnc(window.ENC_DAY[day]);
 function loadDay(day,after){
   $("#day").value=day; $("#bToday").classList.toggle("on",day===today); $("#bYest").classList.toggle("on",day===yest);
@@ -1430,8 +1432,8 @@ async function unlock(){
   await loadAccess();
   if(PROFILE&&PROFILE.must_change_password){gateMode("changepw");return false}
   if(!OP){gateMode("noaccess");return false}
-  const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k) throw new Error("no_key");
-  CKEY=await crypto.subtle.importKey("raw",b64(k),"AES-GCM",false,["decrypt"]);
+  const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k||!k.keys||!Object.keys(k.keys).length) throw new Error("no_key");
+  CKEYS={};for(const [kid,v] of Object.entries(k.keys)) CKEYS[kid]=await crypto.subtle.importKey("raw",b64(v),"AES-GCM",false,["decrypt"]);
   applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad(),loadEnds(),loadChoices()]); drawSaveBar();
   // the day loads behind the gate while the logo intro is still playing
   if(!days.length) $("#gantt").innerHTML='<div class="empty-state">אין עדיין נתונים למפעיל הזה</div>';

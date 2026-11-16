@@ -12,7 +12,7 @@ Night legs (overnight, depot <-> first/last stop, overnight reinforcement) are c
 from the ends index, the Supabase settings and the overnight choices.
 
 Caches (never committed, shared by all operators): pipeline/cache/ or $DEADHEAD_CACHE.
-Data key (per operator): $DATA_KEY_FILE or config/.data_key_<slug> (base64, 32 bytes)."""
+Data key (per operator): $DATA_KEY_FILE or config/.data_key_<slug> ("<kid>:<base64 32 bytes>", pipeline/keys.js)."""
 import json, sys, os, glob, hashlib, subprocess, math, datetime as dt, urllib.request, time, zipfile, csv, io, collections, statistics
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -366,11 +366,13 @@ def main():
     slug = "derech-egged"
     if "--op" in args:
         i = args.index("--op"); slug = args[i + 1]; del args[i:i + 2]
-    day = args[0]
-    dt.date.fromisoformat(day)
     OP = operator(slug)
     DAY_START_H = OP["service_day_start_hour"]
     DATA = os.path.join(REPO, "data", slug)
+    if args == ["--reindex"]:  # only rewrite days.js (after pipeline/rotate_key.js re-encrypted the files)
+        return write_days_index()
+    day = args[0]
+    dt.date.fromisoformat(day)
     KEY_FILE = os.environ.get("DATA_KEY_FILE") or os.path.join(REPO, "config", f".data_key_{slug}")
     if not os.path.exists(KEY_FILE):
         raise SystemExit("missing data key: " + KEY_FILE)
