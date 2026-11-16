@@ -6,7 +6,7 @@
 //                      sign_in (username -> accounts whose Auth email is a real recovery address),
 //                      recovery_options, forgot (reset mail to a platform admin's recovery email),
 //                      recover_code (one-time recovery code -> new password). All rate-limited per username.
-// Signed-in user:      change_password (own; clears must_change_password), log_recovery
+// Signed-in user:      change_password (own; clears must_change_password), recovery_set_password (reset-mail session only)
 // Platform admin:      my_security, set_recovery_email, gen_recovery_codes (both need the current password)
 // Control room:        list, create (role "platform" = platform admin, platform admins only), set_membership,
 //                      remove_membership, set_platform, reset_password, set_disabled, delete
@@ -67,6 +67,14 @@ async function checkPassword(id: string, pw: unknown) {
   const { error } = await c.auth.signInWithPassword({ email: await authEmail(id), password: String(pw ?? "") });
   if (error) throw new Fail("wrong_password", 403);
   await c.auth.signOut({ scope: "local" }).catch(() => {});
+}
+// claims of a token that admin.auth.getUser() has already accepted (signature checked by GoTrue)
+function jwtClaims(t: string): Record<string, unknown> {
+  try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); } catch { return {}; }
+}
+async function setPassword(id: string, pw: string) {
+  const { error } = await admin.auth.admin.updateUserById(id, { password: pw });
+  if (error) throw new Fail(/password/i.test(error.message) ? "weak_password" : "server_error", 400);
 }
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -206,12 +214,21 @@ Deno.serve(async (req) => {
       await logEvent(uid, myProf.username, "password_changed");
       return out({ ok: true });
     }
-    if (b.action === "log_recovery") { // after the reset-password mail: the page has set the new password itself
-      if (myProf) {
-        await admin.from("profiles").update({ must_change_password: false }).eq("user_id", uid);
-        await logEvent(uid, myProf.username, "recovered_by_mail");
-      }
-      return out({ ok: true });
+    if (b.action === "recovery_set_password") {
+      // after the reset-password mail: only a session that the mail link itself opened (amr "recovery"/"otp", at most
+      // 10 minutes old) may set a new password here, and only for an account that has a recovery email. The password
+      // is set server-side, so must_change_password is cleared only when the password really changed. (H2)
+      if (!myProf) throw new Fail("not_allowed", 403);
+      const amr = (jwtClaims(token).amr || []) as { method?: string; timestamp?: number }[];
+      const now = Date.now() / 1000;
+      if (!amr.some((a) => ["recovery", "otp"].includes(String(a.method)) && now - Number(a.timestamp || 0) < 600)) throw new Fail("not_recovery", 403);
+      const { data: em } = await admin.rpc("recovery_email_get", { p_user: uid });
+      if (!em) throw new Fail("not_recovery", 403);
+      if (!okPw(b.new_password)) throw new Fail("weak_password");
+      await setPassword(uid, b.new_password as string);
+      await admin.from("profiles").update({ must_change_password: false }).eq("user_id", uid).throwOnError();
+      await logEvent(uid, myProf.username, "recovered_by_mail");
+      return out({ ok: true, username: myProf.username });
     }
 
     // ---------- platform admin: own recovery settings ----------

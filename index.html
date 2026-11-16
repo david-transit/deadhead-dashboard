@@ -534,7 +534,7 @@ const DOMAIN="users.yalla-sa.app"; // internal sign-in address <username>@DOMAIN
 const ERR={invalid_credentials:"שם משתמש או סיסמה שגויים","Invalid login credentials":"שם משתמש או סיסמה שגויים",user_banned:"החשבון הושבת. פנה למנהל המערכת",disabled:"החשבון הושבת. פנה למנהל המערכת",
   "row-level security":"אין לך הרשאה לשנות את זה",not_allowed:"אין לך הרשאה לפעולה הזו","42501":"אין לך הרשאה לשנות את זה",not_signed_in:"צריך להיכנס מחדש",
   weak_password:"הסיסמה חלשה מדי. בחר סיסמה ארוכה יותר (לפחות 8 תווים)","Password should be":"הסיסמה צריכה להיות לפחות 8 תווים",same_password:"הסיסמה החדשה זהה לישנה",
-  wrong_password:"הסיסמה הנוכחית שגויה",bad_username:"שם משתמש: 3–32 תווים, אותיות באנגלית, ספרות, נקודה, מקף או קו תחתון",username_taken:"שם המשתמש הזה כבר תפוס",
+  wrong_password:"הסיסמה הנוכחית שגויה",not_recovery:"הקישור מהמייל לא תקף או שפג תוקפו (10 דקות). בקש קישור חדש.",bad_username:"שם משתמש: 3–32 תווים, אותיות באנגלית, ספרות, נקודה, מקף או קו תחתון",username_taken:"שם המשתמש הזה כבר תפוס",
   bootstrap_done:"חשבון מנהל ראשי כבר נוצר. היכנס עם שם משתמש וסיסמה","rate limit":"יותר מדי ניסיונות. נסה שוב בעוד כמה דקות",over_request_rate_limit:"יותר מדי ניסיונות. נסה שוב בעוד כמה דקות",
   signup_disabled:"אין הרשמה עצמית. מנהל המערכת יוצר את המשתמשים",bad_input:"הנתונים לא תקינים",server_error:"שגיאה בשרת. נסה שוב",
   no_key:"אין גישה לנתוני המפעיל",last_platform_admin:"חייב להישאר לפחות מנהל מערכת פעיל אחד",
@@ -1532,9 +1532,8 @@ $("#gateForm").addEventListener("submit",async e=>{
       if(!(await unlock())) return}
     else if(GMODE==="recoverpw"){const pw=$("#gpw").value;
       if(pw.length<8) throw new Error("Password should be"); if(pw!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
-      await http(SB+"/auth/v1/user",{method:"PUT",headers:{apikey:KEY,"Content-Type":"application/json",Authorization:"Bearer "+await token()},body:JSON.stringify({password:pw})});
-      try{await fnCall({action:"log_recovery"})}catch{}
-      if(!(await unlock())) return}
+      const r=await fnCall({action:"recovery_set_password",new_password:pw}); // server-side, only from the mail's session
+      await signIn(r.username,pw); if(!(await unlock())) return}
   }catch(err){m.className="msg err";m.textContent=errText(err);$("#gateBtn").disabled=false;if(GMODE==="login") $("#gpw")?.select()}
 });
 (async()=>{
