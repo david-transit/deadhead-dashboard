@@ -6,7 +6,8 @@
 //                      sign_in (username -> accounts whose Auth email is a real recovery address),
 //                      recovery_options, forgot (reset mail to a platform admin's recovery email),
 //                      recover_code (one-time recovery code -> new password). All rate-limited per username.
-// Signed-in user:      change_password (own; clears must_change_password), recovery_set_password (reset-mail session only)
+// Signed-in user:      change_password (own; clears must_change_password), recovery_set_password (reset-mail session only),
+//                      remove_my_mfa
 // Platform admin:      my_security, set_recovery_email, gen_recovery_codes (both need the current password)
 // Control room:        list, create (role "platform" = platform admin, platform admins only), set_membership,
 //                      remove_membership, set_platform, reset_password, reset_mfa, set_disabled, delete
@@ -92,7 +93,8 @@ async function verifiedFactors(id: string) {
   const { data } = await admin.auth.admin.mfa.listFactors({ userId: id });
   return (data?.factors || []).filter((f) => f.status === "verified");
 }
-async function dropFactors(id: string) {
+async function dropFactors(id: string) { // the DB guard on auth.mfa_factors needs a one-shot permit (mfa_guard migration)
+  await admin.rpc("allow_mfa_change", { p_user: id }).throwOnError();
   const { data } = await admin.auth.admin.mfa.listFactors({ userId: id });
   for (const f of data?.factors || []) await admin.auth.admin.mfa.deleteFactor({ userId: id, id: f.id });
   return (data?.factors || []).length;
@@ -259,6 +261,14 @@ Deno.serve(async (req) => {
       return out({ ok: true, username: myProf.username });
     }
 
+    if (b.action === "remove_my_mfa") { // own authenticator: only from an aal2 session (GoTrue alone would allow aal1)
+      if (!myProf) throw new Fail("not_allowed", 403);
+      await needMfa();
+      const n = await dropFactors(uid);
+      await logEvent(uid, myProf.username, "mfa_removed", { factors: n });
+      return out({ ok: true, removed: n });
+    }
+
     // ---------- platform admin: own recovery settings ----------
     if (["my_security", "set_recovery_email", "gen_recovery_codes"].includes(String(b.action))) {
       if (!myProf || myProf.must_change_password || !(await isPlatformId(uid))) throw new Fail("not_allowed", 403);
@@ -328,13 +338,11 @@ Deno.serve(async (req) => {
       case "list": {
         const { data: profs } = await admin.from("profiles").select("user_id, username, display_name, must_change_password, disabled, created_at");
         const { data: ms } = await admin.from("memberships").select("user_id, operator_id, role");
-        const seen = new Map<string, string>(), mfa = new Set<string>();
+        const seen = new Map<string, string>();
+        const mfa = new Set<string>(((await admin.rpc("mfa_users")).data || []) as string[]);
         for (let page = 1; page < 20; page++) {
           const { data } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-          for (const u of data?.users || []) {
-            seen.set(u.id, u.last_sign_in_at || "");
-            if ((u.factors || []).some((f) => f.status === "verified")) mfa.add(u.id);
-          }
+          for (const u of data?.users || []) seen.set(u.id, u.last_sign_in_at || "");
           if (!data || data.users.length < 1000) break;
         }
         const users = [];

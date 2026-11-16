@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-16.15";
+const APP_VER="2026-11-16.16";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -51,7 +51,7 @@ const ERR={invalid_credentials:"שם משתמש או סיסמה שגויים","I
   signup_disabled:"אין הרשמה עצמית. מנהל המערכת יוצר את המשתמשים",bad_input:"הנתונים לא תקינים",server_error:"שגיאה בשרת. נסה שוב",
   no_key:"אין גישה לנתוני המפעיל",mfa_required:"צריך להיכנס מחדש עם קוד האימות הדו־שלבי",
   "Invalid TOTP code":"הקוד שגוי או שפג תוקפו. הקלד את הקוד שמוצג עכשיו באפליקציה",mfa_verification_failed:"הקוד שגוי או שפג תוקפו. הקלד את הקוד שמוצג עכשיו באפליקציה",
-  password_change_not_allowed:"שינוי סיסמה רק דרך המסך של האתר",last_platform_admin:"חייב להישאר לפחות מנהל מערכת פעיל אחד",
+  password_change_not_allowed:"שינוי סיסמה רק דרך המסך של האתר",mfa_change_not_allowed:"לשינוי האימות הדו־שלבי צריך להיכנס עם קוד האימות",last_platform_admin:"חייב להישאר לפחות מנהל מערכת פעיל אחד",
   bad_code:"שם המשתמש או קוד השחזור שגויים, או שהקוד כבר נוצל",bad_email:"כתובת המייל לא תקינה",email_taken:"המייל הזה כבר משויך לחשבון אחר",too_large:"הנתונים גדולים מדי",missing_line:"צריך לבחור קו לתגבור"};
 const errText=e=>{const m=String(e&&e.message||e);for(const k in ERR) if(m.includes(k)) return ERR[k];return /abort/i.test(m)?"אין תשובה מהשרת. נסה שוב":m};
 
@@ -945,7 +945,7 @@ let MEENR=null;
 $("#meBody").addEventListener("click",async e=>{const id=e.target.id;
   if(id==="meMfaOn"){mmsg("מכין קוד…");try{MEENR=await mfaEnroll();meDraw("mfa",{enroll:MEENR});$("#meOtp").focus()}catch(err){mmsg(errText(err),"err")}return}
   if(id==="meMfaOff"){if(!confirm("להסיר את האימות הדו־שלבי? מכאן הכניסה תהיה בסיסמה בלבד.")) return;mmsg("מסיר…");
-    try{for(const f of await myFactors()) await authReq("DELETE",`factors/${f.id}`);try{await refresh()}catch{}meDraw("mfa",{on:false});mmsg("הוסר","ok")}catch(err){mmsg(errText(err),"err")}return}
+    try{await fnCall({action:"remove_my_mfa"});try{await refresh()}catch{}meDraw("mfa",{on:false});mmsg("הוסר","ok")}catch(err){mmsg(errText(err),"err")}return}
   if(id==="meDl"&&MECODES){const t=`יאללה־סע · קודי שחזור לחשבון ${PROFILE?.username||""}\nנוצרו ${new Date().toLocaleString("he-IL")}. כל קוד עובד פעם אחת.\n\n${MECODES.join("\n")}\n`;
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:"text/plain;charset=utf-8"}));a.download="yalla-sa-recovery-codes.txt";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);return}
   if(id==="mePrint"&&MECODES){const w=open("","_blank","width=480,height=600");if(!w) return;
@@ -972,7 +972,8 @@ async function mfaVerify(fid,code){code=String(code||"").replace(/\D/g,"");if(co
 async function mfaEnroll(){ // a fresh factor (unfinished ones are removed first): {id, totp:{qr_code, secret}}
   for(const f of (await myFactors()).filter(f=>f.status!=="verified")) try{await authReq("DELETE",`factors/${f.id}`)}catch{}
   return authReq("POST","factors",{factor_type:"totp",friendly_name:"yalla-sa "+new Date().toISOString().slice(0,16)})}
-const mfaBox=e=>`<div class="mfaqr"><img src="${esc(e.totp.qr_code)}" alt="קוד QR לאפליקציית האימות" width="180" height="180"></div>
+const qrSrc=q=>String(q).startsWith("data:")?q:"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q); // GoTrue returns raw SVG
+const mfaBox=e=>`<div class="mfaqr"><img src="${esc(qrSrc(e.totp.qr_code))}" alt="קוד QR לאפליקציית האימות" width="180" height="180"></div>
   <p class="hint">אין אפשרות לסרוק? הקלד באפליקציה את המפתח: <b dir="ltr" class="mono">${esc(e.totp.secret)}</b></p>`;
 let MFAF=null, ENR=null;
 
