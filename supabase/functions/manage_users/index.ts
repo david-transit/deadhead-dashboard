@@ -2,11 +2,16 @@
 // Supabase Auth holds each user under an internal address <username>@users.yalla-sa.app (never shown).
 // Runs with the service role key (Edge Function env only; never in the browser or the repo).
 //
-// No sign-in needed:   bootstrap_status, bootstrap (first platform admin, once, server-enforced)
-// Signed-in user:      change_password (own; clears must_change_password)
-// Control room:        list, create, set_membership, remove_membership, reset_password, set_disabled, delete
-//   platform admin = every user except other platform admins; operator admin = users whose access is only
-//   in operators he administers.
+// No sign-in needed:   bootstrap_status, bootstrap (first platform admin, once, server-enforced),
+//                      sign_in (username -> accounts whose Auth email is a real recovery address),
+//                      recovery_options, forgot (reset mail to a platform admin's recovery email),
+//                      recover_code (one-time recovery code -> new password). All rate-limited per username.
+// Signed-in user:      change_password (own; clears must_change_password), log_recovery
+// Platform admin:      my_security, set_recovery_email, gen_recovery_codes (both need the current password)
+// Control room:        list, create (role "platform" = platform admin, platform admins only), set_membership,
+//                      remove_membership, set_platform, reset_password, set_disabled, delete
+//   platform admin = every user except himself (own password: change_password); operator admin = users whose
+//   access is only in operators he administers. At least one active platform admin always remains.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
@@ -14,6 +19,8 @@ const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY") || "sb_publishable_hCBsqYekz61JY6SFfT_sjw_-wj0QGXT"; // public key
 const DOMAIN = "users.yalla-sa.app";
 const ORIGINS = ["https://david-transit.github.io", "http://localhost:8770", "http://127.0.0.1:8770"];
+const SITE = "https://david-transit.github.io/deadhead-dashboard/"; // where the reset-password mail lands
+const CODE_ABC = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 const ROLES = ["viewer", "editor", "admin"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const USER = /^[a-z0-9._-]{3,32}$/;
@@ -23,6 +30,45 @@ const emailOf = (u: string) => `${u}@${DOMAIN}`;
 const cleanUser = (u: unknown) => String(u ?? "").trim().toLowerCase();
 const okPw = (p: unknown) => typeof p === "string" && p.length >= 8 && p.length <= 72;
 const cleanName = (n: unknown) => String(n ?? "").trim().slice(0, 80);
+
+const anonClient = () => createClient(SB_URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
+const normCode = (c: unknown) => String(c ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+async function sha256(s: string) {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+const codeHash = (user: string, code: string) => sha256(`${user}:${normCode(code)}`);
+function newCode() {
+  const r = crypto.getRandomValues(new Uint32Array(10));
+  const c = [...r].map((x) => CODE_ABC[x % CODE_ABC.length]).join("");
+  return c.slice(0, 5) + "-" + c.slice(5);
+}
+async function attempt(username: string, kind: string) {
+  const { data } = await admin.rpc("auth_attempt", { p_username: username, p_kind: kind }).throwOnError();
+  if (!data) throw new Fail("rate limit", 429);
+}
+const logEvent = (user: string | null, username: string | null, event: string, detail: unknown = null) =>
+  admin.rpc("auth_event", { p_user: user, p_username: username, p_event: event, p_detail: detail }).then(() => {}, () => {});
+async function profileByName(username: string) {
+  const { data } = await admin.from("profiles").select("user_id, username, disabled").eq("username", username).maybeSingle();
+  return data;
+}
+async function isPlatformId(id: string) {
+  const { data } = await admin.from("platform_admins").select("user_id").eq("user_id", id).maybeSingle();
+  return !!data;
+}
+async function authEmail(id: string) {
+  const { data } = await admin.auth.admin.getUserById(id);
+  return data?.user?.email || "";
+}
+// the password of a signed-in user, checked against his real Auth email (internal or recovery address)
+async function checkPassword(id: string, pw: unknown) {
+  const c = anonClient();
+  const { error } = await c.auth.signInWithPassword({ email: await authEmail(id), password: String(pw ?? "") });
+  if (error) throw new Fail("wrong_password", 403);
+  await c.auth.signOut({ scope: "local" }).catch(() => {});
+}
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 class Fail extends Error { constructor(public code: string, public status = 400) { super(code); } }
 
@@ -86,6 +132,60 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (b.action === "sign_in") {
+      // accounts with a recovery email sign in through here (their Auth email is the real address); the same answer
+      // for every failure, rate-limited per username
+      const username = cleanUser(b.username);
+      if (!USER.test(username)) throw new Fail("invalid_credentials", 400);
+      await attempt(username, "sign_in");
+      const p = await profileByName(username);
+      const email = p ? await authEmail(p.user_id) : "";
+      if (!p || !email || email === emailOf(username)) throw new Fail("invalid_credentials", 400);
+      const { data, error } = await anonClient().auth.signInWithPassword({ email, password: String(b.password ?? "") });
+      if (error || !data.session) throw new Fail(/ban/i.test(error?.message || "") ? "user_banned" : "invalid_credentials", 400);
+      const x = data.session;
+      return out({ ok: true, session: { access_token: x.access_token, refresh_token: x.refresh_token, expires_in: x.expires_in, expires_at: x.expires_at, user: x.user } });
+    }
+    if (b.action === "recovery_options") {
+      const username = cleanUser(b.username);
+      if (!USER.test(username)) return out({ ok: true, email: false });
+      await attempt(username, "options");
+      const p = await profileByName(username);
+      const has = !!p && !p.disabled && await isPlatformId(p.user_id) && !!(await admin.rpc("recovery_email_get", { p_user: p.user_id })).data;
+      return out({ ok: true, email: has });
+    }
+    if (b.action === "forgot") {
+      const username = cleanUser(b.username);
+      if (USER.test(username)) {
+        await attempt(username, "forgot");
+        const p = await profileByName(username);
+        if (p && !p.disabled && await isPlatformId(p.user_id)) {
+          const { data: em } = await admin.rpc("recovery_email_get", { p_user: p.user_id });
+          if (em) {
+            const { error } = await anonClient().auth.resetPasswordForEmail(em as string, { redirectTo: SITE });
+            await logEvent(p.user_id, username, error ? "forgot_mail_failed" : "forgot_mail_sent", error ? { msg: error.message } : null);
+          }
+        }
+      }
+      return out({ ok: true }); // the same answer whether or not a mail went out
+    }
+    if (b.action === "recover_code") {
+      const username = cleanUser(b.username);
+      if (!USER.test(username)) throw new Fail("bad_code", 400);
+      await attempt(username, "code");
+      if (!okPw(b.new_password)) throw new Fail("weak_password");
+      const p = await profileByName(username);
+      if (!p || p.disabled || !(await isPlatformId(p.user_id))) { await logEvent(null, username, "recovery_code_failed"); throw new Fail("bad_code", 400); }
+      const { data: used } = await admin.rpc("recovery_use_code", { p_user: p.user_id, p_hash: await codeHash(p.user_id, b.code as string) }).throwOnError();
+      if (!used) { await logEvent(p.user_id, username, "recovery_code_failed"); throw new Fail("bad_code", 400); }
+      const { error } = await admin.auth.admin.updateUserById(p.user_id, { password: b.new_password as string });
+      if (error) throw new Fail(/password/i.test(error.message) ? "weak_password" : "server_error");
+      await admin.from("profiles").update({ must_change_password: false }).eq("user_id", p.user_id).throwOnError();
+      const { data: left } = await admin.rpc("recovery_codes_left", { p_user: p.user_id });
+      await logEvent(p.user_id, username, "recovery_code_used", { left });
+      return out({ ok: true, left });
+    }
+
     // ---------- who is calling ----------
     const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     if (!token) throw new Fail("not_signed_in", 401);
@@ -99,14 +199,42 @@ Deno.serve(async (req) => {
       if (!myProf) throw new Fail("not_allowed", 403);
       if (!okPw(b.new_password)) throw new Fail("weak_password");
       if (b.new_password === b.current_password) throw new Fail("same_password");
-      const check = createClient(SB_URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
-      const { error: se } = await check.auth.signInWithPassword({ email: emailOf(myProf.username), password: String(b.current_password ?? "") });
-      if (se) throw new Fail("wrong_password", 403);
-      await check.auth.signOut({ scope: "local" }).catch(() => {}); // only the check session, not the caller's
+      await checkPassword(uid, b.current_password); // a separate check session, not the caller's
       const { error } = await admin.auth.admin.updateUserById(uid, { password: b.new_password as string });
       if (error) throw new Fail(/password/i.test(error.message) ? "weak_password" : "server_error", 400);
       await admin.from("profiles").update({ must_change_password: false }).eq("user_id", uid).throwOnError();
+      await logEvent(uid, myProf.username, "password_changed");
       return out({ ok: true });
+    }
+    if (b.action === "log_recovery") { // after the reset-password mail: the page has set the new password itself
+      if (myProf) {
+        await admin.from("profiles").update({ must_change_password: false }).eq("user_id", uid);
+        await logEvent(uid, myProf.username, "recovered_by_mail");
+      }
+      return out({ ok: true });
+    }
+
+    // ---------- platform admin: own recovery settings ----------
+    if (["my_security", "set_recovery_email", "gen_recovery_codes"].includes(String(b.action))) {
+      if (!myProf || myProf.must_change_password || !(await isPlatformId(uid))) throw new Fail("not_allowed", 403);
+      if (b.action === "my_security") {
+        const [{ data: em }, { data: left }] = await Promise.all([admin.rpc("recovery_email_get", { p_user: uid }), admin.rpc("recovery_codes_left", { p_user: uid })]);
+        return out({ ok: true, recovery_email: em || null, codes_left: left || 0 });
+      }
+      await checkPassword(uid, b.current_password);
+      if (b.action === "set_recovery_email") {
+        const em = b.email == null || b.email === "" ? null : String(b.email).trim().toLowerCase();
+        if (em !== null && (!EMAIL.test(em) || em.length > 254 || em.endsWith("@" + DOMAIN))) throw new Fail("bad_email");
+        const { error } = await admin.auth.admin.updateUserById(uid, { email: em || emailOf(myProf.username), email_confirm: true });
+        if (error) throw new Fail(/already|exists|registered/i.test(error.message) ? "email_taken" : "server_error", 400);
+        await admin.rpc("recovery_email_set", { p_user: uid, p_email: em }).throwOnError();
+        await logEvent(uid, myProf.username, em ? "recovery_email_set" : "recovery_email_removed");
+        return out({ ok: true });
+      }
+      const codes = Array.from({ length: 8 }, newCode);
+      await admin.rpc("recovery_set_codes", { p_user: uid, p_hashes: await Promise.all(codes.map((c) => codeHash(uid, c))) }).throwOnError();
+      await logEvent(uid, myProf.username, "recovery_codes_generated");
+      return out({ ok: true, codes });
     }
 
     // ---------- control room ----------
@@ -122,8 +250,9 @@ Deno.serve(async (req) => {
       (await admin.from("memberships").select("operator_id, role").eq("user_id", user)).data || [];
     // may the caller reset / disable / delete / re-assign this user?
     const manageable = async (target: string) => {
-      if (!UUID.test(target) || target === uid || platformIds.has(target)) return false;
+      if (!UUID.test(target) || target === uid) return false;
       if (isPlatform) return true;
+      if (platformIds.has(target)) return false;
       const ms = await membershipsOf(target);
       return ms.length > 0 && ms.every((m) => adminOps.has(m.operator_id));
     };
@@ -133,6 +262,12 @@ Deno.serve(async (req) => {
       const { data } = await admin.from("profiles").select("user_id").eq("user_id", t).maybeSingle();
       if (!data) throw new Fail("bad_input");
       return t;
+    };
+    // at least one active platform admin must remain when "target" stops being one (revoke, disable, delete)
+    const keepOnePlatform = async (target: string) => {
+      if (!platformIds.has(target)) return;
+      const { data: act } = await admin.from("profiles").select("user_id").in("user_id", [...platformIds]).eq("disabled", false);
+      if (!(act || []).some((x) => x.user_id !== target)) throw new Fail("last_platform_admin", 409);
     };
     const needOpRole = () => {
       const op = String(b.operator_id || ""), role = String(b.role || "");
@@ -172,6 +307,13 @@ Deno.serve(async (req) => {
         const username = cleanUser(b.username);
         if (!USER.test(username)) throw new Fail("bad_username");
         if (!okPw(b.password)) throw new Fail("weak_password");
+        if (b.role === "platform") { // platform admin: no operator needed; only a platform admin may create one
+          if (!isPlatform) throw new Fail("not_allowed", 403);
+          const id = await createAccount(username, b.password as string, cleanName(b.display_name), true, uid);
+          await admin.from("platform_admins").insert({ user_id: id }).throwOnError();
+          await logEvent(uid, myProf.username, "platform_admin_created", { user: username });
+          return out({ ok: true, user_id: id });
+        }
         const { op, role } = needOpRole();
         const id = await createAccount(username, b.password as string, cleanName(b.display_name), true, uid);
         await admin.from("memberships").insert({ user_id: id, operator_id: op, role, created_by: uid }).throwOnError();
@@ -191,17 +333,28 @@ Deno.serve(async (req) => {
         return out({ ok: true });
       }
 
+      case "set_platform": {
+        if (!isPlatform) throw new Fail("not_allowed", 403);
+        const t = await needTarget(), on = !!b.on;
+        if (on) await admin.from("platform_admins").upsert({ user_id: t }, { onConflict: "user_id" }).throwOnError();
+        else { await keepOnePlatform(t); await admin.from("platform_admins").delete().eq("user_id", t).throwOnError(); }
+        await logEvent(uid, myProf.username, on ? "platform_admin_granted" : "platform_admin_revoked", { user: t });
+        return out({ ok: true });
+      }
+
       case "reset_password": {
         const t = await needTarget();
         if (!okPw(b.password)) throw new Fail("weak_password");
         const { error } = await admin.auth.admin.updateUserById(t, { password: b.password as string });
         if (error) throw new Fail(/password/i.test(error.message) ? "weak_password" : "server_error");
         await admin.from("profiles").update({ must_change_password: true }).eq("user_id", t).throwOnError();
+        await logEvent(uid, myProf.username, "password_reset_by_admin", { user: t });
         return out({ ok: true });
       }
 
       case "set_disabled": {
         const t = await needTarget(), off = !!b.disabled;
+        if (off) await keepOnePlatform(t);
         const { error } = await admin.auth.admin.updateUserById(t, { ban_duration: off ? "876000h" : "none" });
         if (error) throw error;
         await admin.from("profiles").update({ disabled: off }).eq("user_id", t).throwOnError();
@@ -210,6 +363,7 @@ Deno.serve(async (req) => {
 
       case "delete": {
         const t = await needTarget();
+        await keepOnePlatform(t);
         const { error } = await admin.auth.admin.deleteUser(t);
         if (error) throw error;
         return out({ ok: true });
