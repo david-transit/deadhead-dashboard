@@ -33,6 +33,9 @@ FALSE_START_GAP = 20   # ... followed within 20 min by a ride of the same line i
 LATE_M = 1500          # first GPS point further along the route than this = logged in late
 TIGHT_MIN = 10         # empty leg needing more than gap + 10 min of driving (or > 100 km/h) is flagged "tight" (data warning)
 ROUTE_V = 3            # assets/route.js V: cached routes checked by an older version are routed again
+# Road profile (pipeline/osrm/README.md): with OSRM_BASE set (our own osrm-routed, bus-strict), cached routes of another
+# profile (car, or a car fallback) are routed again; without it the public car server is used, as before.
+PROFILE = os.environ.get("OSRM_PROFILE", "bus-strict") if os.environ.get("OSRM_BASE") else "car"
 IL = (29.0, 34.0, 34.0, 36.5)  # valid GPS (lat/lon box); SIRI sends -1,-1 for "no position"
 
 
@@ -62,13 +65,13 @@ def osrm_router(cache_file):
             return 0.0, 0.0, None
         k = f"{p[0]:.5f},{p[1]:.5f};{q[0]:.5f},{q[1]:.5f}"  # same rounding as the browser's road_cache key
         c = cache.get(k)
-        if not c or len(c) < 3 or (c[2] or {}).get("v", 0) < ROUTE_V:
+        if not c or len(c) < 3 or (c[2] or {}).get("v", 0) < ROUTE_V or (c[2] or {}).get("p", "car") != PROFILE or (c[2] or {}).get("fb"):
             r = ask([round(p[0], 5), round(p[1], 5)], [round(q[0], 5), round(q[1], 5)], list(term))
             if not r:
                 miss[0] += 1
                 return None, None, None
             old = c[0] if c else None
-            meta = {x: r[x] for x in ("v", "s", "fix", "km0", "via", "u", "ok", "why") if x in r}
+            meta = {x: r[x] for x in ("v", "s", "fix", "km0", "via", "u", "ok", "why", "p", "fb") if x in r}
             cache[k] = c = [r["km"], r["min"], meta]
             stat["routed"] += 1
             if stat["routed"] % 200 == 0:  # keep the work if the run is cut short (CI timeout)
@@ -76,6 +79,7 @@ def osrm_router(cache_file):
                 print("routes so far:", dict(stat), flush=True)
             if r.get("why"): stat["suspicious"] += 1
             if r.get("fix"): stat["fixed"] += 1
+            if r.get("fb"): stat["car_fallback"] += 1
             if old is not None and abs(old - r["km"]) > 0.05: stat["changed"] += 1; stat["delta_km"] += r["km"] - old
         return c[0], c[1], c[2]
 
@@ -274,6 +278,8 @@ def build(day):
                            a=p["b"], b=t["a"])
                 if rt and (rt.get("fix") or rt.get("u") or max(rt.get("s") or [0]) > 30):
                     leg["rt"] = {x: rt[x] for x in ("s", "fix", "km0", "u", "ok") if x in rt}  # route check (assets/route.js)
+                if rt and rt.get("fb"):
+                    leg["fb"] = 1  # our bus OSRM failed: routed as a private car (public server), "חושב ברכב פרטי (גיבוי)"
                 if km is None:  # OSRM failed: a marked estimate, never dropped
                     km = round(hav(p["b"], t["a"]) * 1.35, 1); leg.update(km=km, drive_min=round(km / 40 * 60, 1), est=True)
                 if gap < 0:
@@ -317,7 +323,8 @@ def build(day):
     if n_empty and osrm_miss[0] > 0.2 * n_empty:
         raise SystemExit(f"{day}: OSRM failed for {osrm_miss[0]}/{n_empty} empty legs")
 
-    out = dict(day=day, day_start_min=DAY_START_H * 60, operator=OP["name"], operator_slug=OP["slug"], built=dt.datetime.now(TZ).isoformat(timespec="minutes"),
+    n_fb = sum(1 for v in vehicles for i in v["items"] if i.get("fb"))
+    out = dict(day=day, day_start_min=DAY_START_H * 60, routing=dict(profile=PROFILE, fallback_legs=n_fb), operator=OP["name"], operator_slug=OP["slug"], built=dt.datetime.now(TZ).isoformat(timespec="minutes"),
                routes=routes, summary=dict(vehicles=len(vehicles), trips=sum(len(v) for v in by.values()),
                empty_day_km=round(tot_day), skipped_rides=skipped, auto_rein=auto_n, auto_rein_unmapped=auto_unmapped,
                gps=G["gps"], no_gps=G["no_gps"], incomplete=G["incomplete"], false_starts=n_dup, not_performed=G["ghost"], late_login=G["late_login"]), vehicles=vehicles)

@@ -8,3 +8,4 @@ __pycache__/
 design/
 image-prompt.md
 *.sh
+!pipeline/osrm/serve.sh
