@@ -1,8 +1,8 @@
 {
-  "_note": "One entry per operator (tenant). active=false: listed but not built. key_secret = GitHub secret holding that operator's data key (base64, 32 bytes); locally config/.data_key_<slug>. service_day_start_hour: service day D = D hh:00 .. D+1 hh:00 local (not verified against the official GTFS/SIRI spec). legacy_mirror: also write data/day_*.js + data/days.js for legacy.html (remove after the switch to user accounts).",
+  "_note": "One entry per operator (tenant). active=false: listed but not built. key_secret = GitHub secret holding that operator's data key (base64, 32 bytes); locally config/.data_key_<slug>. service_day_start_hour: service day D = D hh:00 .. D+1 hh:00 local (not verified against the official GTFS/SIRI spec).",
   "operators": [
     {"slug": "derech-egged", "name": "דרך אגד עוטף ירושלים", "operator_ref": 135, "cluster_operator_name": "דרך אגד",
-     "service_day_start_hour": 4, "key_secret": "DATA_KEY", "active": true, "legacy_mirror": true},
+     "service_day_start_hour": 4, "key_secret": "DATA_KEY", "active": true},
     {"slug": "metropoline", "name": "מטרופולין", "operator_ref": 15, "cluster_operator_name": "מטרופולין",
      "service_day_start_hour": 4, "key_secret": "DATA_KEY_METROPOLINE", "active": false}
   ]

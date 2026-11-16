@@ -6,7 +6,7 @@
 - "חדר בקרה": יצירת משתמש עם סיסמה זמנית, הרשאה ומפעיל, סיסמה זמנית חדשה, השבתה, מחיקה (Edge Function `manage_users`). מנהל מפעיל רואה רק את המשתמשים של המפעיל שלו. סיסמה זמנית חייבת להיות מוחלפת בכניסה, ועד אז אין גישה לנתונים.
 - הרשאות: צופה / עורך / מנהל מפעיל, ומנהל מערכת.
 - מפעילים: `pipeline/operators.json` (פעיל / לא פעיל, גבול יום שירות, סוד מפתח הנתונים). נתונים לכל מפעיל ב-`data/<slug>/`.
-- `legacy.html`: הכניסה הישנה בסיסמה המשותפת, זמנית עד המעבר המלא.
+- `legacy.html`: הפניה לדף הראשי (הכניסה בסיסמה המשותפת הוסרה).
 - עדכון אוטומטי: כל לילה ה-Action `nightly-day` מוסיף את יום אתמול לכל מפעיל פעיל. מילוי ימים חסרים: Actions → nightly-day → Run workflow עם from/to (ו-operator).
 - הוספת יום ידנית: `python dashboard/build_day.py YYYY-MM-DD --op derech-egged` (הקוד ב-`pipeline/`; דורש `config/.data_key_<slug>` ו-`pip install tzdata`).
 - קישור ישיר: `index.html?op=derech-egged&day=2026-11-10&veh=23404402`.

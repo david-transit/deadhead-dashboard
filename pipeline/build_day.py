@@ -7,7 +7,7 @@ and rewrites data/<slug>/days.js from the encrypted files present. Operators: pi
 Caches (never committed, shared by all operators): pipeline/cache/ or $DEADHEAD_CACHE.
 Data key (per operator): $DATA_KEY_FILE or config/.data_key_<slug> (base64, 32 bytes).
 Night legs (depot <-> first/last stop) are computed in the browser from the Supabase settings."""
-import json, sys, os, glob, shutil, subprocess, datetime as dt, urllib.request, time, zipfile, csv, io, collections, statistics
+import json, sys, os, glob, hashlib, subprocess, datetime as dt, urllib.request, time, zipfile, csv, io, collections, statistics
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -182,16 +182,18 @@ def build(day):
 
 def encrypt(day):
     subprocess.run(["node", os.path.join(HERE, "encrypt.js"), KEY_FILE, DATA, day], check=True)
-    days = sorted(os.path.basename(f)[4:14] for f in glob.glob(os.path.join(DATA, "day_*.js")))
-    meta = dict(days=days, day_start_hour=DAY_START_H, name=OP["name"])
+    write_days_index()
+
+
+def write_days_index():
+    """data/<slug>/days.js: the list of built days + a short content hash per day (cache-busting ?v= for day_<D>.js)."""
+    files = sorted(glob.glob(os.path.join(DATA, "day_*.js")))
+    days = [os.path.basename(f)[4:14] for f in files]
+    ver = {os.path.basename(f)[4:14]: hashlib.sha256(open(f, "rb").read()).hexdigest()[:10] for f in files}
+    meta = dict(days=days, day_start_hour=DAY_START_H, name=OP["name"], ver=ver)
     open(os.path.join(DATA, "days.js"), "w", encoding="utf-8").write(
         f"(window.OPDAYS=window.OPDAYS||{{}})[{json.dumps(OP['slug'])}]=" + json.dumps(meta, ensure_ascii=False) + ";\n")
     print("days:", days)
-    if OP.get("legacy_mirror"):  # the old shared-password page (legacy.html) reads data/day_*.js; removed after the switch
-        root = os.path.dirname(DATA)
-        shutil.copy(os.path.join(DATA, f"day_{day}.js"), os.path.join(root, f"day_{day}.js"))
-        old = sorted(os.path.basename(f)[4:14] for f in glob.glob(os.path.join(root, "day_*.js")))
-        open(os.path.join(root, "days.js"), "w", encoding="utf-8").write("window.DAYS=" + json.dumps(old) + ";\n")
 
 
 def main():

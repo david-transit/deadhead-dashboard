@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>יאללה־סע · נסיעות ריקות</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&family=Montserrat:wght@800&family=Rubik:wght@500&display=swap" rel="stylesheet">
@@ -105,13 +108,14 @@ table.ed input.num{width:110px}
 .msg.err{color:var(--warn)}
 .msg.ok{color:var(--ok)}
 .look{margin-top:4px;font-size:12px;max-width:420px}
-#gate{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
+#gate{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:safe center;padding:16px}
 #gate form{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px 28px 22px;width:100%;max-width:380px;text-align:center}
 #gate h2{margin:6px 0 4px;font-size:20px}
 #gate{flex-direction:column;gap:18px;overflow:auto}
 #gate #logoBtn{cursor:default}
 #gate #logo{height:min(55vh,480px);transition:height .5s ease}
-#gate.ready #logo{height:min(26vh,220px)}
+#gate.ready #logo{height:var(--logoH,min(26vh,220px))}
+#gate form{flex:none}
 #gate.intro:not(.ready) form{opacity:0;visibility:hidden}
 #gate.intro.ready form{transition:opacity .5s ease}
 @media (prefers-reduced-motion:reduce){#gate #logo,#gate.intro form{transition:none}}
@@ -350,6 +354,12 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 
 </script>
 <script>
+// ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
+// index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
+const APP_VER="2026-11-16.1";
+(async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
+  if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
+    const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
 // ---- backend: Supabase Auth (email + password) + REST. Every row is protected by RLS (operator + role);
 // the publishable key is public by design. User management runs in the manage_users Edge Function. ----
 const SB="https://xghfcdgettrcdciwwzbl.supabase.co", KEY="sb_publishable_hCBsqYekz61JY6SFfT_sjw_-wj0QGXT";
@@ -404,7 +414,7 @@ async function loadAccess(){
 }
 function applyOperator(){
   $("#op").textContent=OP.name; document.title=`יאללה־סע · נסיעות ריקות · ${OP.name}`;
-  const lb=$("#opLogo"); lb.hidden=!OP.logo_url; lb.innerHTML=OP.logo_url?`<img src="${esc(OP.logo_url)}" alt="${esc(OP.name)}">`:"";
+  const lb=$("#opLogo"); lb.hidden=!OP.logo_url; lb.innerHTML=OP.logo_url?`<img src="${esc(OP.logo_url+(OP.logo_url.includes("?")?"&":"?")+"v="+APP_VER)}" alt="${esc(OP.name)}">`:"";
   const os=$("#opSel"); os.hidden=OPS.length<2; os.innerHTML=OPS.map(o=>`<option value="${esc(o.slug)}" ${o.id===OP.id?"selected":""}>${esc(o.name)}</option>`).join("");
   $("#bCtl").hidden=!canManage();
   $("#who").innerHTML=`${esc((PROFILE&&(PROFILE.display_name||PROFILE.username))||"")}<br>${PLATFORM?"מנהל מערכת":esc(ROLEHE[ROLE]||"")}`;
@@ -424,7 +434,7 @@ const DEF={fuel_by_class:{"עירוני":"גז","בינעירוני":"סולר"}
 let S={depots:[],fuel_stations:[],driver_change_points:[],defaults:clone(DEF),vehicles:{}};
 let REIN={}, OVN={}, AUTOR={};
 // days of the current operator: data/<slug>/days.js (built by the pipeline); service day D = D hh:00 … D+1 hh:00 (operators.json)
-let days=[],DAY_START_H=4,today="",yest="";
+let days=[],DAY_START_H=4,today="",yest="",DAYVER={};
 
 // ---- night trips: estimate (straight line × 1.35) until road distances are computed ----
 const hav=(a,b)=>{const R=6371,r=x=>x*Math.PI/180,dp=r(b[0]-a[0]),dl=r(b[1]-a[1]);return 2*R*Math.asin(Math.sqrt(Math.sin(dp/2)**2+Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dl/2)**2))};
@@ -524,8 +534,8 @@ function vstats(v){
 // ---- days ----
 const loadScript=src=>new Promise((ok,bad)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=bad;document.head.appendChild(s)});
 async function initDays(){
-  try{await loadScript(`data/${OP.slug}/days.js?v=${Math.floor(Date.now()/6e5)}`)}catch{}
-  const m=(window.OPDAYS||{})[OP.slug]||{days:[]}; days=(m.days||[]).slice().sort(); DAY_START_H=m.day_start_hour??4;
+  try{await loadScript(`data/${OP.slug}/days.js?v=${Date.now()}`)}catch{}
+  const m=(window.OPDAYS||{})[OP.slug]||{days:[]}; days=(m.days||[]).slice().sort(); DAYVER=m.ver||{}; DAY_START_H=m.day_start_hour??4;
   const now=new Date(Date.now()-new Date().getTimezoneOffset()*6e4-DAY_START_H*36e5); today=ymd(now); yest=ymd(new Date(now-864e5));
   $("#day").innerHTML=days.map(d=>`<option value="${d}">${d.split("-").reverse().join(".")}</option>`).join("");
   $("#bToday").disabled=!days.includes(today); $("#bYest").disabled=!days.includes(yest);
@@ -543,7 +553,7 @@ function loadDay(day,after){
     D=window.DAY_DATA[day];sel=null;await Promise.all([loadRein(day),loadOvernight(day),loadAutoRein(day)]);render();ensureRoad();$("#side").innerHTML='<div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div>';after&&after()};
   if((window.DAY_DATA&&window.DAY_DATA[day])||(window.ENC_DAY&&window.ENC_DAY[day])) return go();
   $("#gantt").innerHTML='<div class="empty-state">טוען…</div>';
-  const s=document.createElement("script"); s.src=`data/${OP.slug}/day_${day}.js`; s.onload=go;
+  const s=document.createElement("script"); s.src=`data/${OP.slug}/day_${day}.js?v=${encodeURIComponent(DAYVER[day]||APP_VER)}`; s.onload=go;
   s.onerror=()=>{$("#gantt").innerHTML='<div class="empty-state">לא ניתן לטעון את נתוני היום הזה</div>'}; document.head.appendChild(s);
 }
 
@@ -889,7 +899,11 @@ async function unlock(){
 const LOGO=$("#logoBtn"), LOGO_HOME=[LOGO.parentNode,LOGO.nextSibling];
 function logoHome(){if(LOGO.parentNode!==LOGO_HOME[0]){LOGO_HOME[0].insertBefore(LOGO,LOGO_HOME[1]);LOGO.removeAttribute("aria-hidden");LOGO.tabIndex=0}}
 let introEnd=Promise.resolve(), introOver=false, AUTO=false, GMODE="login", LASTPW=null;
-const showForm=()=>{const g=$("#gate");if(g&&!g.classList.contains("ready")){g.classList.add("ready");g.querySelector("#gateFields input:not([hidden]),#gateBtn")?.focus()}};
+// the logo takes only the height left over by the form, so the form is always fully visible (laptop windows, zoom)
+function fitGate(){const g=$("#gate");if(!g||!g.classList.contains("ready")) return;const f=$("#gateForm");
+  const left=innerHeight-f.offsetHeight-18-32-8;g.style.setProperty("--logoH",Math.max(48,Math.min(220,left))+"px")}
+addEventListener("resize",fitGate);
+const showForm=()=>{const g=$("#gate");if(g&&!g.classList.contains("ready")){fitGate();g.classList.add("ready");g.querySelector("#gateFields input:not([hidden]),#gateBtn")?.focus()}};
 function gateIntro(){const g=$("#gate");let done=false,res;introEnd=new Promise(r=>res=r);
   const show=()=>{if(done) return;done=true;introOver=true;clearTimeout(tm);removeEventListener("keydown",show,true);g.removeEventListener("pointerdown",show);res();if(!AUTO) showForm()};
   g.insertBefore(LOGO,g.firstChild); LOGO.setAttribute("aria-hidden","true"); LOGO.tabIndex=-1; g.classList.add("intro");
@@ -900,9 +914,8 @@ const userFld=v=>fld("gUser","שם משתמש","text","username",`value="${esc(v
 function gateMode(m,{msg="",err=""}={}){
   GMODE=m; const uname=(PROFILE&&PROFILE.username)||lsGet("ys_user")||"";
   const F=$("#gateFields"),A=$("#gateAlt"),B=$("#gateBtn"),S=$("#gateSub"); B.disabled=false;
-  const legacy=`<a class="linkbtn dim" href="legacy.html">כניסה בסיסמה המשותפת (זמני)</a>`;
   if(m==="login"){S.textContent="כניסה עם שם משתמש וסיסמה";F.innerHTML=userFld(uname)+fld("gpw","סיסמה","password","current-password");
-    B.textContent="כניסה";A.innerHTML=`<span class="muted">שכחת סיסמה? פנה למנהל המערכת.</span>${legacy}`}
+    B.textContent="כניסה";A.innerHTML=`<span class="muted">שכחת סיסמה? פנה למנהל המערכת.</span>`}
   else if(m==="bootstrap"){S.textContent="יצירת חשבון מנהל ראשי (פעם אחת בלבד)";
     F.innerHTML=userFld("")+fld("gName","שם לתצוגה","text","name",'maxlength="80"')+fld("gpw","סיסמה (לפחות 8 תווים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
     B.textContent="יצירת החשבון וכניסה";A.innerHTML=`<span class="muted">שם משתמש: אותיות באנגלית, ספרות, נקודה, מקף או קו תחתון.</span>`}
@@ -911,7 +924,7 @@ function gateMode(m,{msg="",err=""}={}){
       fld("gpw","סיסמה חדשה (לפחות 8 תווים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
     B.textContent="שמירת הסיסמה וכניסה";A.innerHTML=`<button type="button" class="linkbtn dim" data-gm="logout">יציאה</button>`}
   else if(m==="noaccess"){S.textContent=`החשבון ${uname} עוד לא שויך לאף מפעיל. פנה למנהל המערכת.`;F.innerHTML="";B.textContent="יציאה";A.innerHTML=""}
-  const gm=$("#gateMsg"); gm.className="msg"+(err?" err":msg?" ok":""); gm.textContent=err||msg;
+  const gm=$("#gateMsg"); gm.className="msg"+(err?" err":msg?" ok":""); gm.textContent=err||msg; fitGate();
   if(introOver) {showForm();(F.querySelector("input:not([hidden])")||B).focus()}
 }
 const signOut=async()=>{try{await authPost("logout",{},SES&&SES.access_token)}catch{} setSes(null);LASTPW=null};
