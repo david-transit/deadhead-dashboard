@@ -339,7 +339,7 @@ Deno.serve(async (req) => {
         const { data: profs } = await admin.from("profiles").select("user_id, username, display_name, must_change_password, disabled, created_at");
         const { data: ms } = await admin.from("memberships").select("user_id, operator_id, role");
         const seen = new Map<string, string>();
-        const mfa = new Set<string>(((await admin.rpc("mfa_users")).data || []) as string[]);
+        const mfa = new Set<string>((((await admin.rpc("mfa_users")).data || []) as unknown[]).map((x) => typeof x === "string" ? x : String((x as Record<string, unknown>).mfa_users)));
         for (let page = 1; page < 20; page++) {
           const { data } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
           for (const u of data?.users || []) seen.set(u.id, u.last_sign_in_at || "");
