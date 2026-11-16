@@ -27,6 +27,7 @@
   .m-who{display:flex!important;flex-direction:column;padding:8px 12px 10px;border-bottom:1px solid var(--line);margin-bottom:4px}
   .m-who span{color:var(--muted);font-size:13px}
   #mOp{width:calc(100% - 8px);margin:4px}
+  #meMenu #bDense,#meMenu #bDense+hr{display:none}
 
   /* desktop pieces replaced by the mobile ones */
   body>section.cards,main>.panel:first-child{display:none}
