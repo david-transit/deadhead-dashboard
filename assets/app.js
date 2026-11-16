@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-16.21";
+const APP_VER="2026-11-16.22";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -441,7 +441,7 @@ async function tripMap(v,i){const route=(D.routes||[]).filter(r=>String(r.line)=
   const c=await YMAP.open({title:`רכב ${v.veh} · קו ${i.line}`,info,fit:[i.a,i.b,route&&route.o,route&&route.d].filter(Boolean)});if(!c) return;
   if(route) c.point(route.o,{label:"תחנת מוצא מתוכננת: "+route.frm,fill:"#ddd",border:"#555",r:6}).point(route.d,{label:"תחנת יעד מתוכננת: "+route.to,fill:"#ddd",border:"#555",r:6});
   if(i.no_gps){c.status("אין GPS לנסיעה הזו (מוצגות תחנות הקצה המתוכננות)");c.point(i.a,{fill:"#2E9E5B"}).point(i.b,{fill:"#C0392B"});return}
-  c.status("טוען מסלול GPS מ־Open Bus…");
+  c.status("טוען מסלול GPS מ־Open Bus (לפעמים עד חצי דקה)…");
   try{const ref=await opRef(),q=new URLSearchParams({limit:"2000",siri_ride__vehicle_ref:v.veh,recorded_at_time_from:utcISO(D.day,i.start-2),recorded_at_time_to:utcISO(D.day,i.end+2),order_by:"recorded_at_time asc"});
     if(ref) q.set("siri_routes__operator_ref",ref); if(i.line_ref) q.set("siri_routes__line_ref",i.line_ref);
     const rows=(await (await fetch(`${STRIDE}/siri_vehicle_locations/list?${q}`)).json()).filter(x=>x.lat>29&&x.lat<34&&x.lon>34&&x.lon<36.5);
