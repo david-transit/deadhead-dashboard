@@ -109,13 +109,14 @@ jobs:
 
       # Our own OSRM with the bus profile from transit-studio (pipeline/osrm/README.md): graph cached per extract week +
       # profile hash, rebuilt weekly; osrm-routed on 127.0.0.1:5000 for this job only.
+      # OFF until David approves the bus-vs-car review: repository variable DEADHEAD_ROUTING=bus switches it on.
       - name: OSRM graph key
         id: osrmkey
-        if: steps.days.outputs.days != ''
+        if: steps.days.outputs.days != '' && vars.DEADHEAD_ROUTING == 'bus'
         run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
       - name: Restore OSRM bus graph
-        if: steps.days.outputs.days != ''
+        if: steps.days.outputs.days != '' && vars.DEADHEAD_ROUTING == 'bus'
         id: osrmcache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -123,12 +124,12 @@ jobs:
           key: osrm-bus-strict-v26.10.0-${{ steps.osrmkey.outputs.week }}-${{ hashFiles('pipeline/osrm/profiles/*.lua') }}
 
       - name: Start OSRM (bus-strict)
-        if: steps.days.outputs.days != ''
+        if: steps.days.outputs.days != '' && vars.DEADHEAD_ROUTING == 'bus'
         id: osrm
         run: bash pipeline/osrm/serve.sh ~/osrm/bus-strict
 
       - name: Save OSRM bus graph
-        if: steps.days.outputs.days != '' && steps.osrm.outputs.osrm == 'ok' && steps.osrmcache.outputs.cache-hit != 'true'
+        if: steps.days.outputs.days != '' && vars.DEADHEAD_ROUTING == 'bus' && steps.osrm.outputs.osrm == 'ok' && steps.osrmcache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/osrm/bus-strict
@@ -142,7 +143,8 @@ jobs:
           DAYS: ${{ steps.days.outputs.days }}
           SECRET_NAME: ${{ matrix.op.secret }}
           PYTHONIOENCODING: utf-8
-          OSRM_BASE: http://127.0.0.1:5000   # down = every new leg falls back to the public car server, marked fb
+          # bus (DEADHEAD_ROUTING=bus): our server, down = each new leg falls back to the public car server, marked fb
+          OSRM_BASE: ${{ vars.DEADHEAD_ROUTING == 'bus' && 'http://127.0.0.1:5000' || '' }}
           OSRM_PROFILE: bus-strict
           OSRM_DOWN: ${{ steps.osrm.outputs.osrm != 'ok' }}
         run: |

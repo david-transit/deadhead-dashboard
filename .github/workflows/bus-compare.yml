@@ -1,0 +1,96 @@
+name: bus-compare
+
+# Bus vs car review before switching the nightly to bus routing (pipeline/osrm/README.md). Manual only.
+# Routes every unique empty leg of the LIVE day files (main) with bus-strict, bus-relaxed and the public car server, and
+# uploads the result encrypted with the operator key (artifact bus-compare, 3 days). Nothing is committed.
+on:
+  workflow_dispatch:
+    inputs:
+      operator:
+        description: "Operator slug (its key is the DATA_KEY secret)"
+        default: derech-egged
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - name: Live day files from main
+        env:
+          SLUG: ${{ inputs.operator }}
+        run: |
+          set -eu
+          [[ "$SLUG" =~ ^[a-z0-9-]+$ ]] || { echo "bad operator slug"; exit 1; }
+          git checkout origin/main -- "data/$SLUG"
+          ls "data/$SLUG" | head -20
+
+      - id: osrmkey
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore OSRM bus-strict graph
+        id: cstrict
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/osrm/bus-strict
+          key: osrm-bus-strict-v26.10.0-${{ steps.osrmkey.outputs.week }}-${{ hashFiles('pipeline/osrm/profiles/*.lua') }}
+
+      - name: Restore OSRM bus-relaxed graph
+        id: crelaxed
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/osrm/bus-relaxed
+          key: osrm-bus-relaxed-v26.10.0-${{ steps.osrmkey.outputs.week }}-${{ hashFiles('pipeline/osrm/profiles/*.lua') }}
+
+      - name: Start OSRM bus-strict (5000)
+        id: strict
+        run: bash pipeline/osrm/serve.sh ~/osrm/bus-strict bus-strict 5000
+
+      - name: Start OSRM bus-relaxed (5001)
+        id: relaxed
+        run: bash pipeline/osrm/serve.sh ~/osrm/bus-relaxed bus-relaxed 5001
+
+      - name: Save OSRM bus-strict graph
+        if: steps.strict.outputs.osrm == 'ok' && steps.cstrict.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/osrm/bus-strict
+          key: osrm-bus-strict-v26.10.0-${{ steps.osrmkey.outputs.week }}-${{ hashFiles('pipeline/osrm/profiles/*.lua') }}
+
+      - name: Save OSRM bus-relaxed graph
+        if: steps.relaxed.outputs.osrm == 'ok' && steps.crelaxed.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/osrm/bus-relaxed
+          key: osrm-bus-relaxed-v26.10.0-${{ steps.osrmkey.outputs.week }}-${{ hashFiles('pipeline/osrm/profiles/*.lua') }}
+
+      - name: Route every unique leg (encrypted output)
+        env:
+          DATA_KEY: ${{ secrets.DATA_KEY }}   # derech-egged (pipeline/operators.json)
+          SLUG: ${{ inputs.operator }}
+          OK: ${{ steps.strict.outputs.osrm == 'ok' && steps.relaxed.outputs.osrm == 'ok' }}
+        run: |
+          set -eu
+          [ "$OK" = "true" ] || { echo "our OSRM servers are not up"; exit 1; }
+          [ -n "$DATA_KEY" ] || { echo "key secret missing"; exit 1; }
+          KF="$RUNNER_TEMP/data_key"; (umask 077; printf '%s' "$DATA_KEY" > "$KF")
+          mkdir -p "$RUNNER_TEMP/out"
+          node pipeline/osrm/compare.js "$KF" "data/$SLUG" "$RUNNER_TEMP/out/bus-compare.js"
+          rm -f "$KF"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bus-compare
+          path: ${{ runner.temp }}/out/bus-compare.js
+          retention-days: 3
