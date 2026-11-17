@@ -1,0 +1,61 @@
+name: bus-pending-impact
+
+# What-if for David's review (17.11): the bus-strict graph with the 61 PENDING blockers of pipeline/osrm/pending_exceptions.csv
+# added as exceptions on the runner only (the committed bus_exceptions.csv and the nightly graph are untouched; no cache is
+# saved). Routes every unique empty leg of the live day files with that graph, bus only, and uploads the result encrypted
+# with the operator key (artifact bus-pending-impact, 3 days). Compared locally against bus-compare to see which pending
+# blocker changes which of our pairs.
+on:
+  push:
+    branches: [bus-osrm]
+    paths: [".github/workflows/bus-pending-impact.yml", "pipeline/osrm/pending_exceptions.csv"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  whatif:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - name: Live day files from main
+        run: git checkout origin/main -- data/derech-egged
+
+      - name: Add the pending rows (runner copy only)
+        run: |
+          grep -v '^#' pipeline/osrm/pending_exceptions.csv >> pipeline/osrm/local/bus_exceptions.csv
+          grep -vc '^#' pipeline/osrm/local/bus_exceptions.csv
+
+      - name: Build and start OSRM bus-strict + pending (5000)
+        id: strict
+        run: bash pipeline/osrm/serve.sh ~/osrm/bus-whatif deadhead-bus-strict 5000
+
+      - name: Route every unique leg (encrypted output)
+        env:
+          DATA_KEY: ${{ secrets.DATA_KEY }}
+          OK: ${{ steps.strict.outputs.osrm == 'ok' }}
+          ONLY_STRICT: "1"
+        run: |
+          set -eu
+          [ "$OK" = "true" ] || { echo "OSRM is not up"; exit 1; }
+          [ -n "$DATA_KEY" ] || { echo "key secret missing"; exit 1; }
+          KF="$RUNNER_TEMP/data_key"; (umask 077; printf '%s' "$DATA_KEY" > "$KF")
+          mkdir -p "$RUNNER_TEMP/out"
+          node pipeline/osrm/compare.js "$KF" data/derech-egged "$RUNNER_TEMP/out/bus-compare.js"
+          rm -f "$KF"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bus-pending-impact
+          path: ${{ runner.temp }}/out/bus-compare.js
+          retention-days: 3

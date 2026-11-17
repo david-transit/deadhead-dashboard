@@ -1,0 +1,64 @@
+# NOT APPROVED. The 61 blockers awaiting David's review (scan 17.11), for the what-if run only
+# (.github/workflows/bus-pending-impact.yml appends them to the runner's copy of local/bus_exceptions.csv; the bus graph
+# the nightly uses never reads this file). type,id,ignore,reason,approved_by,date
+way,31650635,maxheight,"what-if: maxheight=3.75",pending,2026-11-17
+way,44376249,maxheight,"what-if: maxheight=2.9",pending,2026-11-17
+way,58078797,maxheight,"what-if: maxheight=2.5",pending,2026-11-17
+way,92335923,maxweight,"what-if: maxweight=4",pending,2026-11-17
+way,96840590,maxheight,"what-if: maxheight=2",pending,2026-11-17
+way,119550264,maxheight,"what-if: maxheight=3.5",pending,2026-11-17
+way,154716334,maxheight,"what-if: maxheight=3.70",pending,2026-11-17
+way,203304771,maxheight,"what-if: maxheight=3.1",pending,2026-11-17
+way,204135830,maxheight,"what-if: maxheight=2.3",pending,2026-11-17
+way,204395743,maxheight,"what-if: maxheight=2.4",pending,2026-11-17
+way,227908305,maxheight,"what-if: maxheight=3.7",pending,2026-11-17
+way,229580548,maxheight,"what-if: maxheight=3.35",pending,2026-11-17
+way,249256803,maxheight,"what-if: maxheight=3.9",pending,2026-11-17
+way,264524096,maxweight,"what-if: maxweight=2.5",pending,2026-11-17
+way,288057422,maxheight,"what-if: maxheight=2.8",pending,2026-11-17
+way,288057451,maxheight,"what-if: maxheight=2.8",pending,2026-11-17
+way,362318588,maxheight,"what-if: maxheight=2.8",pending,2026-11-17
+way,364646190,maxheight,"what-if: maxheight=3.5",pending,2026-11-17
+way,364991713,maxheight,"what-if: maxheight=2.15",pending,2026-11-17
+way,374722882,maxheight,"what-if: maxheight=2.2",pending,2026-11-17
+way,398991152,maxheight,"what-if: maxheight=3.5",pending,2026-11-17
+way,407466009,maxheight,"what-if: maxheight=3.8",pending,2026-11-17
+way,407466010,maxheight,"what-if: maxheight=3.8",pending,2026-11-17
+way,499042702,maxheight,"what-if: maxheight=3.7",pending,2026-11-17
+way,693173063,maxheight,"what-if: maxheight=2.15",pending,2026-11-17
+way,706138675,width,"what-if: width=2",pending,2026-11-17
+way,1011908330,maxheight,"what-if: maxheight=3",pending,2026-11-17
+way,1020354313,maxheight,"what-if: maxheight=3.5",pending,2026-11-17
+way,1426343442,maxheight,"what-if: maxheight=2.2",pending,2026-11-17
+node,352937814,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,352938032,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,412270806,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,1101781791,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,1453684698,barrier,"what-if: barrier=spikes",pending,2026-11-17
+node,1783625046,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,1910253879,barrier,"what-if: maxheight=3.35",pending,2026-11-17
+node,2065511822,barrier,"what-if: maxheight=1.75",pending,2026-11-17
+node,2196338933,barrier,"what-if: motor_vehicle=no barrier=lift_gate",pending,2026-11-17
+node,2903988215,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,4089921570,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,4189410612,barrier,"what-if: barrier=spikes",pending,2026-11-17
+node,4421914074,barrier,"what-if: access=no barrier=lift_gate",pending,2026-11-17
+node,4899057926,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,4902239755,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,5903597521,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,6483808509,barrier,"what-if: barrier=spikes",pending,2026-11-17
+node,6496211525,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,6851161120,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,7099664289,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,7108663944,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,7142677024,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,8935040246,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,10127374880,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,10681774948,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,11129214048,barrier,"what-if: access=no barrier=gate",pending,2026-11-17
+node,11775928956,barrier,"what-if: motor_vehicle=no barrier=yes",pending,2026-11-17
+node,13049605337,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,13059953667,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,13226760283,barrier,"what-if: barrier=spikes",pending,2026-11-17
+node,13825407890,barrier,"what-if: barrier=bollard",pending,2026-11-17
+node,14159115399,barrier,"what-if: barrier=spikes",pending,2026-11-17

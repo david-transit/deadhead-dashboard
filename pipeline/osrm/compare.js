@@ -4,6 +4,7 @@
 //   strict  : our bus-strict OSRM on 127.0.0.1:5000 through assets/route.js smart() (exactly what the nightly would do)
 //   relaxed : our bus-relaxed OSRM on 127.0.0.1:5001, plain route (ways the strict profile blocks are marked "dimlimit")
 //   car     : the public car OSRM, plain route (no snapping check), for reference
+// ONLY_STRICT=1: strict only (what-if graph of bus-pending-impact.yml).
 // (OSM node ids of each route where they differ, annotations=nodes) and writes the result ENCRYPTED with the operator key (same format as a day file, name "bus-compare"); the repository
 // is public, so nothing in plaintext leaves the runner. Decrypt locally: node pipeline/decrypt.js <key> <out.js>.
 const fs = require("fs"), path = require("path");
@@ -61,6 +62,7 @@ const plain = async (base, a, b, curb, gap) => {
         p.bus = Object.assign(r, { geo: await plain(STRICT, A, B, r.fix === "curb", 0) });
       } else p.bus = null;
     } catch (e) { p.bus = { err: String(e.message || e) }; }
+    if (process.env.ONLY_STRICT) continue;   // what-if runs (bus-pending-impact.yml): our bus route only
     p.relaxed = await plain(RELAXED, p.a, p.b, false, 0);
     p.strict_plain = await plain(STRICT, p.a, p.b, false, 0);
     p.car = await plain(PUBLIC, p.a, p.b, false, 150);
