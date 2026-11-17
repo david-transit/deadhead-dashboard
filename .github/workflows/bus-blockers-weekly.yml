@@ -32,7 +32,7 @@ jobs:
       - run: pip install osmium==4.3.2
 
       - name: Israel extract (Geofabrik)
-        run: curl -fsSL --retry 3 -o "$RUNNER_TEMP/israel.osm.pbf" https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf
+        run: curl -fsSL --retry 6 --retry-all-errors --retry-delay 30 -o "$RUNNER_TEMP/israel.osm.pbf" https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf
 
       - name: Last 3 weekdays (Sun-Thu)
         id: days
