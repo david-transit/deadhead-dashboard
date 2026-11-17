@@ -14,7 +14,8 @@
 //                      reset_password, reset_mfa, set_disabled, delete
 //   platform admin = every user except himself (own password: change_password); operator admin = viewers and editors
 //   whose access is only in operators he administers (never another admin). At least one active platform admin remains.
-// MFA: a user with a verified TOTP factor must call with an aal2 session (except recovery_set_password).
+// MFA (step-up, 2026-11-18): sign-in is password-only and data RLS no longer asks for aal2. Here: the control room and
+// own recovery settings always need aal2; change_password / remove_my_mfa need aal2 when the user has a verified factor.
 // Passwords: only this function can set one (DB trigger on auth.users needs a one-shot permit, allow_pw_change).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
@@ -275,7 +276,8 @@ Deno.serve(async (req) => {
     // ---------- platform admin: own recovery settings ----------
     if (["my_security", "set_recovery_email", "gen_recovery_codes"].includes(String(b.action))) {
       if (!myProf || myProf.must_change_password || !(await isPlatformId(uid))) throw new Fail("not_allowed", 403);
-      await needMfa();
+      // step-up model (2026-11-18): sign-in is password-only, so own recovery settings always need an aal2 session
+      if (claims.aal !== "aal2") throw new Fail("mfa_enroll_required", 403);
       if (b.action === "my_security") {
         const [{ data: em }, { data: left }] = await Promise.all([admin.rpc("recovery_email_get", { p_user: uid }), admin.rpc("recovery_codes_left", { p_user: uid })]);
         return out({ ok: true, recovery_email: em || null, codes_left: left || 0 });
