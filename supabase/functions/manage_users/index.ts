@@ -10,7 +10,8 @@
 //                      remove_my_mfa
 // Platform admin:      my_security, set_recovery_email, gen_recovery_codes (both need the current password)
 // Control room:        list, create (role "platform" = platform admin, platform admins only), set_membership,
-//                      remove_membership, set_platform, reset_password, reset_mfa, set_disabled, delete
+//                      remove_membership, set_platform, set_name (display name; own or a manageable user),
+//                      reset_password, reset_mfa, set_disabled, delete
 //   platform admin = every user except himself (own password: change_password); operator admin = viewers and editors
 //   whose access is only in operators he administers (never another admin). At least one active platform admin remains.
 // MFA: a user with a verified TOTP factor must call with an aal2 session (except recovery_set_password).
@@ -402,6 +403,15 @@ Deno.serve(async (req) => {
         if (on) await admin.from("platform_admins").upsert({ user_id: t }, { onConflict: "user_id" }).throwOnError();
         else { await keepOnePlatform(t); await admin.from("platform_admins").delete().eq("user_id", t).throwOnError(); }
         await logEvent(uid, myProf.username, on ? "platform_admin_granted" : "platform_admin_revoked", { user: t });
+        return out({ ok: true });
+      }
+
+      case "set_name": { // display name: same rule as the other user actions (no RLS update policy on profiles; only this service-role path writes)
+        const name = cleanName(b.display_name);
+        if (!name) throw new Fail("bad_input");
+        const t = String(b.user_id || "") === uid ? uid : await needTarget();
+        await admin.from("profiles").update({ display_name: name }).eq("user_id", t).throwOnError();
+        await logEvent(uid, myProf.username, "display_name_changed", { user: t });
         return out({ ok: true });
       }
 
