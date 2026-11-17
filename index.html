@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="יאללה־סע">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link href="assets/fonts/fonts.css?v=2026-11-17.38" rel="stylesheet">
+<link href="assets/fonts/fonts.css?v=2026-11-18.39" rel="stylesheet">
 <style>
 :root{--gold:#B8860B;--char:#4A5059;--blue:#1F6FEB;--dim:#D9DDE2;--bg:#F5F6F8;--card:#fff;--line:#E3E6EB;--text:#1d2330;--muted:#6b7280;--svc:#1F4E9A;--empty:#E8871E;--depot:#5B3A8C;--rein:#2E8B57;--sel:#E8F0FC;--warn:#C62828;--ok:#2E9E4F}
 *{box-sizing:border-box}
@@ -122,7 +122,7 @@ body.dense .row .lab .fuelb{display:none}
 .findpop{position:fixed;inset-block-start:64px;inset-inline-end:auto;inset-inline-start:auto;left:16px;margin:0;width:min(640px,96vw);max-height:calc(100vh - 90px);box-shadow:0 12px 32px rgba(20,25,35,.22);z-index:40}
 .findpop .dlg-b{max-height:calc(100vh - 170px)}
 @media (max-width:768px){.findpop{inset:0;left:0;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;border-radius:0;box-shadow:none}
-  .findpop .dlg-b{max-height:calc(100dvh - 60px)}.findpop .inv{flex-wrap:wrap}.fdrow{grid-template-columns:78px 40px 1fr;font-size:13px}
+  .findpop .dlg-b{max-height:calc(100dvh - 60px)}.findpop .inv{flex-wrap:wrap}.findpop .fdday{flex-basis:100%}.findpop .fdday select{width:100%;min-height:44px;font-size:16px}.fdrow{grid-template-columns:78px 40px 1fr;font-size:13px}
   .fdrow>span:nth-child(4){grid-column:1/-1;text-align:right!important}}
 .fdonly{display:flex;gap:6px;align-items:center;font-size:13px;margin:2px 0 6px}
 .fdrow{display:grid;grid-template-columns:96px 52px 1fr 92px;gap:8px;align-items:center;width:100%;text-align:right;border:0;border-bottom:1px solid #EEF0F3;background:none;padding:7px 6px;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
@@ -265,7 +265,7 @@ body.locked>.legend{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 @media (max-width:900px){body{height:auto}.legend{position:sticky;bottom:0}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
 </style>
-<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-17.38">
+<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-18.39">
 </head>
 <body class="locked">
 <div id="gate" class="intro">
@@ -415,6 +415,7 @@ body.locked>.legend{visibility:hidden}
   <div class="dlg-h"><h3 id="fdTitle">חיפוש נסיעה</h3><button class="btn small" id="fdClose">סגירה</button></div>
   <div class="dlg-b">
     <div class="inv">
+      <div class="field fdday"><label for="fdDay">תאריך</label><select id="fdDay"></select></div>
       <div class="field"><label for="fdLine">קו</label><input id="fdLine" list="fdLines" dir="ltr" style="width:84px" autocomplete="off"><datalist id="fdLines"></datalist></div>
       <div class="field"><label for="fdDir">כיוון</label><select id="fdDir" style="max-width:300px"></select></div>
       <div class="field"><label for="fdTime">שעת יציאה</label><input id="fdTime" dir="ltr" placeholder="16:00" style="width:74px" autocomplete="off"></div>
@@ -455,11 +456,11 @@ body.locked>.legend{visibility:hidden}
   <div class="dlg-f" id="setFoot"><button class="btn primary" id="setSave">החלה</button><span class="msg" id="setMsg" aria-live="polite"></span></div>
 </dialog>
 
-<script src="assets/logo.js?v=2026-11-17.38"></script>
-<script src="assets/core.js?v=2026-11-17.38"></script>
-<script src="assets/route.js?v=2026-11-17.38"></script>
-<script src="assets/map.js?v=2026-11-17.38"></script>
-<script src="assets/app.js?v=2026-11-17.38"></script>
-<script src="mobile/mobile.js?v=2026-11-17.38"></script>
+<script src="assets/logo.js?v=2026-11-18.39"></script>
+<script src="assets/core.js?v=2026-11-18.39"></script>
+<script src="assets/route.js?v=2026-11-18.39"></script>
+<script src="assets/map.js?v=2026-11-18.39"></script>
+<script src="assets/app.js?v=2026-11-18.39"></script>
+<script src="mobile/mobile.js?v=2026-11-18.39"></script>
 </body>
 </html>

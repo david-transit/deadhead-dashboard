@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-17.38";
+const APP_VER="2026-11-18.39";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -10,15 +10,17 @@ const SB="https://xghfcdgettrcdciwwzbl.supabase.co", KEY="sb_publishable_hCBsqYe
 const SITE=location.origin+location.pathname, SKEY="ys_session";
 const lsGet=k=>{try{return localStorage.getItem(k)}catch{return null}}, lsSet=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch{}};
 let SES=null; try{SES=JSON.parse(lsGet(SKEY)||"null")}catch{}
-// idle timeout (M5): no click / key / scroll for IDLE_MIN minutes (in any tab) ends the session; with unsaved drafts, twice that
-const IDLE_MIN=30, ACT="ys_act", lastAct=()=>+lsGet(ACT)||0;
+// idle timeout (M5): no click / key / scroll for 30 minutes (in any tab) ends the session; with unsaved drafts, twice that.
+// A device the user marked as personal at the portal sign-in (ys_trust = expiry, 12 hours) gets 12 hours instead (David, 2026-11-18).
+const ACT="ys_act", TRUST="ys_trust", lastAct=()=>+lsGet(ACT)||0;
+const idleMs=()=>((+lsGet(TRUST)||0)>Date.now()?720:30)*6e4;
 const touchAct=()=>{const n=Date.now();if(n-lastAct()>20000) lsSet(ACT,String(n))};
-if(SES&&Date.now()-lastAct()>IDLE_MIN*6e4){const old=SES;SES=null;lsSet(SKEY,null); // revoke the stale session on the server too
+if(SES&&Date.now()-lastAct()>idleMs()){const old=SES;SES=null;lsSet(SKEY,null); // revoke the stale session on the server too
   fetch(SB+"/auth/v1/token?grant_type=refresh_token",{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json"},body:JSON.stringify({refresh_token:old.refresh_token})})
     .then(r=>r.ok?r.json():null).then(j=>j&&fetch(SB+"/auth/v1/logout",{method:"POST",headers:{apikey:KEY,Authorization:"Bearer "+j.access_token}})).catch(()=>{})}
 ["pointerdown","keydown","wheel","touchstart"].forEach(t=>addEventListener(t,touchAct,{passive:true,capture:true}));
 setInterval(async()=>{if(!SES) return;const idle=Date.now()-lastAct(),drafts=typeof nDraft==="function"&&nDraft()>0;
-  if(idle>IDLE_MIN*6e4*(drafts?2:1)){try{await authPost("logout",{},SES.access_token)}catch{} setSes(null);location.replace(location.pathname)}},60000);
+  if(idle>idleMs()*(drafts?2:1)){try{await authPost("logout",{},SES.access_token)}catch{} setSes(null);location.replace(location.pathname)}},60000);
 function setSes(j){SES=j?{access_token:j.access_token,refresh_token:j.refresh_token,expires_at:+j.expires_at||Math.floor(Date.now()/1000)+(+j.expires_in||3600),user:j.user||null}:null;
   lsSet(SKEY,SES?JSON.stringify(SES):null)}
 async function http(url,opt={},ms=15000){const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),ms);
@@ -247,6 +249,7 @@ async function initDays(){
   const m=(window.OPDAYS||{})[OP.slug]||{days:[]}; days=(m.days||[]).slice().sort(); DAYVER=m.ver||{}; ENDSVER=m.ends||{}; DAY_START_H=m.day_start_hour??4;
   const now=new Date(Date.now()-new Date().getTimezoneOffset()*6e4-DAY_START_H*36e5); today=ymd(now); yest=ymd(new Date(now-864e5));
   $("#day").innerHTML=days.map(d=>`<option value="${d}">${d.split("-").reverse().join(".")}</option>`).join("");
+  $("#fdDay").innerHTML=days.map(d=>`<option value="${d}">${fdDayTxt(d)}</option>`).join("");
   $("#bToday").disabled=!days.includes(today); $("#bYest").disabled=!days.includes(yest);
   $("#bToday").title=days.includes(today)?"":"אין עדיין נתונים להיום"; $("#bYest").title=days.includes(yest)?"":"אין נתונים לאתמול";
 }
@@ -270,7 +273,7 @@ async function decryptEnc(e){const iv=b64(e.iv),ct=b64(e.ct); // files carry the
   throw new Error("decrypt")}
 const decryptDay=day=>decryptEnc(window.ENC_DAY[day]);
 function loadDay(day,after){
-  $("#day").value=day; $("#bToday").classList.toggle("on",day===today); $("#bYest").classList.toggle("on",day===yest);
+  $("#day").value=day; $("#fdDay").value=day; $("#bToday").classList.toggle("on",day===today); $("#bYest").classList.toggle("on",day===yest);
   const go=async()=>{window.DAY_DATA=window.DAY_DATA||{};try{if(!window.DAY_DATA[day]) window.DAY_DATA[day]=await decryptDay(day)}catch(e){$("#gantt").innerHTML='<div class="empty-state">לא ניתן לפענח את נתוני היום הזה</div>';return}
     D=effDay(day);{const q=$("#q").value.trim();if(knownVeh(q)) sel=q}
     loadEditedNeighbours(day); if($("#dlgFind").open){const l=$("#fdLine").value;fillDirs();$("#fdLine").value=l;setTimeout(drawFind,0)}
@@ -1248,7 +1251,11 @@ function lineOk(v){if(!LINEF) return true;const dirs=dirsOf(LINEF.line);
   return v.items.some(i=>i.kind==="trip"&&String(i.line)===LINEF.line&&(LINEF.dir<0||dirOfTrip(i,dirs)===LINEF.dir))}
 function drawLineF(){const b=$("#bLineF");b.hidden=!LINEF;if(LINEF){const r=dirsOf(LINEF.line)[LINEF.dir];b.textContent=`קו ${LINEF.line}${r?` · ${r.frm.split(",")[0]} ←`:""} ✕`}}
 $("#bLineF").onclick=()=>{LINEF=null;$("#fdOnly").checked=false;drawLineF();render()};
-function openFind(line,focus){const d=$("#dlgFind");
+// the search works on one day: shown (and changed) at the top of the search, also on the phone
+const WDAY=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+const fdDayTxt=d=>`יום ${WDAY[new Date(d+"T12:00:00").getDay()]} ${d.split("-").reverse().join(".")}${d===today?" (היום)":d===yest?" (אתמול)":""}`;
+$("#fdDay").onchange=e=>loadDay(e.target.value);
+function openFind(line,focus){const d=$("#dlgFind");if(D) $("#fdDay").value=D.day;
   $("#fdLines").innerHTML=dayLines().map(l=>`<option value="${esc(l)}">`).join("");
   if(line!=null&&$("#fdLine").value!==line){$("#fdLine").value=line;fillDirs()}
   if(!d.open) d.show(); drawFind(); if(focus) ($("#fdLine").value?$("#fdTime"):$("#fdLine")).focus()}
@@ -1336,7 +1343,8 @@ async function meOpen(view){menuOpen(false);
   if(view==="sec"){$("#meBody").innerHTML='<div class="empty-state">טוען…</div>';$("#dlgMe").showModal();
     try{meDraw("sec",await fnCall({action:"my_security"}))}catch(e){$("#meBody").innerHTML=`<p class="msg err">${esc(errText(e))}</p>`}}
   else{meDraw("pw");$("#dlgMe").showModal();$("#mePw0").focus()}}
-meMenu.addEventListener("click",e=>{const v=e.target.dataset.me;if(v) meOpen(v);else if(e.target.id==="bCtl"||e.target.id==="bEdit") menuOpen(false)});
+meMenu.addEventListener("click",e=>{const v=e.target.dataset.me;if(v){menuOpen(false);location.assign("/?panel=sec")} // the code (aal2) is asked there, not here
+  else if(e.target.id==="bCtl"||e.target.id==="bEdit") menuOpen(false)});
 $("#meClose").onclick=()=>$("#dlgMe").close();
 let MECODES=null;
 $("#meBody").addEventListener("submit",async e=>{e.preventDefault();
@@ -1389,9 +1397,9 @@ const isAdminAny=()=>PLATFORM||(MS||[]).some(m=>m.role==="admin"); // any admin 
 async function unlock(){
   await loadAccess();
   const fs=await myFactors(), ver=fs.filter(f=>f.status==="verified");
-  if(ver.length&&aal()!=="aal2"){MFAF=ver[0].id;gateMode("mfa");return false}
-  if(PROFILE&&PROFILE.must_change_password){gateMode("changepw");return false}
-  if(isAdminAny()&&!ver.length){gateMode("mfa_enroll");return false}
+  // step-up (David, 2026-11-18): no code at sign-in; the portal's control panel asks for it (manage_users enforces aal2).
+  // A forced password change goes through manage_users, which wants the code when the account has a factor.
+  if(PROFILE&&PROFILE.must_change_password){if(ver.length&&aal()!=="aal2"){MFAF=ver[0].id;gateMode("mfa");return false} gateMode("changepw");return false}
   if(!OP){gateMode("noaccess");return false}
   const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k||!k.keys||!Object.keys(k.keys).length) throw new Error("no_key");
   CKEYS={};for(const [kid,v] of Object.entries(k.keys)) CKEYS[kid]=await crypto.subtle.importKey("raw",b64(v),"AES-GCM",false,["decrypt"]);
@@ -1456,7 +1464,7 @@ function gateMode(m,{msg="",err=""}={}){
   const gm=$("#gateMsg"); gm.className="msg"+(err?" err":msg?" ok":""); gm.textContent=err||msg; $("#gateWarn").textContent=""; fitGate();
   if(introOver) {showForm();(F.querySelector("input:not([hidden])")||B).focus()}
 }
-const signOut=async()=>{try{await authPost("logout",{},SES&&SES.access_token)}catch{} setSes(null);LASTPW=null};
+const signOut=async()=>{try{await authPost("logout",{},SES&&SES.access_token)}catch{} setSes(null);lsSet(TRUST,null);LASTPW=null};
 // username: trimmed + lower-case. An account with a recovery email has a real Auth email: manage_users signs it in.
 const signIn=async(user,pw)=>{user=String(user||"").trim().toLowerCase();
   try{setSes(await authPost("token?grant_type=password",{email:user+"@"+DOMAIN,password:pw}))}
