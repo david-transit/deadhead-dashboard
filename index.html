@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="יאללה־סע">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link href="assets/fonts/fonts.css?v=2026-11-17.37" rel="stylesheet">
+<link href="assets/fonts/fonts.css?v=2026-11-17.38" rel="stylesheet">
 <style>
 :root{--gold:#B8860B;--char:#4A5059;--blue:#1F6FEB;--dim:#D9DDE2;--bg:#F5F6F8;--card:#fff;--line:#E3E6EB;--text:#1d2330;--muted:#6b7280;--svc:#1F4E9A;--empty:#E8871E;--depot:#5B3A8C;--rein:#2E8B57;--sel:#E8F0FC;--warn:#C62828;--ok:#2E9E4F}
 *{box-sizing:border-box}
@@ -172,6 +172,7 @@ body.dense .row .lab .fuelb{display:none}
 .vehnav .sp{flex:1}
 .vehdlg #side{flex:1;min-height:0;border:0;border-radius:0;overflow:auto}
 .vehdlg #side>h2{display:none}
+.rwg.rwback{outline:3px solid var(--blue);outline-offset:2px;border-radius:8px;transition:outline-color .4s}
 .legdlg{max-width:min(620px,96vw)}.legdlg .field{margin-top:10px}.legdlg select{width:100%;max-width:100%}
 .vehft{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 16px;border-top:1px solid var(--line)}
 .vehft:has(#vehSave[hidden]):has(#vehSaveMsg:empty){display:none}
@@ -264,7 +265,7 @@ body.locked>.legend{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 @media (max-width:900px){body{height:auto}.legend{position:sticky;bottom:0}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
 </style>
-<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-17.37">
+<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-17.38">
 </head>
 <body class="locked">
 <div id="gate" class="intro">
@@ -454,11 +455,11 @@ body.locked>.legend{visibility:hidden}
   <div class="dlg-f" id="setFoot"><button class="btn primary" id="setSave">החלה</button><span class="msg" id="setMsg" aria-live="polite"></span></div>
 </dialog>
 
-<script src="assets/logo.js?v=2026-11-17.37"></script>
-<script src="assets/core.js?v=2026-11-17.37"></script>
-<script src="assets/route.js?v=2026-11-17.37"></script>
-<script src="assets/map.js?v=2026-11-17.37"></script>
-<script src="assets/app.js?v=2026-11-17.37"></script>
-<script src="mobile/mobile.js?v=2026-11-17.37"></script>
+<script src="assets/logo.js?v=2026-11-17.38"></script>
+<script src="assets/core.js?v=2026-11-17.38"></script>
+<script src="assets/route.js?v=2026-11-17.38"></script>
+<script src="assets/map.js?v=2026-11-17.38"></script>
+<script src="assets/app.js?v=2026-11-17.38"></script>
+<script src="mobile/mobile.js?v=2026-11-17.38"></script>
 </body>
 </html>

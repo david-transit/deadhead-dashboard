@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-17.37";
+const APP_VER="2026-11-17.38";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -539,10 +539,17 @@ document.addEventListener("click",e=>{if(e.target.closest("[data-rwopen]")) open
 function rwDlg(){let d=$("#dlgRw");if(d) return d;d=document.createElement("dialog");d.id="dlgRw";d.className="rwdlg";d.setAttribute("aria-labelledby","rwT");
   d.innerHTML=`<div class="maphd"><h3 id="rwT">בעיות מסלול</h3><button type="button" class="btn small" data-rwclose>✕ סגירה</button></div><p class="hint">נסיעות ריקות שלא נכנסות בזמן, עם עיקוף גדול (כביש פי 2.5 מקו אווירי ויותר מ־4 ק״מ) או מסלול חשוד. כל שורה היא זוג מוצא ← יעד. "שלח לבדיקה", "הערה" ו"מסלול תקין" נשמרים כטיוטה ונשלחים ב"שמירה". "מסלול תקין" מסתיר את העיקוף / המסלול החשוד של הזוג בכל הימים (לא את "לא נכנס בזמן").</p><div id="rwList"></div>`;
   document.body.appendChild(d);d.addEventListener("click",rwClick);return d}
+// back from the block opened by "הצג סידור": the same warning, scrolled into view, focus on the button it was opened from
+// (if the warning is gone, e.g. the leg was fixed: the warning now in its place, or the list's top)
+function backToWarning(gk,idx,veh,start){openRouteList();const L=$("#rwList");
+  const sec=[...L.querySelectorAll(".rwg")].find(x=>x.dataset.rgk===gk)||L.querySelectorAll(".rwg")[Math.min(idx,L.querySelectorAll(".rwg").length-1)];if(!sec) return;
+  const b=sec.dataset.rgk===gk&&[...sec.querySelectorAll("[data-rgv]")].find(x=>x.dataset.rgv===veh&&x.dataset.rgs===String(start));
+  sec.scrollIntoView({block:"center"});(b||sec).focus({preventScroll:true});
+  L.querySelectorAll(".rwg.rwback").forEach(x=>x.classList.remove("rwback"));sec.classList.add("rwback");setTimeout(()=>sec.classList.remove("rwback"),2500)}
 function openRouteList(){const d=rwDlg();drawRouteList();if(!d.open) d.showModal();d.querySelector("[data-rwclose]").focus()}
 function drawRouteList(){const box=$("#rwList");if(!box) return;
   box.innerHTML=RP.length?RP.map((g,n)=>{const k=rpKey(g),dr=DRAFT.reports[k],frees=g.legs.map(x=>x.end-x.start);
-    return `<section class="rwg" data-rg="${n}"><h4>${esc(g.frm)} ← ${esc(g.to)}</h4>
+    return `<section class="rwg" data-rg="${n}" data-rgk="${esc(g.k)}" tabindex="-1" aria-label="${esc(g.frm)} ← ${esc(g.to)}"><h4>${esc(g.frm)} ← ${esc(g.to)}</h4>
       <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span><span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
       <div class="rwveh" role="group" aria-label="הצג סידור">${g.legs.map(x=>`<button type="button" class="btn small" data-rgv="${esc(x.veh)}" data-rgs="${x.start}" aria-label="הצג סידור של רכב ${esc(x.veh)}, הנסיעה הריקה של ${fmt(x.start)}">הצג סידור · ${esc(x.veh)} · ${fmt(x.start)}</button>`).join("")}</div>
       <div class="rwact"><button type="button" class="btn small" data-rgmap="${n}">הצג על מפה</button>${canEdit()?`<button type="button" class="btn small" data-rgvia="${n}">הצע נקודת מעבר</button><button type="button" class="btn small" data-rgnote="${n}">הערה</button><button type="button" class="btn small primary" data-rgsend="${n}" ${dr||RSENT[k]?"disabled":""}>${RSENT[k]?"נשלח לבדיקה":dr?"בטיוטה":"שלח לבדיקה"}</button>${g.kinds.has("detour")||g.kinds.has("route")||g.kinds.has("okchg")?`<button type="button" class="btn small" data-rgok="${n}">מסלול תקין</button>`:""}`:""}</div>
@@ -569,7 +576,8 @@ async function rwClick(e){const t=e.target,d=$("#dlgRw");
   if(t.dataset.rokdel!=null){const k=t.dataset.rokdel;rokSet(k,DRAFT.rok[k]===null||(DRAFT.rok[k]&&!ROK.some(r=>rokRowKey(r)===k))?undefined:null);$("#rwList [data-rokshow]")?.focus();return}
   const n=t.dataset.rgmap??t.dataset.rgvia??t.dataset.rgnote??t.dataset.rgsend??t.dataset.rgnoteok??t.dataset.rgok??t.dataset.rgokok;const g=n!=null?RP[+n]:null;
   if(t.dataset.rgv){d.close();if(!(await selectVehicle(t.dataset.rgv))){openRouteList();return}
-    HLE={veh:t.dataset.rgv,day:D.day,start:+t.dataset.rgs};openVehDlg(null,{back:openRouteList});return}
+    const gk=t.closest(".rwg")?.dataset.rgk,idx=+(t.closest(".rwg")?.dataset.rg||0),rv=t.dataset.rgv,rs=t.dataset.rgs;
+    HLE={veh:rv,day:D.day,start:+rs};openVehDlg(null,{back:()=>backToWarning(gk,idx,rv,rs)});return}
   if(!g) return;
   if(t.dataset.rgmap!=null){d.close();const x=g.legs[0];legMap({a:g.a,b:g.b,km:g.km,min:g.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:`בעיית מסלול: ${g.legs.length} נסיעות`,back:openRouteList})}
   else if(t.dataset.rgnote!=null){const w=t.closest(".rwg").querySelector(".rwnote");w.hidden=!w.hidden;if(!w.hidden) w.querySelector("textarea").focus()}
