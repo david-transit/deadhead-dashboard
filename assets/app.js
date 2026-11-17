@@ -1132,7 +1132,7 @@ async function drawCtl(){
       <td>${u.manageable&&PLATFORM?`<button class="btn small" data-plat="${u.platform?0:1}">${u.platform?"הסרת מנהל מערכת":"הפיכה למנהל מערכת"}</button> `:""}${u.manageable?`<button class="btn small" data-reset>סיסמה זמנית</button> ${u.mfa?`<button class="btn small" data-mfar>איפוס אימות דו־שלבי</button> `:""}<button class="btn small" data-dis="${u.disabled?0:1}">${u.disabled?"הפעלה":"השבתה"}</button> <button class="btn small danger" data-delu>מחיקה</button><div data-resetbox></div>`:""}</td></tr>`).join("")+
     `</tbody></table>
     <h4>משתמש חדש</h4>
-    <form class="inv" id="ctlNew" autocomplete="off">
+    <form class="inv" id="ctlNew" autocomplete="off" novalidate>
       <div class="field"><label for="nOp">גישה ל־</label><select id="nOp">${PLATFORM?'<option value="platform">מנהל מערכת (כל המפעילים)</option>':""}${AO.map(o=>`<option value="${esc(o.id)}" ${o.id===OP.id?"selected":""}>${esc(o.name)}</option>`).join("")}</select></div>
       <div class="field"><label for="nUser">שם משתמש (אנגלית/ספרות)</label><input id="nUser" dir="ltr" required pattern="[A-Za-z0-9._\\-]{3,32}" style="width:170px" autocomplete="off"></div>
       <div class="field"><label for="nName">שם לתצוגה</label><input id="nName" style="width:170px"></div>
