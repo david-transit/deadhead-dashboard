@@ -74,6 +74,9 @@
     }
     const ll = p => `${(+p[1]).toFixed(6)},${(+p[0]).toFixed(6)}`;
     const route = (a, b, curb) => get(`${BASE}/route/v1/driving/${ll(a)};${ll(b)}?overview=false&steps=true${curb ? "&approaches=curb;curb" : ""}`);
+    // in the bus's direction of travel: h = [heading at a | null, heading at b | null] (degrees), tol (deg), rad (m)
+    const routeH = (a, b, h, tol, rad) => get(`${BASE}/route/v1/driving/${ll(a)};${ll(b)}?overview=false&steps=true&bearings=${
+      h.map(x => x == null ? "" : `${Math.round(x)},${tol || 60}`).join(";")}&radiuses=${h.map(x => x == null ? "unlimited" : (rad || 40)).join(";")}`);
     async function candidates(p) { // road points around p (lat,lon): the nearest point of every distinct road first, then the rest
       const all = [], add = w => { const q = [w.location[1], w.location[0]], d = hav(p, q) * 1000;
         if (d <= CAND_M && all.every(o => hav(o.q, q) * 1000 > 10)) all.push({ q, d, n: w.name || "" }); };
@@ -91,6 +94,10 @@
     // a: [lat,lon], b: [lat,lon]; o.terminal: [bool,bool] (the end is a bus terminal / stop)
     async function smart(a, b, o) {
       const term = (o && o.terminal) || [true, true];
+      if (o && o.h && o.h.some(x => x != null)) { // the bus's heading at a raw GPS end: leave/arrive on its carriageway
+        const jh = await routeH(a, b, o.h, o.tol, o.rad);
+        if (jh) { const xh = analyze(jh); if (!xh.why.length && !xh.s.some(m => m > SNAP_M)) return { km: Math.round(xh.km * 100) / 100, min: Math.round(xh.min * 10) / 10, v: V, s: xh.s, hd: o.h }; }
+      }
       const j0 = await route(a, b); if (!j0) return null;
       const x0 = analyze(j0), out = r => ({ km: Math.round(r.km * 100) / 100, min: Math.round(r.min * 10) / 10, v: V, s: r.s });
       if (!suspicious(x0, term)) return out(x0);

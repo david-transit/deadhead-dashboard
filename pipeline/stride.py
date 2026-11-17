@@ -66,7 +66,7 @@ def update_route_ends(rides, cache_file):
     need = {}
     for x in rides:
         k = str(x["gtfs_ride__gtfs_route_id"])
-        if x["gtfs_ride_id"] and k not in ends:
+        if x["gtfs_ride_id"] and (k not in ends or "st" not in ends[k]):  # v2: + stop sequence
             need.setdefault(k, x["gtfs_ride_id"])
     ids = list(need.values())
     print("route ends needed:", len(ids), file=sys.stderr)
@@ -86,7 +86,8 @@ def update_route_ends(rides, cache_file):
             a, b = ss[0], ss[-1]
             ends[str(rid)] = {"o": [a["gtfs_stop__lat"], a["gtfs_stop__lon"], a["gtfs_stop__name"], a["gtfs_stop__city"]],
                               "d": [b["gtfs_stop__lat"], b["gtfs_stop__lon"], b["gtfs_stop__name"], b["gtfs_stop__city"]],
-                              "km": (b["shape_dist_traveled"] or 0) / 1000}
+                              "km": (b["shape_dist_traveled"] or 0) / 1000,
+                              "st": [[s["gtfs_stop__lat"], s["gtfs_stop__lon"], s["shape_dist_traveled"] or 0] for s in ss]}
         print("route ends:", i + 15, "/", len(ids), file=sys.stderr)
         json.dump(ends, open(cache_file, "w", encoding="utf-8"), ensure_ascii=False)
     return ends
@@ -94,16 +95,17 @@ def update_route_ends(rides, cache_file):
 
 def fetch_locations(rides, cache_file):
     """First + last SIRI vehicle location of every ride (actual GPS start/end), batched by id and cached per day.
-    Returns {location_id: [recorded_at_iso, lat, lon, distance_from_journey_start_m]}."""
+    Returns {location_id: [recorded_at_iso, lat, lon, distance_from_journey_start_m, bearing_deg, velocity]}."""
     cache = json.load(open(cache_file, encoding="utf-8")) if os.path.exists(cache_file) else {}
     ids = sorted({str(i) for x in rides for i in (x.get("first_vehicle_location_id"), x.get("last_vehicle_location_id")) if i})
-    need = [i for i in ids if i not in cache]
+    need = [i for i in ids if i not in cache or (cache[i] is not None and len(cache[i]) < 6)]  # v2: + bearing, velocity
     print("vehicle locations:", len(ids), "to fetch:", len(need), file=sys.stderr)
     for k in range(0, len(need), 100):
         part = need[k:k + 100]
         for x in get("/siri_vehicle_locations/list", {"limit": 500, "siri_vehicle_location_ids": ",".join(part)}):
-            cache[str(x["id"])] = [x["recorded_at_time"], x["lat"], x["lon"], x["distance_from_journey_start"]]
+            cache[str(x["id"])] = [x["recorded_at_time"], x["lat"], x["lon"], x["distance_from_journey_start"], x.get("bearing"), x.get("velocity")]
         for i in part:
+            if cache.get(i) is not None and len(cache[i]) < 6: cache[i] = cache[i] + [None, None]  # not returned again
             cache.setdefault(i, None)  # not returned: remember, do not ask again
         if k // 100 % 10 == 9:
             print("locations:", k + 100, "/", len(need), file=sys.stderr)

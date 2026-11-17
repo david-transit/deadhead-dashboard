@@ -44,6 +44,13 @@ PROFILE = os.environ.get("OSRM_PROFILE", "bus-strict") if os.environ.get("OSRM_B
 SNAP = dict(dict(enabled=True, share=0.95, max_km=1.0, before_tol_km=0.0, start_share=0.05, start_max_km=1.0),
             **json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("gps_end_snap", {}))
 if os.environ.get("GPS_END_SNAP") == "0": SNAP["enabled"] = False
+# An empty leg that starts (ends) at a raw GPS point on the road (not a stop) is routed in the bus's direction of travel:
+# the SIRI heading of the last (first) point goes to OSRM as a bearing, so the leg leaves on the carriageway the bus was
+# on (David, 18.11.2026: line 137 lost on Golda Meir southbound was routed from the northbound side, 4.79 km instead of
+# ~1.2). pipeline/config.json "gps_heading"; GPS_HEADING=0 turns it off.
+HEAD = dict(dict(enabled=True, tol_deg=60, radius_m=15, line_m=60),
+            **json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("gps_heading", {}))
+if os.environ.get("GPS_HEADING") == "0": HEAD["enabled"] = False
 IL = (29.0, 34.0, 34.0, 36.5)  # valid GPS (lat/lon box); SIRI sends -1,-1 for "no position"
 
 
@@ -60,26 +67,31 @@ def osrm_router(cache_file):
     cache = json.load(open(cache_file, encoding="utf-8")) if os.path.exists(cache_file) else {}
     miss = [0]; proc = [None]; stat = collections.Counter()
 
-    def ask(p, q, term):
+    def ask(p, q, term, h=(None, None)):
         if proc[0] is None:
             proc[0] = subprocess.Popen(["node", os.path.join(HERE, "route.js")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                        text=True, encoding="utf-8", bufsize=1)
-        proc[0].stdin.write(json.dumps(dict(a=p, b=q, t=term)) + "\n"); proc[0].stdin.flush()
+        req = dict(a=p, b=q, t=term)
+        if h[0] is not None or h[1] is not None: req.update(h=list(h), tol=HEAD["tol_deg"], rad=HEAD["radius_m"])
+        proc[0].stdin.write(json.dumps(req) + "\n"); proc[0].stdin.flush()
         return json.loads(proc[0].stdout.readline() or "null")
 
-    def road(p, q, term=(True, True)):
+    def road(p, q, term=(True, True), h=(None, None)):
         """-> (km, min, meta) ; meta = {s:[snap m], fix?, km0?, via?, u?, ok?, why?} ; (None, None, None) when OSRM failed."""
         if hav(p, q) < 0.05:
             return 0.0, 0.0, None
         k = f"{p[0]:.5f},{p[1]:.5f};{q[0]:.5f},{q[1]:.5f}"  # same rounding as the browser's road_cache key
+        if h[0] is not None or h[1] is not None:  # routed in the bus's direction: its own entry (heading in 10 degree steps)
+            h = tuple(None if x is None else int(round(x / 10.0)) * 10 % 360 for x in h)
+            k += "|h" + ",".join("" if x is None else str(x) for x in h) + f'|r{HEAD["radius_m"]}'
         c = cache.get(k)
         if not c or len(c) < 3 or (c[2] or {}).get("v", 0) < ROUTE_V or (c[2] or {}).get("p", "car") != PROFILE or (c[2] or {}).get("fb"):
-            r = ask([round(p[0], 5), round(p[1], 5)], [round(q[0], 5), round(q[1], 5)], list(term))
+            r = ask([round(p[0], 5), round(p[1], 5)], [round(q[0], 5), round(q[1], 5)], list(term), h)
             if not r:
                 miss[0] += 1
                 return None, None, None
             old = c[0] if c else None
-            meta = {x: r[x] for x in ("v", "s", "fix", "km0", "via", "u", "ok", "why", "p", "fb") if x in r}
+            meta = {x: r[x] for x in ("v", "s", "fix", "km0", "via", "u", "ok", "why", "p", "fb", "hd") if x in r}
             cache[k] = c = [r["km"], r["min"], meta]
             stat["routed"] += 1
             if stat["routed"] % 200 == 0:  # keep the work if the run is cut short (CI timeout)
@@ -91,12 +103,23 @@ def osrm_router(cache_file):
             if old is not None and abs(old - r["km"]) > 0.05: stat["changed"] += 1; stat["delta_km"] += r["km"] - old
         return c[0], c[1], c[2]
 
+    def geom(p, q):
+        """The road between two stops of a line as [[lat, lon], ...] (cached), None when OSRM has none."""
+        k = f"g|{p[0]:.5f},{p[1]:.5f};{q[0]:.5f},{q[1]:.5f}"
+        if k not in cache:
+            if proc[0] is None: ask(p, q, [True, True])  # start the router process
+            proc[0].stdin.write(json.dumps(dict(a=p, b=q, g=1)) + "\n"); proc[0].stdin.flush()
+            r = json.loads(proc[0].stdout.readline() or "null"); cache[k] = [r["km"], r["g"]] if r else None
+            stat["geom"] += 1
+        return cache[k]
+
     def save():
         if proc[0] is not None:
             proc[0].stdin.close(); proc[0].wait(); proc[0] = None
         json.dump(cache, open(cache_file, "w", encoding="utf-8"))
         if stat: print("routes:", dict(stat))
 
+    road.geom = geom
     return road, save, miss
 
 
@@ -144,7 +167,8 @@ def merge_false_starts(ts):
         if (p and p["line_ref"] == t["line_ref"] and t.get("late_login") and p.get("gps_km") is not None and t.get("f_km") is not None
                 and -2 <= t["f_t"] - p["end"] <= 5 and abs(t["f_km"] - p["gps_km"]) <= 2):
             keep, other = (p, t) if t.get("auto") and not p.get("auto") else (t, p)
-            m = dict(keep, start=p["start"], a=p["a"], frm=p["frm"], ca=p["ca"], end=t["end"], b=t["b"], to=t["to"], cb=t["cb"],
+            m = dict(keep, start=p["start"], a=p["a"], frm=p["frm"], ca=p["ca"], end=t["end"], b=t["b"], to=t["to"], cb=t["cb"], ha=p.get("ha"), hb=t.get("hb"),
+                     gps_raw_a=p.get("gps_raw_a"), gps_raw_b=t.get("gps_raw_b"),
                      km=t["km"], gps_km=t["gps_km"], sched=keep["sched"])
             m.pop("late_login", None)
             if not t.get("incomplete"): m.pop("incomplete", None)
@@ -162,7 +186,7 @@ def merge_false_starts(ts):
             if short and (p.get("incomplete") or p.get("unmapped")) and -5 <= gap <= FALSE_START_GAP and reach:
                 dups.append(dict(kind="dup", start=p["start"], end=p["end"], line=p["line"], sched=p["sched"], frm=p["frm"], to=p["to"],
                                  merged_into=t["sched"], **({"auto": True} if p.get("auto") else {})))
-                t.update(start=p["start"], a=p["a"], frm=p["frm"], ca=p["ca"]); t.pop("late_login", None)
+                t.update(start=p["start"], a=p["a"], frm=p["frm"], ca=p["ca"], ha=p.get("ha"), gps_raw_a=p.get("gps_raw_a"), f_km=p.get("f_km")); t.pop("late_login", None)
                 out[-1] = t
                 continue
         out.append(t)
@@ -170,6 +194,35 @@ def merge_false_starts(ts):
 
 
 RAW = ("ליד", "מיקום")
+
+
+def brg(a, b):
+    y = math.sin(math.radians(b[1] - a[1])) * math.cos(math.radians(b[0]))
+    x = math.cos(math.radians(a[0])) * math.sin(math.radians(b[0])) - math.sin(math.radians(a[0])) * math.cos(math.radians(b[0])) * math.cos(math.radians(b[1] - a[1]))
+    return round(math.degrees(math.atan2(y, x))) % 360
+
+
+def on_line(road, t, pos, along_km, end):
+    """A raw GPS point of a ride -> (point on the line's own road, that road's direction there, metres moved), or None.
+    The line's road = OSRM between the two licensed stops around the point (by distance along the route); used only when
+    it is plausible (<= 1.3 x the planned distance between the stops + 0.2 km) and the point is within LINE_M of it
+    (farther = the bus was not on the line's road: left as it is)."""
+    st = t.get("st")
+    if not st or len(st) < 2 or pos is None: return None
+    m = along_km * 1000
+    i = next((k for k in range(len(st) - 1) if st[k][2] <= m <= st[k + 1][2]), None)
+    if i is None: i = 0 if m < st[0][2] else len(st) - 2
+    g = road.geom(st[i][:2], st[i + 1][:2])
+    if not g or g[0] > (st[i + 1][2] - st[i][2]) / 1000 * 1.3 + 0.2 or len(g[1]) < 2: return None
+    k = math.cos(math.radians(pos[0])); best = None
+    for j in range(len(g[1]) - 1):
+        a, b = g[1][j], g[1][j + 1]
+        ax, ay, bx, by = a[1] * k, a[0], b[1] * k, b[0]; px, py = pos[1] * k, pos[0]
+        dx, dy = bx - ax, by - ay; u = 0 if dx == dy == 0 else max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+        q = [ay + u * dy, (ax + u * dx) / k]; d = hav(pos, q) * 1000
+        if best is None or d < best[0]: best = (d, q, brg(a, b) if hav(a, b) > 0.003 else None)
+    if best[0] > HEAD["line_m"] or best[2] is None: return None
+    return [round(best[1][0], 6), round(best[1][1], 6)], best[2], round(best[0])
 
 
 def snap_ends(ts):
@@ -244,7 +297,7 @@ def build(day):
             if not e or not x["gtfs_ride__start_time"]:
                 skipped += 1; continue
             dur = (dt.datetime.fromisoformat(x["gtfs_ride__end_time"]) - dt.datetime.fromisoformat(x["gtfs_ride__start_time"])).total_seconds() / 60
-            t = dict(line=x["gtfs_route__route_short_name"], mkt=x["gtfs_route__route_mkt"], o=e["o"], d=e["d"], km_plan=round(e["km"], 1))
+            t = dict(line=x["gtfs_route__route_short_name"], mkt=x["gtfs_route__route_mkt"], o=e["o"], d=e["d"], km_plan=round(e["km"], 1), st=e.get("st"))
         else:
             # ran in service but not in the licensed GTFS schedule -> automatic reinforcement candidate
             info = LR.get(str(x["siri_route__line_ref"]))
@@ -271,6 +324,7 @@ def build(day):
             G["gps"] += 1
             t0, t1 = max(mins(P(f[0])), sched), mins(P(l[0]))
             a, frm, ca = at([f[1], f[2]]); b, to, cb = at([l[1], l[2]])
+            t.update(gps_raw_a=[f[1], f[2]], gps_raw_b=[l[1], l[2]])
             gkm = round(l[3] / 1000, 1) if l[3] is not None else None
             ride_min = mins(P(l[0])) - mins(P(f[0]))
             if gkm is not None and gkm > 2 and (ride_min <= 0 or gkm / (ride_min / 60) > 100):
@@ -280,7 +334,8 @@ def build(day):
                 long_enough = ride_min >= 0.5 * dur  # a loop route ends where it starts: being near the end is not enough
                 done = (hav([l[1], l[2]], t["d"]) <= DONE_KM and long_enough) or (gkm is not None and bool(t["km_plan"]) and gkm >= DONE_SHARE * t["km_plan"])
             km = t["km_plan"] if done and t["km_plan"] is not None else gkm
-            t.update(f_t=mins(P(f[0])), f_km=round(f[3] / 1000, 1) if f[3] is not None else None)
+            t.update(f_t=mins(P(f[0])), f_km=round(f[3] / 1000, 1) if f[3] is not None else None,
+                     ha=f[4] if len(f) > 4 and f[4] else None, hb=l[4] if len(l) > 4 and l[4] else None)  # 0 = SIRI "unknown"
             t.update(start=round(t0), end=max(round(t1), round(t0) + 1), a=a, b=b, frm=frm, to=to, ca=ca, cb=cb, km=km, gps_km=gkm)
             if f[3] and f[3] > LATE_M and t["o"] and t["km_plan"] and dur > 0:
                 # logged in mid-route (first GPS point already f[3] m along the route): the trip began at the route's first
@@ -318,11 +373,23 @@ def build(day):
             if i:
                 p = ts[i - 1]; gap = t["start"] - p["end"]
                 term = (not p["to"].startswith(("ליד", "מיקום")), not t["frm"].startswith(("ליד", "מיקום")))  # snapped to a terminal stop
-                km, mn, rt = road(p["b"], t["a"], term)
+                hd = (None if term[0] or not HEAD["enabled"] else p.get("hb"), None if term[1] or not HEAD["enabled"] else t.get("ha"))
+                A, B, lr = p["b"], t["a"], [None, None]
+                if HEAD["enabled"] and not term[0] and p.get("gps_km") is not None:
+                    s = on_line(road, p, p.get("gps_raw_b"), p["gps_km"], 1)
+                    if s: A, hd, lr[0] = s[0], (s[1], hd[1]), s[2]
+                if HEAD["enabled"] and not term[1] and t.get("f_km") is not None and not t.get("late_login"):
+                    s = on_line(road, t, t.get("gps_raw_a"), t["f_km"], 0)
+                    if s: B, hd, lr[1] = s[0], (hd[0], s[1]), s[2]
+                km, mn, rt = road(A, B, term, hd)
                 leg = dict(kind="empty", start=p["end"], end=t["start"], km=km, drive_min=mn, frm=p["to"], to=t["frm"], next_sched=t["sched"],
                            a=p["b"], b=t["a"])
                 if rt and (rt.get("fix") or rt.get("u") or max(rt.get("s") or [0]) > 30):
                     leg["rt"] = {x: rt[x] for x in ("s", "fix", "km0", "u", "ok") if x in rt}  # route check (assets/route.js)
+                if rt and rt.get("hd"):
+                    leg["hd"] = rt["hd"]  # routed in the bus's direction of travel ([heading at a, heading at b])
+                if any(x is not None for x in lr):
+                    leg["lr"] = lr  # [m from the GPS point to the line's road at a, at b]: routed from the point on the line's road
                 if rt and rt.get("fb"):
                     leg["fb"] = 1  # our bus OSRM failed: routed as a private car (public server), "חושב ברכב פרטי (גיבוי)"
                 if km is None:  # OSRM failed: a marked estimate, never dropped
