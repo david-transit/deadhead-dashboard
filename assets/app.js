@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-17.35";
+const APP_VER="2026-11-17.36";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -1166,65 +1166,7 @@ const fnCall=async(body,auth=true)=>http(SB+"/functions/v1/manage_users",{method
 const adminOps=()=>OPS.filter(o=>PLATFORM||MS.some(m=>m.operator_id===o.id&&m.role==="admin"));
 const opName=id=>(OPS.find(o=>o.id===id)||{}).name||"מפעיל אחר";
 function suggestPw(){const a="abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";for(;;){const r=crypto.getRandomValues(new Uint32Array(12)),pw=[...r].map(x=>a[x%a.length]).join("");if(!weakPw(pw)) return pw}}
-const cmsg=(t,cls="",show=false)=>{const m=$("#ctlMsg");if(m){m.className="msg "+cls;m.textContent=t;if(show) m.scrollIntoView({block:"nearest",behavior:"smooth"})}};
-let CTL=null;
-async function drawCtl(){
-  const box=$("#ctlBody"); if(!CTL) box.innerHTML='<div class="empty-state">טוען…</div>';
-  try{CTL=await fnCall({action:"list"})}catch(e){box.innerHTML=`<p class="msg err">${esc(errText(e))}</p>`;return}
-  const AO=adminOps(), dt=x=>x?new Date(x).toLocaleDateString("he-IL"):"";
-  const status=u=>(u.mfa?'<span class="muted" title="אימות דו־שלבי פעיל">🔒 </span>':"")+(u.disabled?'<span class="msg err">מושבת</span>':u.must_change?'<span class="muted">צריך להחליף סיסמה בכניסה</span>':u.last_sign_in?"נכנס לאחרונה "+dt(u.last_sign_in):'<span class="muted">עוד לא נכנס</span>');
-  const access=u=>u.platform?"<b>מנהל מערכת</b> (הכול)":(u.memberships.map(m=>`<div class="mrow">${esc(opName(m.operator_id))}: ${u.manageable?roleSel(m.role,`data-mrole="${esc(m.operator_id)}" aria-label="הרשאה ב${esc(opName(m.operator_id))}"`)+
-      `<button class="btn small" data-mdel="${esc(m.operator_id)}" title="הסרת הגישה למפעיל הזה" aria-label="הסרת הגישה ל${esc(opName(m.operator_id))}">✕</button>`:esc(ROLEHE[m.role])}</div>`).join("")||'<span class="muted">אין גישה</span>')+
-      (u.other_access?'<div class="muted">+ גישה למפעילים אחרים</div>':"")+
-      (u.manageable&&AO.some(o=>!u.memberships.some(m=>m.operator_id===o.id))?`<div class="mrow"><select data-madd aria-label="הוספת גישה למפעיל"><option value="">+ הוספת מפעיל</option>${AO.filter(o=>!u.memberships.some(m=>m.operator_id===o.id)).map(o=>`<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("")}</select></div>`:"");
-  box.innerHTML=`<p class="hint">${ROLEHINT} אין שחזור סיסמה עצמי: מי ששכח סיסמה פונה אליך, ואתה קובע לו סיסמה זמנית. בכניסה הבאה הוא יבחר סיסמה חדשה.</p>
-    <table class="ed"><thead><tr><th>שם משתמש</th><th>שם</th><th>גישה והרשאה</th><th>מצב</th><th>פעולות</th></tr></thead><tbody>`+
-    CTL.users.map(u=>`<tr data-u="${esc(u.user_id)}" data-name="${esc(u.username)}"><td dir="ltr" style="text-align:right"><b>${esc(u.username)}</b>${u.me?" (אתה)":""}</td><td>${esc(u.display_name)}</td>
-      <td>${access(u)}</td><td>${status(u)}</td>
-      <td>${u.manageable&&PLATFORM?`<button class="btn small" data-plat="${u.platform?0:1}">${u.platform?"הסרת מנהל מערכת":"הפיכה למנהל מערכת"}</button> `:""}${u.manageable?`<button class="btn small" data-reset>סיסמה זמנית</button> ${u.mfa?`<button class="btn small" data-mfar>איפוס אימות דו־שלבי</button> `:""}<button class="btn small" data-dis="${u.disabled?0:1}">${u.disabled?"הפעלה":"השבתה"}</button> <button class="btn small danger" data-delu>מחיקה</button><div data-resetbox></div>`:""}</td></tr>`).join("")+
-    `</tbody></table>
-    <h4>משתמש חדש</h4>
-    <form class="inv" id="ctlNew" autocomplete="off" novalidate>
-      <div class="field"><label for="nOp">גישה ל־</label><select id="nOp">${PLATFORM?'<option value="platform">מנהל מערכת (כל המפעילים)</option>':""}${AO.map(o=>`<option value="${esc(o.id)}" ${o.id===OP.id?"selected":""}>${esc(o.name)}</option>`).join("")}</select></div>
-      <div class="field"><label for="nUser">שם משתמש (אנגלית/ספרות)</label><input id="nUser" dir="ltr" required pattern="[A-Za-z0-9._\\-]{3,32}" style="width:170px" autocomplete="off"></div>
-      <div class="field"><label for="nName">שם לתצוגה</label><input id="nName" style="width:170px"></div>
-      <div class="field" id="nRoleBox"><label for="nRole">הרשאה</label>${roleSel("viewer",'id="nRole"')}</div>
-      <div class="field"><label for="nPw">סיסמה זמנית</label><div style="display:flex;gap:4px"><input id="nPw" dir="ltr" required minlength="8" aria-describedby="nPwChk" style="width:150px" autocomplete="new-password"><button type="button" class="btn small" id="nGen">הצעה</button></div><div class="msg pwchk muted" id="nPwChk" aria-live="polite">לפחות 8 תווים, עם אותיות באנגלית ומספרים</div></div>
-      <button class="btn primary">יצירת משתמש</button>
-    </form>
-    <p class="hint">מעבירים למשתמש את שם המשתמש והסיסמה הזמנית בעצמך. בכניסה הראשונה הוא חייב לבחור סיסמה חדשה, ועד אז הוא לא רואה נתונים.</p>
-    <div class="msg" id="ctlMsg" aria-live="polite"></div>`;
-}
-async function ctlDo(body,okText){cmsg("שומר…");try{await fnCall(body);await drawCtl();cmsg(okText,"ok");return true}catch(e){cmsg(errText(e),"err");return false}}
-$("#bCtl").onclick=()=>{CTL=null;$("#dlgCtl").showModal();drawCtl()};
-$("#ctlClose").onclick=()=>$("#dlgCtl").close();
-$("#ctlBody").addEventListener("change",e=>{const t=e.target;if(t.id==="nOp"){$("#nRoleBox").hidden=t.value==="platform";return}
-  const tr=t.closest("tr");if(!tr) return;
-  if(t.dataset.mrole) ctlDo({action:"set_membership",user_id:tr.dataset.u,operator_id:t.dataset.mrole,role:t.value},`ההרשאה של ${tr.dataset.name} עודכנה`);
-  if(t.dataset.madd!=null&&t.value) ctlDo({action:"set_membership",user_id:tr.dataset.u,operator_id:t.value,role:"viewer"},`${tr.dataset.name} קיבל גישת צפייה ל${opName(t.value)}`)});
-$("#ctlBody").addEventListener("click",async e=>{const t=e.target,tr=t.closest("tr");
-  if(t.id==="nGen"){$("#nPw").value=suggestPw();pwShow($("#nPw"),$("#nPwChk"));return}
-  if(!tr) return; const u=tr.dataset.u,n=tr.dataset.name;
-  if(t.dataset.mdel){if(confirm(`להסיר את הגישה של ${n} ל${opName(t.dataset.mdel)}?`)) ctlDo({action:"remove_membership",user_id:u,operator_id:t.dataset.mdel},`הגישה של ${n} הוסרה`);return}
-  if(t.dataset.plat!=null){const on=t.dataset.plat==="1";
-    if(confirm(on?`להפוך את ${n} למנהל מערכת? הוא יראה וינהל הכול, בכל המפעילים.`:`להסיר מ־${n} את הרשאת מנהל המערכת?`))
-      ctlDo({action:"set_platform",user_id:u,on},on?`${n} הוא עכשיו מנהל מערכת`:`${n} כבר לא מנהל מערכת`);return}
-  if(t.dataset.dis!=null){const off=t.dataset.dis==="1";if(off&&!confirm(`להשבית את ${n}? הוא לא יוכל להיכנס עד שיופעל שוב.`)) return;
-    ctlDo({action:"set_disabled",user_id:u,disabled:off},off?`${n} הושבת`:`${n} הופעל`);return}
-  if(t.dataset.mfar!=null){if(confirm(`לאפס את האימות הדו־שלבי של ${n}? (למשל טלפון שאבד). בכניסה הבאה הוא יכנס בסיסמה בלבד${(()=>{const x=CTL.users.find(x=>x.user_id===u);return x&&(x.platform||x.role==="admin"||(x.memberships||[]).some(m=>m.role==="admin"))})()?" ויחויב להפעיל אימות חדש":""}.`))
-    ctlDo({action:"reset_mfa",user_id:u},`האימות הדו־שלבי של ${n} אופס`);return}
-  if(t.dataset.delu!=null){if(confirm(`למחוק את המשתמש ${n} לצמיתות? אי אפשר לבטל.`)) ctlDo({action:"delete",user_id:u},`${n} נמחק`);return}
-  if(t.dataset.reset!=null){const b=tr.querySelector("[data-resetbox]");b.innerHTML=`<div class="copyrow"><input data-rpw dir="ltr" value="${suggestPw()}" aria-label="סיסמה זמנית ל${esc(n)}" autocomplete="off"><button class="btn small primary" data-rsave>קביעה</button></div><div class="msg pwchk" data-rpwchk aria-live="polite"></div>`;const ri=b.querySelector("input");ri.setAttribute("aria-describedby","rpw-"+u);b.querySelector("[data-rpwchk]").id="rpw-"+u;pwShow(ri,b.querySelector("[data-rpwchk]"));ri.focus();return}
-  if(t.dataset.rsave!=null){const ri=tr.querySelector("[data-rpw]"),pw=ri.value;if(weakPw(pw)){pwShow(ri,tr.querySelector("[data-rpwchk]"));cmsg(ERR["Password should be"],"err");ri.focus();return}
-    if(await ctlDo({action:"reset_password",user_id:u,password:pw},"")) cmsg(`נקבעה סיסמה זמנית ל־${n}: ${pw} . העבר לו אותה. בכניסה הבאה הוא יבחר סיסמה חדשה.`,"ok",true)}
-});
-$("#ctlBody").addEventListener("submit",async e=>{e.preventDefault();const user=$("#nUser").value.trim().toLowerCase(),pw=$("#nPw").value;
-  if(!USERRE.test(user)){cmsg(ERR.bad_username,"err");return} if(weakPw(pw)){pwShow($("#nPw"),$("#nPwChk"));cmsg(ERR["Password should be"],"err");$("#nPw").focus();return}
-  const op=$("#nOp").value,role=op==="platform"?"platform":$("#nRole").value;
-  if(await ctlDo({action:"create",username:user,display_name:$("#nName").value.trim(),...(role==="platform"?{}:{operator_id:op}),role,password:pw},""))
-    cmsg(`נוצר המשתמש ${user} עם הסיסמה הזמנית ${pw} . העבר לו את שניהם. בכניסה הראשונה הוא יבחר סיסמה חדשה.`,"ok",true)});
-// live password check while typing (new user form + per-user temporary password)
-$("#ctlBody").addEventListener("input",e=>{const t=e.target;if(t.id==="nPw") pwShow(t,$("#nPwChk"));else if(t.dataset.rpw!=null) pwShow(t,t.closest("[data-resetbox]").querySelector("[data-rpwchk]"))});
+// the control room (users and permissions) moved to the yalla-sa portal control panel: #bCtl links there (platform rule)
 
 // ---- trip search: "who ran line L, direction X, at about HH:MM?" over the day as shown (block edits + drafts included) ----
 let HL=null, LINEF=null; // HL = highlighted trip {veh, sched}; LINEF = {line, dir} filter of the timeline

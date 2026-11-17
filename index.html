@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="יאללה־סע">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link href="assets/fonts/fonts.css?v=2026-11-17.35" rel="stylesheet">
+<link href="assets/fonts/fonts.css?v=2026-11-17.36" rel="stylesheet">
 <style>
 :root{--gold:#B8860B;--char:#4A5059;--blue:#1F6FEB;--dim:#D9DDE2;--bg:#F5F6F8;--card:#fff;--line:#E3E6EB;--text:#1d2330;--muted:#6b7280;--svc:#1F4E9A;--empty:#E8871E;--depot:#5B3A8C;--rein:#2E8B57;--sel:#E8F0FC;--warn:#C62828;--ok:#2E9E4F}
 *{box-sizing:border-box}
@@ -251,8 +251,8 @@ table.ed input.num{width:110px}
 .who{font-size:12px;color:var(--muted);text-align:left;line-height:1.3;padding:3px 8px}
 .mewrap{position:relative}
 .menu{position:absolute;inset-inline-end:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(20,25,35,.15);z-index:20;min-width:210px;padding:4px}
-.menu button{display:block;width:100%;text-align:right;border:0;background:none;padding:8px 10px;font:inherit;cursor:pointer;border-radius:6px;color:var(--text)}
-.menu button:hover,.menu button:focus-visible{background:var(--sel)}
+.menu button,.menu a{display:block;text-decoration:none;width:100%;text-align:right;border:0;background:none;padding:8px 10px;font:inherit;cursor:pointer;border-radius:6px;color:var(--text)}
+.menu button:hover,.menu button:focus-visible,.menu a:hover,.menu a:focus-visible{background:var(--sel)}
 .gwarn{color:var(--warn);font-size:13px;min-height:1.2em;margin-top:6px;text-align:right}
 .codes{font:600 16px/1.9 ui-monospace,Consolas,monospace;direction:ltr;display:grid;grid-template-columns:repeat(2,max-content);gap:0 28px;margin:8px 0;padding:10px 14px;background:var(--bg);border-radius:8px}
 .copyrow{display:flex;gap:6px;margin-top:6px}.copyrow input{flex:1;direction:ltr;min-width:0}
@@ -263,7 +263,7 @@ body.locked>.legend{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 @media (max-width:900px){body{height:auto}.legend{position:sticky;bottom:0}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
 </style>
-<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-17.35">
+<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-17.36">
 </head>
 <body class="locked">
 <div id="gate" class="intro">
@@ -334,7 +334,7 @@ body.locked>.legend{visibility:hidden}
     <div class="mewrap"><button class="btn ghost who" id="who" aria-haspopup="menu" aria-expanded="false" title="החשבון שלי"></button>
       <div class="menu" id="meMenu" role="menu" hidden><button role="menuitem" data-me="pw">שינוי סיסמה</button><button role="menuitem" data-me="mfa">אימות דו־שלבי</button><button role="menuitem" data-me="sec" id="meSec" hidden>שחזור חשבון (מייל וקודים)</button>
         <button role="menuitemcheckbox" id="bDense" aria-checked="false">תצוגה צפופה</button><hr>
-        <button role="menuitem" id="bCtl" hidden>חדר בקרה: משתמשים והרשאות</button></div></div>
+        <a role="menuitem" id="bCtl" href="/?panel=users" hidden>משתמשים והרשאות (פאנל הבקרה ב־yalla-sa)</a></div></div>
     <button class="btn ghost iconbtn keep" id="bCollapse" aria-expanded="true" aria-controls="sumStrip" title="כיווץ החלק העליון"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
   </div>
 </header>
@@ -384,10 +384,6 @@ body.locked>.legend{visibility:hidden}
   <div class="dlg-b" id="savBody"></div>
 </dialog>
 
-<dialog id="dlgCtl" aria-labelledby="ctlTitle">
-  <div class="dlg-h"><h3 id="ctlTitle">חדר בקרה · משתמשים והרשאות</h3><button class="btn small" id="ctlClose">סגירה</button></div>
-  <div class="dlg-b" id="ctlBody"></div>
-</dialog>
 
 <dialog id="dlgRein" aria-labelledby="reinTitle">
   <div class="dlg-h"><h3 id="reinTitle">סימון נסיעת תגבור</h3><button class="btn small" id="reinClose">סגירה</button></div>
@@ -457,11 +453,11 @@ body.locked>.legend{visibility:hidden}
   <div class="dlg-f" id="setFoot"><button class="btn primary" id="setSave">החלה</button><span class="msg" id="setMsg" aria-live="polite"></span></div>
 </dialog>
 
-<script src="assets/logo.js?v=2026-11-17.35"></script>
-<script src="assets/core.js?v=2026-11-17.35"></script>
-<script src="assets/route.js?v=2026-11-17.35"></script>
-<script src="assets/map.js?v=2026-11-17.35"></script>
-<script src="assets/app.js?v=2026-11-17.35"></script>
-<script src="mobile/mobile.js?v=2026-11-17.35"></script>
+<script src="assets/logo.js?v=2026-11-17.36"></script>
+<script src="assets/core.js?v=2026-11-17.36"></script>
+<script src="assets/route.js?v=2026-11-17.36"></script>
+<script src="assets/map.js?v=2026-11-17.36"></script>
+<script src="assets/app.js?v=2026-11-17.36"></script>
+<script src="mobile/mobile.js?v=2026-11-17.36"></script>
 </body>
 </html>
