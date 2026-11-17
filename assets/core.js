@@ -172,7 +172,8 @@
   }
   // ---- manual block edits (fixing data errors) ----
   // edits: rows of block_edits {id, day, veh, action, payload, created_at}: delete / replace / add / times / move a trip,
-  // the trip named by its scheduled minute (payload.sched). Applied in order (payload.seq, then created_at) to a copy of
+  // the trip named by its scheduled minute (payload.sched); "leg" = another origin (a, frm) and/or destination (b, to) for
+  // the empty leg before the trip payload.sched (e.g. the GPS lost the bus 700 m before the terminal it really reached). Applied in order (payload.seq, then created_at) to a copy of
   // the day: the original stays untouched (shown on demand). Edited vehicles get their empty legs, totals and start/end
   // recomputed; a leg whose two ends did not change keeps the pipeline's road km. Returns a day in the same shape as a
   // day file (also what the savings engine reads through getBlocks), plus day.edits = {applied, orphans}.
@@ -190,7 +191,7 @@
         T.set(veh, ts); }
       return T.get(veh);
     };
-    const applied = [], orphans = [];
+    const applied = [], orphans = [], LEGS = new Map(); // veh -> Map(next trip sched -> leg edit)
     for (const e of es) {
       const p = e.payload || {}, ts = tripsOf(e.veh), k = p.sched != null ? ts.findIndex(t => t.sched === +p.sched) : -1;
       const tag = t => Object.assign(t, { edited: true, edit_id: e.id, edit: { action: e.action, by: p.by || null, at: e.created_at || null } });
@@ -204,6 +205,9 @@
           km: +p.km || 0, km_plan: +p.km || 0, cls: p.cls || (old && old.cls) || "לא ידוע", start: +p.start, end: +p.start + Math.max(+p.dur || 0, 1),
           sched: old ? old.sched : (p.sched != null ? +p.sched : +p.start), ...(p.auto ? { auto: true } : {}) });
         if (old) ts[k] = nt; else ts.push(nt);
+      } else if (e.action === "leg") {
+        if (k <= 0 || (!p.a && !p.b)) { orphans.push(e); continue; } // no trip before it: there is no empty leg to change
+        if (!LEGS.has(e.veh)) LEGS.set(e.veh, new Map()); LEGS.get(e.veh).set(+p.sched, e);
       } else if (e.action === "move") {
         if (!p.to_veh || p.to_veh === e.veh) { orphans.push(e); continue; }
         const [t] = ts.splice(k, 1); tripsOf(String(p.to_veh)).push(tag({ ...t, moved_from: e.veh }));
@@ -225,9 +229,16 @@
       trips.forEach((t, n) => {
         if (n) {
           const p = trips[n - 1], gap = t.start - p.end, o = old.get(t.sched);
-          const same = o && o.prev && o.prev.sched === p.sched && !p.edited && !t.edited;
+          const le = LEGS.has(veh) ? LEGS.get(veh).get(t.sched) : null, lp = le ? le.payload : null;
+          const same = !le && o && o.prev && o.prev.sched === p.sched && !p.edited && !t.edited;
           let leg;
-          if (same) leg = { ...o.leg };
+          if (le) { // origin / destination chosen by hand: routed again from the chosen points
+            const A = lp.a || p.b, B = lp.b || t.a, r = hav(A, B) < 0.05 ? { km: 0, min: 0 } : road(A, B), km = r ? r.km : Math.round(estKm(A, B) * 10) / 10;
+            leg = { kind: "empty", start: p.end, end: t.start, km, drive_min: r ? r.min : Math.round(estMin(km) * 10) / 10, frm: lp.a ? lp.frm || "" : p.to, to: lp.b ? lp.to || "" : t.frm,
+              next_sched: t.sched, a: A, b: B, ...(r ? {} : { est: true }), edited: true, leg_edit: { id: le.id, by: lp.by || null, at: le.created_at || null, a: !!lp.a, b: !!lp.b },
+              ...(o ? { orig: { a: o.leg.a, b: o.leg.b, frm: o.leg.frm, to: o.leg.to, km: o.leg.km } } : {}) };
+          }
+          else if (same) leg = { ...o.leg };
           else {
             const r = hav(p.b, t.a) < 0.05 ? { km: 0, min: 0 } : road(p.b, t.a), km = r ? r.km : Math.round(estKm(p.b, t.a) * 10) / 10;
             leg = { kind: "empty", start: p.end, end: t.start, km, drive_min: r ? r.min : Math.round(estMin(km) * 10) / 10, frm: p.to, to: t.frm,
