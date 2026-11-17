@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-18.39";
+const APP_VER="2026-11-18.40";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -10,10 +10,11 @@ const SB="https://xghfcdgettrcdciwwzbl.supabase.co", KEY="sb_publishable_hCBsqYe
 const SITE=location.origin+location.pathname, SKEY="ys_session";
 const lsGet=k=>{try{return localStorage.getItem(k)}catch{return null}}, lsSet=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch{}};
 let SES=null; try{SES=JSON.parse(lsGet(SKEY)||"null")}catch{}
-// idle timeout (M5): no click / key / scroll for 30 minutes (in any tab) ends the session; with unsaved drafts, twice that.
-// A device the user marked as personal at the portal sign-in (ys_trust = expiry, 12 hours) gets 12 hours instead (David, 2026-11-18).
-const ACT="ys_act", TRUST="ys_trust", lastAct=()=>+lsGet(ACT)||0;
-const idleMs=()=>((+lsGet(TRUST)||0)>Date.now()?720:30)*6e4;
+// idle timeout (M5): no click / key / scroll for idleMinutes (in any tab) ends the session; with unsaved drafts, twice that.
+// A device the user marked as personal at the portal sign-in (ys_trust = expiry) has no idle sign-out until then.
+// Durations: /assets/auth-settings.js (the portal's one settings file, David 2026-11-18); same defaults if it is missing.
+const AUTHCFG=window.YS_AUTH||{trustHours:12,idleMinutes:30}, ACT="ys_act", TRUST="ys_trust", lastAct=()=>+lsGet(ACT)||0;
+const idleMs=()=>(+lsGet(TRUST)||0)>Date.now()?Infinity:(+AUTHCFG.idleMinutes||30)*6e4;
 const touchAct=()=>{const n=Date.now();if(n-lastAct()>20000) lsSet(ACT,String(n))};
 if(SES&&Date.now()-lastAct()>idleMs()){const old=SES;SES=null;lsSet(SKEY,null); // revoke the stale session on the server too
   fetch(SB+"/auth/v1/token?grant_type=refresh_token",{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json"},body:JSON.stringify({refresh_token:old.refresh_token})})
