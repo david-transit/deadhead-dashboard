@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="יאללה־סע">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link href="assets/fonts/fonts.css?v=2026-11-17.34" rel="stylesheet">
+<link href="assets/fonts/fonts.css?v=2026-11-17.35" rel="stylesheet">
 <style>
 :root{--gold:#B8860B;--char:#4A5059;--blue:#1F6FEB;--dim:#D9DDE2;--bg:#F5F6F8;--card:#fff;--line:#E3E6EB;--text:#1d2330;--muted:#6b7280;--svc:#1F4E9A;--empty:#E8871E;--depot:#5B3A8C;--rein:#2E8B57;--sel:#E8F0FC;--warn:#C62828;--ok:#2E9E4F}
 *{box-sizing:border-box}
@@ -224,7 +224,7 @@ table.ed input.num{width:110px}
 #gate form{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px 28px 22px;width:100%;max-width:380px;text-align:center}
 #gate h2{margin:6px 0 4px;font-size:20px}
 #gate{flex-direction:column;gap:18px;overflow:auto}
-#gate #logoBtn{cursor:default}
+#gate #logoBtn{cursor:default;pointer-events:none}
 #gate #logo{height:min(55vh,480px);transition:height .5s ease}
 #gate.ready #logo{height:var(--logoH,min(26vh,220px))}
 #gate form{flex:none}
@@ -263,7 +263,7 @@ body.locked>.legend{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 @media (max-width:900px){body{height:auto}.legend{position:sticky;bottom:0}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
 </style>
-<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-17.34">
+<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-17.35">
 </head>
 <body class="locked">
 <div id="gate" class="intro">
@@ -279,7 +279,7 @@ body.locked>.legend{visibility:hidden}
   </form>
 </div>
 <header>
-  <div id="logoBtn" role="button" tabindex="0" title="יאללה-סע · לחיצה מפעילה שוב את האנימציה" aria-label="יאללה-סע, הפעלה חוזרת של האנימציה"><svg id="logo" aria-hidden="false" viewBox="40 110 1175 1050" role="img" aria-labelledby="t">
+  <a id="logoBtn" href="https://yalla-sa.app/" title="חזרה לדף הבית של יאללה־סע" aria-label="חזרה לדף הבית של יאללה־סע"><svg id="logo" aria-hidden="true" viewBox="40 110 1175 1050" role="img" aria-labelledby="t">
   <title id="t">יאללה-סע</title>
   <!-- v6: Y+S, traced from reference-approved.png (approved by David 2026-11-11) -->
   <path id="char" fill="var(--char)" d="M508.3 747.5C507.2 747.0 506.9 745.2 507.6 741.9C507.8 740.9 508.0 739.0 508.1 737.6C508.2 736.2 508.4 733.8 508.6 732.1C508.8 730.5 509.3 726.0 509.6 722.2C510.9 708.9 514.2 677.2 515.4 666.5C515.9 661.9 516.2 658.7 516.2 656.0C516.3 654.3 516.4 653.7 516.8 652.9C517.1 652.3 517.7 651.2 518.0 650.4C518.9 648.2 519.8 648.0 523.1 649.2C524.2 649.6 526.4 650.3 528.0 650.8C529.6 651.2 531.9 651.9 533.1 652.3C534.4 652.7 536.2 653.2 537.1 653.5C538.1 653.7 540.8 654.5 543.2 655.2C555.0 658.7 568.9 662.5 580.4 665.5C593.6 669.0 609.6 673.0 610.2 673.0C613.0 673.0 614.5 675.6 613.8 679.0C613.5 680.3 612.6 687.5 612.0 692.5C611.9 693.7 611.2 699.0 610.5 704.4C609.8 709.7 609.1 715.1 609.0 716.4C608.9 717.6 608.6 719.0 608.5 719.5C608.4 720.0 608.1 721.5 608.0 722.9C607.7 727.1 607.5 727.3 602.7 728.7C584.5 734.2 547.6 742.1 525.9 745.3C523.8 745.6 521.1 746.0 519.8 746.3C518.5 746.5 516.9 746.8 516.2 746.8C515.5 746.8 514.1 746.9 513.1 747.2C510.8 747.7 509.0 747.8 508.3 747.5ZM623.6 597.8C623.2 597.7 621.0 597.1 618.8 596.6C616.5 596.1 612.5 595.2 610.0 594.6C607.5 594.0 603.9 593.2 602.1 592.8C594.6 591.1 561.5 583.4 554.7 581.8C546.9 579.9 545.2 579.5 540.2 578.1C538.5 577.7 535.2 576.8 532.8 576.1C527.2 574.6 526.7 574.4 526.3 573.1C525.9 572.0 526.3 557.7 526.8 554.6C526.9 553.8 527.4 549.1 527.9 544.1C528.4 539.2 528.9 534.1 529.1 532.9C529.6 529.9 530.0 523.3 530.0 518.6C530.0 513.9 530.2 513.3 531.6 512.3C532.3 511.8 532.9 511.5 533.1 511.5C533.2 511.5 533.9 511.2 534.5 510.8C535.1 510.3 535.8 510.0 536.0 510.0C536.2 510.0 537.0 509.6 537.9 509.1C538.7 508.6 540.1 507.8 541.0 507.4C543.8 506.0 545.8 504.9 547.4 503.9C550.5 501.9 589.6 482.1 611.5 471.4C615.1 469.6 619.7 467.4 621.6 466.5C623.5 465.5 625.9 464.5 627.0 464.1C628.0 463.7 629.1 463.3 629.4 463.1C629.6 462.9 630.5 462.6 631.2 462.3C631.9 462.0 632.9 461.5 633.4 461.2C634.0 460.8 634.9 460.4 635.6 460.1C636.3 459.9 637.3 459.4 637.7 459.1C638.2 458.8 638.7 458.5 638.8 458.5C639.0 458.5 639.9 458.1 640.9 457.6C644.4 456.0 644.9 456.5 644.8 461.3C644.8 463.0 644.6 465.2 644.4 466.0C644.2 466.9 644.0 468.3 643.9 469.1C643.8 469.9 643.6 471.9 643.4 473.5C643.2 475.1 642.6 479.8 642.1 483.9C640.4 498.1 637.7 519.6 636.3 530.9C635.4 537.1 633.9 548.7 632.9 556.8C631.9 564.8 630.9 572.0 630.7 572.8C630.6 573.5 630.3 576.3 630.0 579.0C629.7 582.6 629.4 584.4 628.9 585.8C628.4 587.3 628.2 588.3 628.1 591.3C627.9 597.3 626.9 598.7 623.6 597.8ZM495.6 414.2C494.6 413.2 494.2 412.6 494.0 411.6C493.5 409.3 493.1 408.4 492.6 407.7C490.7 405.1 490.0 404.0 489.6 402.9C489.4 402.3 489.1 401.8 489.0 401.8C488.9 401.8 488.5 400.9 488.0 399.9C487.1 398.1 483.5 391.0 481.0 386.5C480.2 385.1 478.1 381.2 476.4 378.0C457.4 343.2 436.9 312.1 402.9 267.0C384.1 242.1 355.7 207.0 346.5 197.4C346.0 196.8 344.9 195.5 344.0 194.5C343.1 193.5 342.2 192.5 342.0 192.2C341.7 192.0 341.1 191.3 340.5 190.6C339.5 189.5 335.8 185.3 333.9 183.4C333.5 182.9 332.6 182.0 331.9 181.2C322.2 170.7 309.2 157.5 306.9 155.8C303.2 153.0 302.7 150.7 305.5 150.1C307.1 149.8 453.6 150.2 457.2 150.5C475.3 152.0 485.3 155.0 498.4 162.9C499.6 163.7 500.7 164.4 500.8 164.5C500.8 164.6 501.6 165.2 502.5 165.8C509.4 170.4 519.5 180.5 527.2 190.4C528.5 192.0 529.7 193.5 529.9 193.6C532.0 195.4 564.7 241.5 579.5 263.6C591.5 281.5 594.8 289.1 594.8 298.1C594.9 306.1 593.7 309.4 583.0 331.0C578.8 339.6 573.6 350.2 571.6 354.6C557.9 384.5 553.1 389.7 528.2 401.3C526.8 402.0 524.3 403.2 522.6 404.0C521.0 404.8 518.3 406.0 516.8 406.8C515.2 407.5 510.7 409.6 506.9 411.5C497.2 416.3 497.5 416.2 495.6 414.2Z"/>
@@ -312,7 +312,7 @@ body.locked>.legend{visibility:hidden}
   <line x1="83" y1="1083" x2="312" y2="1083" stroke="var(--gold)" stroke-width="12"/>
   <line x1="942" y1="1083" x2="1171" y2="1083" stroke="var(--gold)" stroke-width="12"/>
   <text x="628" y="1105" text-anchor="middle" direction="rtl" font-family="Rubik, sans-serif" font-weight="500" font-size="108" textLength="565" lengthAdjust="spacingAndGlyphs" fill="var(--char)">יאללה-סע</text>
-</svg></div>
+</svg></a>
   <div class="oplogo" id="opLogo" hidden></div>
   <div class="title"><h1>נסיעות ריקות</h1><div id="op"></div></div>
   <div class="controls">
@@ -334,7 +334,7 @@ body.locked>.legend{visibility:hidden}
     <div class="mewrap"><button class="btn ghost who" id="who" aria-haspopup="menu" aria-expanded="false" title="החשבון שלי"></button>
       <div class="menu" id="meMenu" role="menu" hidden><button role="menuitem" data-me="pw">שינוי סיסמה</button><button role="menuitem" data-me="mfa">אימות דו־שלבי</button><button role="menuitem" data-me="sec" id="meSec" hidden>שחזור חשבון (מייל וקודים)</button>
         <button role="menuitemcheckbox" id="bDense" aria-checked="false">תצוגה צפופה</button><hr>
-        <button role="menuitem" id="bCtl" hidden>חדר בקרה: משתמשים והרשאות</button><button role="menuitem" id="bEdit">יציאה מהמערכת</button></div></div>
+        <button role="menuitem" id="bCtl" hidden>חדר בקרה: משתמשים והרשאות</button></div></div>
     <button class="btn ghost iconbtn keep" id="bCollapse" aria-expanded="true" aria-controls="sumStrip" title="כיווץ החלק העליון"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
   </div>
 </header>
@@ -457,11 +457,11 @@ body.locked>.legend{visibility:hidden}
   <div class="dlg-f" id="setFoot"><button class="btn primary" id="setSave">החלה</button><span class="msg" id="setMsg" aria-live="polite"></span></div>
 </dialog>
 
-<script src="assets/logo.js?v=2026-11-17.34"></script>
-<script src="assets/core.js?v=2026-11-17.34"></script>
-<script src="assets/route.js?v=2026-11-17.34"></script>
-<script src="assets/map.js?v=2026-11-17.34"></script>
-<script src="assets/app.js?v=2026-11-17.34"></script>
-<script src="mobile/mobile.js?v=2026-11-17.34"></script>
+<script src="assets/logo.js?v=2026-11-17.35"></script>
+<script src="assets/core.js?v=2026-11-17.35"></script>
+<script src="assets/route.js?v=2026-11-17.35"></script>
+<script src="assets/map.js?v=2026-11-17.35"></script>
+<script src="assets/app.js?v=2026-11-17.35"></script>
+<script src="mobile/mobile.js?v=2026-11-17.35"></script>
 </body>
 </html>

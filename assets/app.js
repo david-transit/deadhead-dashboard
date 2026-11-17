@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-16.24";
+const APP_VER="2026-11-17.35";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -954,10 +954,12 @@ $("#nrQ").oninput=drawNR; ["nrDay","nrTime","nrDepot"].forEach(id=>$("#"+id).add
 $("#nrClose").onclick=()=>{$("#dlgNR").close();NR=null;render()};
 $("#nrSave").onclick=()=>{const det=nrDetail();if(!det) return;
   setDraft("ovn",NR.N+"|"+NR.veh,{day:NR.N,veh:NR.veh,mode:"rein",detail:det,note:null});$("#dlgNR").close();NR=null;render();ensureRoad()};
-// ---- sign out ----
-$("#bEdit").onclick=async()=>{const r=await askSave("יציאה בלי לשמור");if(r==="back") return;if(r==="save"&&!(await saveAll())) return;
-  for(const t in DRAFT) DRAFT[t]={}; // leaving without saving drops the drafts (no "leave page?" prompt after this)
-  try{await authPost("logout",{},SES&&SES.access_token)}catch{} setSes(null);location.replace(location.pathname)};
+// ---- sign-in lives in the yalla-sa portal (platform rule: one login, logout only in the portal) ----
+// no session -> the portal, which returns here after sign-in (?next= is checked there against an allow-list)
+const PORTAL=location.hostname==="yalla-sa.app"?location.origin+"/":"https://yalla-sa.app/";
+const toPortal=()=>location.replace(PORTAL+"?next="+encodeURIComponent(location.pathname+location.search));
+// signed out in another tab (the portal's "יציאה" or its idle timeout): leave too
+addEventListener("storage",e=>{if(e.key===SKEY&&!e.newValue&&!["recoverpw","code"].includes(GMODE)) toPortal()});
 
 // ---- settings ----
 async function loadSettings(){try{const rows=await getRows("settings",`select=key,value&${opq()}`)||[];for(const {key:k,value:v} of rows) S[k]=k==="defaults"?{...clone(DEF),...v}:v}catch(e){console.warn("settings",e)}}
@@ -1432,6 +1434,8 @@ function gateMode(m,{msg="",err=""}={}){
       fld("gpw","סיסמה חדשה (לפחות 8 תווים, עם אותיות ומספרים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
     F.insertAdjacentHTML("afterbegin",PRIVNOTE);
     B.textContent="שמירת הסיסמה וכניסה";A.innerHTML=`<button type="button" class="linkbtn dim" data-gm="logout">יציאה</button>`}
+  else if(m==="error"){S.textContent="לא ניתן לטעון את הנתונים כרגע.";F.innerHTML="";B.textContent="נסה שוב";
+    A.innerHTML=`<a class="linkbtn dim" href="${esc(PORTAL)}">חזרה ל־yalla-sa</a>`}
   else if(m==="noaccess"){S.textContent=`החשבון ${uname} עוד לא שויך לאף מפעיל. פנה למנהל המערכת.`;F.innerHTML="";B.textContent="יציאה";A.innerHTML=""}
   else if(m==="mfa"){S.textContent="אימות דו־שלבי: הקלד את הקוד שמוצג עכשיו באפליקציית האימות בטלפון";
     F.innerHTML=fld("gOtp","קוד בן 6 ספרות","text","one-time-code",'inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7"');
@@ -1467,8 +1471,9 @@ $("#gateForm").addEventListener("keydown",e=>{if(!(e.target instanceof HTMLInput
   kbWarn()});
 $("#gateForm").addEventListener("input",kbWarn);
 $("#gateAlt").addEventListener("click",async e=>{const m=e.target.dataset.gm;
-  if(m==="logout"){await signOut();gateMode("login")}
-  else if(m==="code"||m==="login") gateMode(m);
+  if(m==="logout"){await signOut();toPortal()}
+  else if(m==="login") toPortal();
+  else if(m==="code") gateMode(m);
   else if(m==="forgot"){const u=$("#gUser").value.trim().toLowerCase(),g=$("#gateMsg");g.className="msg";g.textContent="שולח…";
     try{await fnCall({action:"forgot",username:u},false);g.className="msg ok";g.textContent="אם לחשבון מוגדר מייל לשחזור, נשלח אליו עכשיו קישור לבחירת סיסמה חדשה. בדוק גם בדואר זבל."}
     catch(err){g.className="msg err";g.textContent=errText(err)}}});
@@ -1486,7 +1491,8 @@ $("#gateForm").addEventListener("submit",async e=>{
       await fnCall({action:"change_password",current_password:cur,new_password:pw});
       await signIn(lsGet("ys_user")||PROFILE?.username||"",pw); LASTPW=null; // a password change ends the old sessions
       if(!(await unlock())) return}
-    else if(GMODE==="noaccess"){await signOut();gateMode("login")}
+    else if(GMODE==="noaccess"){await signOut();toPortal()}
+    else if(GMODE==="error"){location.reload()}
     else if(GMODE==="mfa"){await mfaVerify(MFAF,$("#gOtp").value);if(!(await unlock())) return}
     else if(GMODE==="mfa_enroll"){if(!ENR) throw new Error("רגע, הקוד עוד נטען");await mfaVerify(ENR.id,$("#gOtp").value);ENR=null;if(!(await unlock())) return}
     else if(GMODE==="code"){const user=$("#gUser").value.trim().toLowerCase(),pw=$("#gpw").value;
@@ -1507,10 +1513,11 @@ $("#gateForm").addEventListener("submit",async e=>{
   if(HP.get("type")==="recovery"&&HP.get("access_token")){setSes({access_token:HP.get("access_token"),refresh_token:HP.get("refresh_token"),expires_in:HP.get("expires_in"),expires_at:HP.get("expires_at")});
     gateIntro();gateMode("recoverpw");return}
   if(HP.get("error_description")){gateIntro();gateMode("login",{err:"הקישור מהמייל לא תקף או שפג תוקפו. בקש קישור חדש."});return}
-  if(SES){AUTO=true; gateIntro(); // signed in before: play the intro, then straight to the dashboard
-    try{if(await unlock()) return}catch(e){console.warn(e); if(e.status===401||e.status===403||e.message==="not_signed_in") setSes(null)}
-    AUTO=false; if(["changepw","noaccess","mfa","mfa_enroll"].includes(GMODE)){if(introOver) showForm();return}
-    gateMode("login",SES?{err:"לא ניתן לטעון את הנתונים. נסה שוב."}:{});return}
-  gateIntro(); gateMode("login");
-  try{if((await fnCall({action:"bootstrap_status"},false)).needed) gateMode("bootstrap")}catch(e){console.warn("bootstrap status",e)}
+  // recovery code (the portal's "אין לי גישה" link): the one sign-in step still done here
+  if(new URLSearchParams(location.search).get("recover")==="1"){gateIntro();gateMode("code");return}
+  if(!SES){toPortal();return}
+  // signed in through the portal: straight to the tool, no intro; the gate shows only for a step this account still owes
+  try{if(await unlock()) return}catch(e){console.warn(e); if(e.status===401||e.status===403||e.message==="not_signed_in"){setSes(null);toPortal();return}}
+  if(["changepw","noaccess","mfa","mfa_enroll"].includes(GMODE)){gateIntro();return}
+  gateIntro(); gateMode("error");
 })();

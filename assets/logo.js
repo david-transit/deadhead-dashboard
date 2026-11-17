@@ -93,6 +93,6 @@
   const reduce =matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduce) render(T.total); else play();
   window.playLogo = () => { if (reduce) render(T.total); else play(); }; window.LOGO_MS = reduce ? 0 : T.total;
-  const L=document.getElementById('logoBtn'); L.addEventListener('click', play); L.addEventListener('keydown', e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();play()}});
+  // the header logo is a link back to the yalla-sa portal home (platform rule); it no longer replays the animation
 })();
 
