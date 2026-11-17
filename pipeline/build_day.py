@@ -36,6 +36,14 @@ ROUTE_V = 3            # assets/route.js V: cached routes checked by an older ve
 # Road profile (pipeline/osrm/README.md): with OSRM_BASE set (our own osrm-routed, bus-strict), cached routes of another
 # profile (car, or a car fallback) are routed again; without it the public car server is used, as before.
 PROFILE = os.environ.get("OSRM_PROFILE", "bus-strict") if os.environ.get("OSRM_BASE") else "car"
+# A trip that GPS lost shortly before its planned last stop ("ליד …") ends at that stop only when all hold (David,
+# 17.11.2026): it covered >= share of the planned km, the last point is <= max_km from the stop and before it along the
+# route, and the time to the next trip is enough to drive the rest at the line's planned speed. The end time stays the
+# GPS time. Otherwise the raw point stays, marked trunc_end ("קטיעה אפשרית"). The same, mirrored, for the start.
+# pipeline/config.json "gps_end_snap" (settings, not code); GPS_END_SNAP=0 turns it off (before/after comparison).
+SNAP = dict(dict(enabled=True, share=0.95, max_km=1.0, before_tol_km=0.0, start_share=0.05, start_max_km=1.0),
+            **json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("gps_end_snap", {}))
+if os.environ.get("GPS_END_SNAP") == "0": SNAP["enabled"] = False
 IL = (29.0, 34.0, 34.0, 36.5)  # valid GPS (lat/lon box); SIRI sends -1,-1 for "no position"
 
 
@@ -161,6 +169,42 @@ def merge_false_starts(ts):
     return out, dups
 
 
+RAW = ("ליד", "מיקום")
+
+
+def snap_ends(ts):
+    """Move a GPS trip end (start) that is a raw point to the planned last (first) stop under the strict rule (SNAP).
+    Runs on one vehicle's trips in order, after merge_false_starts: the next/previous trip is the next/previous event."""
+    if not SNAP["enabled"]: return
+    for i, t in enumerate(ts):
+        if t.get("no_gps") or not t.get("km_plan") or not t.get("dur"): continue
+        v = t["km_plan"] / t["dur"]  # planned km per minute
+        g = t.get("gps_km")
+        if t["d"] and t["to"].startswith(RAW):
+            d, why = t["d"], []
+            if g is None or g < SNAP["share"] * t["km_plan"]: why.append("share")
+            if hav(t["b"], d) > SNAP["max_km"] or (g is not None and g > t["km_plan"] + SNAP["before_tol_km"]): why.append("far")
+            nx = ts[i + 1] if i + 1 < len(ts) else None
+            if nx is not None and g is not None and nx["start"] - t["end"] < max(t["km_plan"] - g, 0) / v: why.append("time")
+            if why:
+                t["trunc_end"] = why
+            else:
+                t["snap_end"] = dict(b=t["b"], to=t["to"], m=round(hav(t["b"], d) * 1000))
+                t.update(b=[round(d[0], 5), round(d[1], 5)], to=f'{d[3]}, {d[2]}', cb=d[3])
+        f = t.get("f_km")
+        if t["o"] and t["frm"].startswith(RAW) and not t.get("late_login") and not t.get("midroute"):
+            o, why = t["o"], []
+            if f is None or f > SNAP["start_share"] * t["km_plan"]: why.append("share")
+            if hav(t["a"], o) > SNAP["start_max_km"]: why.append("far")
+            pv = ts[i - 1] if i else None
+            if pv is not None and f is not None and t.get("f_t") is not None and t["f_t"] - pv["end"] < f / v: why.append("time")
+            if why:
+                t["trunc_start"] = why
+            else:
+                t["snap_start"] = dict(a=t["a"], frm=t["frm"], m=round(hav(t["a"], o) * 1000))
+                t.update(a=[round(o[0], 5), round(o[1], 5)], frm=f'{o[3]}, {o[2]}', ca=o[3])
+
+
 def build(day):
     os.makedirs(CACHE_DIR, exist_ok=True)
     rf = os.path.join(CACHE_DIR, f"rides_{OP['slug']}_{day}_h{DAY_START_H}.json")
@@ -209,7 +253,7 @@ def build(day):
             t = dict(line=info["line"] if info else "?", mkt=info["mkt"] if info else None,
                      o=e["o"] if e else None, d=e["d"] if e else None, km_plan=round(e["km"], 1) if e else None,
                      auto=True, **({} if e else {"unmapped": True}))
-        t["line_ref"] = x["siri_route__line_ref"]
+        t["line_ref"] = x["siri_route__line_ref"]; t["dur"] = dur
         sched = mins(st)
         f, l = LOC.get(str(x.get("first_vehicle_location_id"))), LOC.get(str(x.get("last_vehicle_location_id")))
         ok = lambda q: q and q[1] is not None and IL[0] < q[1] < IL[1] and IL[2] < q[2] < IL[3]
@@ -266,6 +310,7 @@ def build(day):
     for v, ts in sorted(by.items()):
         ts.sort(key=lambda t: (t.get("f_t", t["start"]), t["sched"]))  # in the order the GPS saw them
         ts, dups = merge_false_starts(ts); n_dup += len(dups); by[v] = ts
+        snap_ends(ts)
         cls = collections.Counter(t["cls"] for t in ts if not t.get("auto")).most_common(1)
         cls = cls[0][0] if cls else ts[0]["cls"]
         items = []
@@ -290,7 +335,8 @@ def build(day):
                 if not leg.get("overlap"): tot_day += km
             items.append(dict(kind="trip", start=t["start"], end=t["end"], line=t["line"], km=t["km"], cls=t["cls"], sched=t["sched"],
                               frm=t["frm"], to=t["to"], a=t["a"], b=t["b"], ca=t["ca"], cb=t["cb"],
-                              **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute")
+                              **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute",
+                                           "snap_end", "snap_start", "trunc_end", "trunc_start")
                                  if t.get(k) is not None}))
         items += dups + ghosts.pop(v, [])
         # an empty leg sits right before the trip it leads to (also when SIRI shows overlapping rides)
@@ -327,7 +373,9 @@ def build(day):
     out = dict(day=day, day_start_min=DAY_START_H * 60, routing=dict(profile=PROFILE, fallback_legs=n_fb), operator=OP["name"], operator_slug=OP["slug"], built=dt.datetime.now(TZ).isoformat(timespec="minutes"),
                routes=routes, summary=dict(vehicles=len(vehicles), trips=sum(len(v) for v in by.values()),
                empty_day_km=round(tot_day), skipped_rides=skipped, auto_rein=auto_n, auto_rein_unmapped=auto_unmapped,
-               gps=G["gps"], no_gps=G["no_gps"], incomplete=G["incomplete"], false_starts=n_dup, not_performed=G["ghost"], late_login=G["late_login"]), vehicles=vehicles)
+               gps=G["gps"], no_gps=G["no_gps"], incomplete=G["incomplete"], false_starts=n_dup, not_performed=G["ghost"], late_login=G["late_login"],
+               snap_end=sum(1 for v in by.values() for t in v if t.get("snap_end")), snap_start=sum(1 for v in by.values() for t in v if t.get("snap_start")),
+               trunc_end=sum(1 for v in by.values() for t in v if t.get("trunc_end")), trunc_start=sum(1 for v in by.values() for t in v if t.get("trunc_start"))), vehicles=vehicles)
     os.makedirs(DATA, exist_ok=True)
     json.dump(out, open(os.path.join(DATA, f"day_{day}.json"), "w", encoding="utf-8"), ensure_ascii=False)
     print(json.dumps(out["summary"], ensure_ascii=False))

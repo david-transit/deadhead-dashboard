@@ -405,7 +405,7 @@ function sideBody(veh){
     if(i.kind==="ghost"){h+=`<div class="it wait"><span>קו ${esc(i.line)} שובץ לרכב אבל לא בוצע לפי GPS<span class="sub">אין אף מיקום תקין ומשך 0 דק׳. לא נספר.</span></span><span class="t">${fmt(i.start)}</span></div>`;continue}
     if(i.kind==="dup"){h+=i.continued?`<div class="it wait"><span>המשך באותה נסיעה · קו ${esc(i.line)}<span class="sub">הנסיעה נרשמה ב־SIRI כשתי נסיעות של אותו קו, אחת אחרי השנייה מאותה נקודה. אוחדו לנסיעה אחת: לא נספרת פעמיים, אין ריק ביניהן.</span>${fixLink()}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`
       :`<div class="it wait"><span>התחלה כפולה · קו ${esc(i.line)}<span class="sub">נסיעה של ${Math.round(i.end-i.start)} דק׳${fromPl(i.frm)} שהופסקה או נרשמה פעמיים, ואותו קו נסע מיד. אוחדה עם הנסיעה: לא נסיעה, לא תגבור, אין ריק.</span>${fixLink()}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;continue}
-    const gpsTxt=i.kind==="trip"?(i.midroute?`<span class="sub">הצטרף לקו באמצע (ה־GPS ראה אותו לראשונה ${nf(i.midroute)} ק״מ מתחילת הקו). נספרים ${nf(i.km)} ק״מ.</span>`:"")+(i.late_login?`<span class="sub">נרשם באיחור ב־SIRI (${nf(i.late_login)} ק״מ אחרי תחילת הקו): תחילת הנסיעה מתחילת הקו, השעה משוערת</span>`:"")+(i.incomplete?`<span class="sub" style="color:var(--warn)">לא הושלמה לפי GPS: ${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ. נספרים ${nf(i.km)} ק״מ.</span>${fixLink()}`:i.no_gps?`<span class="sub">בלי GPS לנסיעה הזו: לפי הלוח</span>`:""):"";
+    const gpsTxt=i.kind==="trip"?(i.midroute?`<span class="sub">הצטרף לקו באמצע (ה־GPS ראה אותו לראשונה ${nf(i.midroute)} ק״מ מתחילת הקו). נספרים ${nf(i.km)} ק״מ.</span>`:"")+snapTxt(i)+(i.late_login?`<span class="sub">נרשם באיחור ב־SIRI (${nf(i.late_login)} ק״מ אחרי תחילת הקו): תחילת הנסיעה מתחילת הקו, השעה משוערת</span>`:"")+(i.incomplete?`<span class="sub" style="color:var(--warn)">לא הושלמה לפי GPS: ${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ. נספרים ${nf(i.km)} ק״מ.</span>${fixLink()}`:i.no_gps?`<span class="sub">בלי GPS לנסיעה הזו: לפי הלוח</span>`:""):"";
     if(i.kind==="trip"&&i.auto){const st=autoSt(v,i),btn=(k,t)=>`<button class="btn small" data-ar="${i.sched}" data-st="${k}">${t}</button>`;
       h+=`<div class="it ${st==="rejected"?"svc":"rein"}${HL&&HL.veh===v.veh&&HL.sched===i.sched?" hl":""}"${mi({k:"trip",v,i})}><span>${st==="rejected"?"":"תגבור אוטומטי (לא בלוח הרישוי) · "}קו ${esc(i.line)}${i.unmapped?` (קו לא מזוהה, line_ref ${esc(i.line_ref)})`:""} · ${esc(i.frm)} ← ${esc(i.to)}
         <span class="sub">${AUTOTXT[st]} · ${i.km==null?"? ק״מ":nf(i.km)+" ק״מ"}${i.dur_est?" · משך משוער":""}</span>${gpsTxt}${tripExtra(i)}
@@ -617,6 +617,11 @@ const ERRK=[["rp","בעיית מסלול"],["inc","לא הושלמה לפי GPS"
 // and > 4 km, "route" = suspicious route the route check could not fix
 const RPTXT={time:"לא נכנס בזמן",detour:"עיקוף גדול",route:"מסלול חשוד",okchg:"השתנה מאז שאושר"};
 // a leg still waiting for its road km (anchor / approved link) shows the day file's km: not judged until it is computed
+// GPS trip ends/starts: moved to the planned stop under the strict rule (pipeline SNAP), or left raw ("קטיעה אפשרית")
+const snapTxt=i=>(i.snap_end?`<span class="sub">סוף הנסיעה בתחנה המתוכננת: ה־GPS הסתיים ${nf(i.snap_end.m)} מ׳ לפניה (${esc(i.snap_end.to)}). השעה לפי ה־GPS.</span>`:"")
+  +(i.snap_start?`<span class="sub">תחילת הנסיעה בתחנה המתוכננת: ה־GPS התחיל ${nf(i.snap_start.m)} מ׳ אחריה (${esc(i.snap_start.frm)}). השעה לפי ה־GPS.</span>`:"")
+  +(i.trunc_end&&!i.incomplete?`<span class="sub" style="color:var(--warn)">קטיעה אפשרית: ה־GPS הסתיים ב${esc(i.to)}, לא בתחנת הסוף המתוכננת</span>`:"")
+  +(i.trunc_start?`<span class="sub" style="color:var(--warn)">קטיעה אפשרית: ה־GPS התחיל ב${esc(i.frm)}, לא בתחנת המוצא המתוכננת</span>`:"");
 function legProblems(i){if(i.kind!=="empty"||i.overlap||i.km==null||i.wait) return null;let p=[];
   if(i.tight) p.push("time");
   const ax=i.a&&i.b?hav(i.a,i.b):null; if(ax!=null&&i.km>4&&i.km>2.5*Math.max(ax,0.01)) p.push("detour");
