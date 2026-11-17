@@ -22,7 +22,7 @@ if [ -f "$DIR/israel.osrm.mldgr" ] && [ -f "$DIR/israel.osrm.cell_metrics" ]; th
   echo "graph from cache: $(cat "$DIR/extract.txt" 2>/dev/null)"
 else
   rm -rf "${DIR:?}"/*
-  curl -fsSL --retry 3 -o "$DIR/israel.osm.pbf" "$PBF_URL" || fail "extract download failed"
+  curl -fsSL --retry 6 --retry-all-errors --retry-delay 30 -o "$DIR/israel.osm.pbf" "$PBF_URL" || fail "extract download failed"
   { echo "source=$PBF_URL"; curl -fsSI "$PBF_URL" | grep -i '^last-modified' | tr -d '\r'; echo "built=$(date -u +%FT%TZ)"; echo "image=$IMAGE";
     echo "profile=$PROFILE ($(cat "$PROFILES"/*.lua "$LOCAL"/* | sha256sum | cut -c1-12))"; } > "$DIR/extract.txt"
   cat "$DIR/extract.txt"
