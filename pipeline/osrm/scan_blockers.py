@@ -18,7 +18,10 @@ Public data only (OpenStreetMap + Open Bus Stride SIRI GPS): nothing of an opera
    to local/bus_exceptions.csv (approved_by "David (auto-rule 17.11)").
    Guards (hand check of the first run): no "auto" for a clearance under AUTO_MIN_HEIGHT, or when GPS drift from another
    road is possible (a parallel road within DRIFT_M of a way, any road within NEAR_M of a node) unless rides >= DRIFT_RIDES;
-   those are "border" with the reason in "caution".
+   those are "border" with the reason in "caution". A way below street level (tunnel, negative layer, covered, parking
+   aisle) or a parking-entrance node is never "auto": GPS cannot tell it from the street above (hand check 17.11).
+4. Decisions (bus_decisions.csv, David): a blocker decided "stays blocked" is "decided" while its evidence stays under the
+   rule, and "recheck" (for David) once it crosses it. Nothing flips by itself: approving is a row in bus_exceptions.csv.
 Output: <out>/blockers_scan.json and <out>/blockers_scan.md (Hebrew)."""
 import json, os, sys, math, re, time, csv, collections, urllib.request, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
@@ -26,6 +29,7 @@ import osmium
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXC_FILE = os.path.join(HERE, "local", "bus_exceptions.csv")
+DEC_FILE = os.path.join(HERE, "bus_decisions.csv")   # David's "stays blocked" decisions (not part of the graph)
 API = "https://open-bus-stride-api.hasadna.org.il"
 REGION = (31.70, 32.20, 34.72, 35.30)  # Jerusalem area, Mevaseret, Givat Ze'ev, Beit Horon, 443, Route 1, Gush Dan
 DAYS = ["2026-11-10", "2026-11-12", "2026-11-15"]
@@ -95,6 +99,16 @@ def node_block(t):
     return None
 
 
+def decisions():
+    """bus_decisions.csv: type,id,decision,by,date,note -> {"way:1": {...}}"""
+    out = {}
+    if os.path.exists(DEC_FILE):
+        for row in csv.reader(l for l in open(DEC_FILE, encoding="utf-8") if l.strip() and not l.lstrip().startswith("#")):
+            if len(row) >= 5 and row[0] in ("way", "node"):
+                out[f"{row[0]}:{row[1]}"] = dict(decision=row[2], by=row[3], date=row[4], note=row[5] if len(row) > 5 else "")
+    return out
+
+
 def exceptions():
     out = set()
     if os.path.exists(EXC_FILE):
@@ -106,6 +120,14 @@ def exceptions():
 inside = lambda lat, lon: REGION[0] <= lat <= REGION[1] and REGION[2] <= lon <= REGION[3]
 
 
+def underground(t):
+    """a way below street level (tunnel / negative layer / covered / parking aisle): GPS cannot tell it from the street above"""
+    if t.get("tunnel") not in (None, "no") or t.get("covered") not in (None, "no"): return "tunnel"
+    if t.get("layer", "0").lstrip().startswith("-"): return "layer " + t["layer"]
+    if t.get("service") == "parking_aisle": return "parking_aisle"
+    return ""
+
+
 class Pass1(osmium.SimpleHandler):
     """blocking ways (with geometry) and the ids of nodes on routable ways"""
     def __init__(self, exc):
@@ -114,7 +136,9 @@ class Pass1(osmium.SimpleHandler):
         if len(n.tags) and inside(n.location.lat, n.location.lon):
             t = {x.k: x.v for x in n.tags}
             r = node_block(t)
-            if r and f"node:{n.id}" not in self.exc: self.nodes[n.id] = dict(kind="node", id=n.id, tag=r, loc=(n.location.lat, n.location.lon), tags=t)
+            if r and f"node:{n.id}" not in self.exc:
+                self.nodes[n.id] = dict(kind="node", id=n.id, tag=r, loc=(n.location.lat, n.location.lon), tags=t,
+                                        under="parking_entrance" if t.get("amenity") == "parking_entrance" else "")
     def way(self, w):
         hw = w.tags.get("highway")
         if hw not in SPEEDS: return
@@ -128,7 +152,8 @@ class Pass1(osmium.SimpleHandler):
         if t.get("oneway") == "-1": oneway = True; f, b = b, f; geo = geo[::-1]
         if (f or (b and not oneway)) and f"way:{w.id}" not in self.exc:
             self.ways.append(dict(kind="way", id=w.id, tag=f or b, dirs=[d for d, x in (("fw", f), ("bw", None if oneway else b)) if x],
-                                  geo=geo, name=t.get("name:he") or t.get("name", ""), highway=hw, ref=t.get("ref", "")))
+                                  geo=geo, name=t.get("name:he") or t.get("name", ""), highway=hw, ref=t.get("ref", ""),
+                                  under=underground(t)))
 
 
 class Pass2(osmium.SimpleHandler):
@@ -255,6 +280,8 @@ def caution(b, segs, info):
     if key.split(":")[0] == "maxheight":
         h = num(val, "m")
         if h is not None and h < AUTO_MIN_HEIGHT: return f"גובה {val} מ' – אוטובוס רגיל לא עובר; כנראה מיניבוס או סטיית GPS"
+    if b.get("under"):   # hand check 17.11: 12 of 13 low tunnels "passed" only by buses on the street above
+        return f"מתחת למפלס הרחוב ({b['under']}) – ה־GPS לא מבחין בינו לבין הרחוב שמעליו או לידו"
     if b["rides"] >= DRIFT_RIDES: return None
     p = b.get("mid") or b["loc"]; lat0 = p[0]
     if b["kind"] == "node":
@@ -284,6 +311,7 @@ def main():
     os.makedirs(out, exist_ok=True)
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None  # hand checks: "way:1,node:2"
     exc = exceptions() if not only else set()
+    dec = decisions()
     h1 = Pass1(exc); h1.apply_file(pbf, locations=True, idx="flex_mem")
     nodes = [dict(n, ways=h1.on_road[n["id"]]) for n in h1.nodes.values() if h1.on_road.get(n["id"])]
     B = h1.ways + nodes
@@ -325,6 +353,11 @@ def main():
             r["verdict"] = "border" if r["caution"] else "auto"
         elif r["rides"] > 0: r["verdict"] = "border"
         else: r["verdict"] = "none"
+        d = dec.get(f"{r['kind']}:{r['id']}")
+        if d and "rides" in r:   # David already decided "stays blocked": report it only when the evidence crossed the rule
+            r["decision"] = d
+            crossed = r["rides"] >= AUTO_RIDES and all(r["per_day"].get(x, 0) >= AUTO_PER_DAY for x in DAYS)
+            r["verdict"] = "recheck" if crossed else "decided"
     json.dump(dict(days=DAYS, region=REGION, rule=dict(near_m=NEAR_M, other_m=OTHER_M, auto_rides=AUTO_RIDES, auto_per_day=AUTO_PER_DAY),
                    blockers=res), open(cache, "w", encoding="utf-8"), ensure_ascii=False)
     if only:
@@ -334,13 +367,16 @@ def main():
     md = ["# חסמים בפרופיל האוטובוס מול GPS של שירות קיים", "",
           f"אזור: ירושלים והסביבה, מבשרת, גבעת זאב/בית חורון, 443, כביש 1, גוש דן. ימים: {', '.join(DAYS)}, 06:00–20:00, כל המפעילים.",
           "סינון ראשוני: מקטע בלי אף נקודת GPS של אוטובוס בשעות השיא (07:00–09:00) בשני ימים נחשב \"אין שירות\" בלי בדיקה מלאה.",
-          f"נסרקו {len(res)} חסמים: אישור אוטומטי {c['auto']}, גבולי (לדוד) {c['border']}, בלי שירות {c['none']}, תקלה בבדיקה {c['error']}.",
+          f"נסרקו {len(res)} חסמים: אישור אוטומטי {c['auto']}, גבולי (לדוד) {c['border']}, הוחלט להשאיר חסום ועבר שוב את הכלל (לדוד) {c['recheck']}, "
+          f"הוחלט להשאיר חסום {c['decided']}, בלי שירות {c['none']}, תקלה בבדיקה {c['error']}.",
           "איסורי פנייה לא נבדקו.", "", "| הכרעה | סוג | מזהה | רחוב | חסם | נסיעות | לפי יום | הערה |", "|---|---|---|---|---|---|---|---|"]
-    V = {"auto": "אושר אוטומטית", "border": "גבולי – לדוד", "none": "אין שירות", "error": "תקלה"}
-    for r in sorted(res, key=lambda r: ({"auto": 0, "border": 1, "error": 2, "none": 3}[r["verdict"]], -r.get("rides", 0))):
+    V = {"auto": "אושר אוטומטית", "border": "גבולי – לדוד", "recheck": "הוחלט חסום, עבר את הכלל – לדוד", "decided": "הוחלט חסום",
+         "none": "אין שירות", "error": "תקלה"}
+    O = {"recheck": 0, "auto": 1, "border": 2, "decided": 3, "error": 4, "none": 5}
+    for r in sorted(res, key=lambda r: (O[r["verdict"]], -r.get("rides", 0))):
         if r["verdict"] == "none": continue
         md.append(f"| {V[r['verdict']]} | {r['kind']} | [{r['id']}](https://www.openstreetmap.org/{r['kind']}/{r['id']}) | {r.get('name', '')} | {r['tag']} | {r.get('rides', '')} | "
-                  f"{' / '.join(str(r.get('per_day', {}).get(d, 0)) for d in DAYS)} | {r.get('caution') or ''} |")
+                  f"{' / '.join(str(r.get('per_day', {}).get(d, 0)) for d in DAYS)} | {r.get('caution') or (r.get('decision') or {}).get('note', '')} |")
     open(os.path.join(out, "blockers_scan.md"), "w", encoding="utf-8").write("\n".join(md) + "\n")
     print(dict(c))
     if "--write-exceptions" in sys.argv:

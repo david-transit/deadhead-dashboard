@@ -4,9 +4,13 @@ name: bus-blockers-weekly
 # GPS of buses in service on the last 3 weekdays. Reports new blockers that service already passes ("auto" = clear by
 # David's rule, "border" = for David). Public data only (OSM + Open Bus); it changes nothing: approving is a row in
 # pipeline/osrm/local/bus_exceptions.csv, committed by a person.
+# Monthly (1st of the month): the same scan, and the summary also lists EVERY blocker David decided to keep blocked
+# (pipeline/osrm/bus_decisions.csv) with its current evidence. Every week, a decided one is reported again ("recheck")
+# only when its evidence crossed the rule. Nothing flips by itself.
 on:
   schedule:
     - cron: "0 1 * * 1"   # Monday 03:00 Israel (winter)
+    - cron: "0 3 1 * *"   # monthly full re-check of the decided ("stays blocked") segments
   workflow_dispatch:
 
 permissions:
@@ -45,17 +49,26 @@ jobs:
         env:
           DAYS: ${{ steps.days.outputs.days }}
           PYTHONIOENCODING: utf-8
+          MONTHLY: ${{ github.event.schedule == '0 3 1 * *' && '1' || '' }}
         run: |
           mkdir -p "$RUNNER_TEMP/scan"
           python pipeline/osrm/scan_blockers.py "$RUNNER_TEMP/israel.osm.pbf" "$RUNNER_TEMP/scan" --days "$DAYS"
           python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
           import json, os
           d = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "scan", "blockers_scan.json"), encoding="utf-8"))
+          row = lambda b: (f"| {b['verdict']} | [{b['kind']} {b['id']}](https://www.openstreetmap.org/{b['kind']}/{b['id']}) | {b.get('name','')} | {b['tag']} | "
+                           f"{b['rides']} | {' / '.join(str(v) for v in b['per_day'].values())} | {b.get('caution') or (b.get('decision') or {}).get('note', '')} |")
+          head = "| verdict | OSM | name | tag | rides | per day | note |\n|---|---|---|---|---|---|---|"
+          re_ = [b for b in d["blockers"] if b.get("verdict") == "recheck"]
+          print(f"## Decided 'stays blocked', evidence now crosses the rule (for David): {len(re_)}\n"); print(head)
+          for b in sorted(re_, key=lambda b: -b["rides"]): print(row(b))
           new = [b for b in d["blockers"] if b.get("verdict") in ("auto", "border")]
-          print(f"## Bus blockers that service passes (not yet approved): {len(new)}\n")
-          print("| verdict | OSM | name | tag | rides | per day |\n|---|---|---|---|---|---|")
-          for b in sorted(new, key=lambda b: -b["rides"]):
-              print(f"| {b['verdict']} | [{b['kind']} {b['id']}](https://www.openstreetmap.org/{b['kind']}/{b['id']}) | {b.get('name','')} | {b['tag']} | {b['rides']} | {' / '.join(str(v) for v in b['per_day'].values())} | {b.get('caution') or ''} |")
+          print(f"\n## Bus blockers that service passes (not yet approved or decided): {len(new)}\n"); print(head)
+          for b in sorted(new, key=lambda b: -b["rides"]): print(row(b))
+          if os.environ.get("MONTHLY"):
+              dd = [b for b in d["blockers"] if b.get("verdict") in ("decided", "recheck")]
+              print(f"\n## Monthly: every decided 'stays blocked' segment, current evidence: {len(dd)}\n"); print(head)
+              for b in sorted(dd, key=lambda b: -b["rides"]): print(row(b))
           EOF
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
