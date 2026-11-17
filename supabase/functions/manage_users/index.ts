@@ -8,6 +8,8 @@
 //                      recover_code (one-time recovery code -> new password). All rate-limited per username.
 // Signed-in user:      change_password (own; clears must_change_password), recovery_set_password (reset-mail session only),
 //                      remove_my_mfa
+// Personal devices:    trust_device / untrust_device (this session), my_devices, revoke_device (own: any session;
+//                      another user's: platform admin + aal2), all_devices (platform admin + aal2)
 // Platform admin:      my_security, set_recovery_email, gen_recovery_codes (both need the current password)
 // Control room:        list, create (role "platform" = platform admin, platform admins only), set_membership,
 //                      remove_membership, set_platform, set_name (display name; own or a manageable user),
@@ -271,6 +273,47 @@ Deno.serve(async (req) => {
       const n = await dropFactors(uid);
       await logEvent(uid, myProf.username, "mfa_removed", { factors: n });
       return out({ ok: true, removed: n });
+    }
+
+    // ---------- personal devices (a device = an Auth session; disconnect deletes the session) ----------
+    if (["trust_device", "untrust_device", "my_devices", "revoke_device", "all_devices"].includes(String(b.action))) {
+      if (!myProf) throw new Fail("not_allowed", 403);
+      const sid = String(claims.session_id || "");
+      const dev = (d: Record<string, unknown>) => ({ ...d, current: d.session_id === sid });
+      if (b.action === "trust_device") {
+        if (!UUID.test(sid)) throw new Fail("bad_input");
+        const { data: until } = await admin.rpc("device_trust", { p_user: uid, p_session: sid, p_hours: Math.round(Number(b.hours) || 12) }).throwOnError();
+        await logEvent(uid, myProf.username, "device_trusted", { session: sid, until });
+        return out({ ok: true, expires_at: until });
+      }
+      if (b.action === "untrust_device") {
+        await admin.rpc("device_untrust", { p_user: uid, p_session: sid }).throwOnError();
+        await logEvent(uid, myProf.username, "device_untrusted", { session: sid });
+        return out({ ok: true });
+      }
+      if (b.action === "my_devices") {
+        const { data } = await admin.rpc("device_list", { p_user: uid }).throwOnError();
+        return out({ ok: true, devices: ((data || []) as Record<string, unknown>[]).map(dev) });
+      }
+      const isPlat = await isPlatformId(uid);
+      if (b.action === "all_devices") {
+        if (!isPlat) throw new Fail("not_allowed", 403);
+        if (claims.aal !== "aal2") throw new Fail("mfa_enroll_required", 403);
+        const { data } = await admin.rpc("device_list", { p_user: null }).throwOnError();
+        return out({ ok: true, devices: ((data || []) as Record<string, unknown>[]).map(dev) });
+      }
+      // revoke_device: own sessions with the password session; another user's only by a platform admin with the code
+      const t = String(b.session_id || "");
+      if (!UUID.test(t)) throw new Fail("bad_input");
+      const { data: owner } = await admin.rpc("session_owner", { p_session: t });
+      if (!owner) throw new Fail("not_found", 404);
+      if (owner !== uid) {
+        if (!isPlat) throw new Fail("not_allowed", 403);
+        if (claims.aal !== "aal2") throw new Fail("mfa_enroll_required", 403);
+      }
+      await admin.rpc("device_revoke", { p_session: t }).throwOnError();
+      await logEvent(uid, myProf.username, "device_revoked", { session: t, owner, by_other: owner !== uid });
+      return out({ ok: true });
     }
 
     // ---------- platform admin: own recovery settings ----------
