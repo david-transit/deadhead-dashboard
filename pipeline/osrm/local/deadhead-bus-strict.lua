@@ -18,7 +18,7 @@ if file then
     if kind and (kind == 'way' or kind == 'node') then
       local set = {}
       for key in ignore:gmatch('[^;%s"]+') do
-        if DIMS[key] then set[key] = true end
+        if DIMS[key] or (kind == 'node' and (key == 'barrier' or key == 'access')) then set[key] = true end
         if key == 'maxweight' then set.maxweightrating = true end
         if key == 'width' then set.est_width = true end
       end
@@ -42,6 +42,7 @@ end
 
 local function process_node(profile, node, result, relations)
   local ex = EX['node:' .. tostring(node:id())]
+  if ex and (ex.barrier or ex.access) then return end  -- approved: buses pass this node (no obstacle at all)
   if ex and ex.maxheight then return car.process_node(profile, node, result, relations) end
   return bus.process_node_strict(profile, node, result, relations)
 end

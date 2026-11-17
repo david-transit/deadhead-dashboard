@@ -1,0 +1,66 @@
+name: bus-blockers-weekly
+
+# Weekly scan (pipeline/osrm/scan_blockers.py): every way / node the bus profile blocks in the service area, checked against
+# GPS of buses in service on the last 3 weekdays. Reports new blockers that service already passes ("auto" = clear by
+# David's rule, "border" = for David). Public data only (OSM + Open Bus); it changes nothing: approving is a row in
+# pipeline/osrm/local/bus_exceptions.csv, committed by a person.
+on:
+  schedule:
+    - cron: "0 1 * * 1"   # Monday 03:00 Israel (winter)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install osmium==4.3.2
+
+      - name: Israel extract (Geofabrik)
+        run: curl -fsSL --retry 3 -o "$RUNNER_TEMP/israel.osm.pbf" https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf
+
+      - name: Last 3 weekdays (Sun-Thu)
+        id: days
+        run: |
+          days=$(python3 -c 'import datetime as d
+          t=d.date.today(); out=[]
+          while len(out)<3:
+              t-=d.timedelta(days=1)
+              if t.weekday() not in (4,5): out.append(t.isoformat())
+          print(",".join(sorted(out)))')
+          echo "days=$days" >> "$GITHUB_OUTPUT"; echo "days: $days"
+
+      - name: Scan
+        env:
+          DAYS: ${{ steps.days.outputs.days }}
+          PYTHONIOENCODING: utf-8
+        run: |
+          mkdir -p "$RUNNER_TEMP/scan"
+          python pipeline/osrm/scan_blockers.py "$RUNNER_TEMP/israel.osm.pbf" "$RUNNER_TEMP/scan" --days "$DAYS"
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          d = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "scan", "blockers_scan.json"), encoding="utf-8"))
+          new = [b for b in d["blockers"] if b.get("verdict") in ("auto", "border")]
+          print(f"## Bus blockers that service passes (not yet approved): {len(new)}\n")
+          print("| verdict | OSM | name | tag | rides | per day |\n|---|---|---|---|---|---|")
+          for b in sorted(new, key=lambda b: -b["rides"]):
+              print(f"| {b['verdict']} | [{b['kind']} {b['id']}](https://www.openstreetmap.org/{b['kind']}/{b['id']}) | {b.get('name','')} | {b['tag']} | {b['rides']} | {' / '.join(str(v) for v in b['per_day'].values())} | {b.get('caution') or ''} |")
+          EOF
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: bus-blockers-scan
+          path: ${{ runner.temp }}/scan/
+          retention-days: 30
