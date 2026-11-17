@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="יאללה־סע">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link href="assets/fonts/fonts.css?v=2026-11-17.33" rel="stylesheet">
+<link href="assets/fonts/fonts.css?v=2026-11-17.34" rel="stylesheet">
 <style>
 :root{--gold:#B8860B;--char:#4A5059;--blue:#1F6FEB;--dim:#D9DDE2;--bg:#F5F6F8;--card:#fff;--line:#E3E6EB;--text:#1d2330;--muted:#6b7280;--svc:#1F4E9A;--empty:#E8871E;--depot:#5B3A8C;--rein:#2E8B57;--sel:#E8F0FC;--warn:#C62828;--ok:#2E9E4F}
 *{box-sizing:border-box}
@@ -61,7 +61,7 @@ input[type=search]{width:180px}
 .card .s{display:none;position:absolute;top:calc(100% + 6px);inset-inline-start:0;z-index:15;width:max-content;max-width:min(440px,92vw);background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(20,25,35,.16);padding:8px 12px;font-size:12.5px;line-height:1.55}
 .card:hover .s:not(:empty),.card:focus .s:not(:empty),.card.open .s:not(:empty){display:block}
 .card:nth-child(n+3) .s{inset-inline-start:auto;inset-inline-end:0}
-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;padding:8px 16px 12px}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:8px 16px 8px}
 .panel{min-width:0;background:var(--card);border:1px solid var(--line);border-radius:8px;min-height:0;display:flex;flex-direction:column}
 #gantt{overflow:auto;flex:1;min-height:0;position:relative}
 .axis,.row{display:grid;grid-template-columns:var(--labw,240px) 1fr;align-items:center}
@@ -155,12 +155,27 @@ body.dense .row .lab .fuelb{display:none}
 .savebar{display:flex;gap:6px;align-items:center}
 #bSave.pending{background:var(--empty);border-color:var(--empty);font-weight:700}
 .gpanel{position:relative}
-.legend{display:none;position:absolute;top:32px;inset-inline-start:8px;z-index:6;flex-direction:column;gap:7px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(20,25,35,.16);font-size:13px;max-width:360px}
-.legend.open{display:flex}
-.legbtn{font-size:12px;margin-inline-start:6px;padding:0 2px}
-.legend i{display:inline-block;width:26px;height:12px;border-radius:3px;vertical-align:middle;margin-inline-end:6px}
+.legend{display:flex;flex-wrap:wrap;align-items:center;gap:3px 14px;padding:5px 16px;background:var(--card);border-top:1px solid var(--line);font-size:12px;line-height:1.5;color:var(--text);z-index:20}
+.legend>span{white-space:nowrap}.legend .lgh{font-weight:600;color:var(--muted)}
+.legend i{display:inline-block;width:22px;height:11px;border-radius:3px;vertical-align:middle;margin-inline-end:5px}
 #side{overflow:auto}
 #side h2{margin:0;padding:12px 14px;font-size:17px;background:var(--sel);border-bottom:1px solid var(--line);border-radius:8px 8px 0 0}
+/* the vehicle's block (סידור): a dialog over the full-width schedule */
+.vehdlg{max-width:min(680px,96vw);height:min(92vh,1100px)}
+.vehdlg[open]{display:flex;flex-direction:column}
+.vehdlg .vehhd h2{margin:0;font-size:18px;outline:0}
+.vehnav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--bg)}
+.vehnav .grp{display:flex;align-items:center;gap:4px}
+.vehnav .btn svg{width:16px;height:16px;vertical-align:-3px}
+.vehnav .pos{font-size:12px;color:var(--muted);min-width:70px;text-align:center}
+.vehnav select{max-width:190px}
+.vehnav .sp{flex:1}
+.vehdlg #side{flex:1;min-height:0;border:0;border-radius:0;overflow:auto}
+.vehdlg #side>h2{display:none}
+.vehft{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 16px;border-top:1px solid var(--line)}
+.vehft:has(#vehSave[hidden]):has(#vehSaveMsg:empty){display:none}
+#vehSave{display:flex;gap:8px;align-items:center}#vehSave[hidden]{display:none}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .it{display:flex;justify-content:space-between;gap:8px;padding:5px 14px;border-bottom:1px solid #F0F2F5;font-size:13px}
 .it .t{direction:ltr;font-weight:500;white-space:nowrap}
 .it.svc .t{color:var(--svc)}
@@ -244,10 +259,11 @@ table.ed input.num{width:110px}
 .inv{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}.inv .field{margin:0}
 h4{margin:18px 0 6px;font-size:15px}
 body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
+body.locked>.legend{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
-@media (max-width:900px){body{height:auto}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
+@media (max-width:900px){body{height:auto}.legend{position:sticky;bottom:0}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
 </style>
-<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-17.33">
+<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-17.34">
 </head>
 <body class="locked">
 <div id="gate" class="intro">
@@ -333,20 +349,35 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
 <main>
   <div class="panel gpanel">
     <div id="gantt" role="list" aria-label="סידורי רכב"></div>
-    <div class="legend" id="legendPop" role="note" aria-label="מקרא">
-      <span><i style="background:var(--svc)"></i>נסיעה בשירות</span>
-      <span><i style="background:repeating-linear-gradient(135deg,var(--empty) 0 4px,#F3A957 4px 6px)"></i>נסיעה ריקה</span>
-      <span><i style="background:repeating-linear-gradient(135deg,var(--rein) 0 4px,#5BB585 4px 6px)"></i>נסיעת תגבור</span>
-      <span><i style="background:repeating-linear-gradient(135deg,var(--depot) 0 4px,#7D5BB0 4px 6px)"></i>נסיעה ריקה לחניון / מחניון</span>
-      <span><i style="background:#fff;outline:2px solid var(--warn)"></i>נתון חשוד (חפיפה / אין מספיק זמן)</span>
-      <span><i style="background:repeating-linear-gradient(135deg,#9AA1AB 0 4px,#C9CED6 4px 6px)"></i>התחלה כפולה (אוחדה)</span>
-      <span><i style="background:var(--svc);outline:2px dashed var(--warn);outline-offset:-2px"></i>לא הושלמה לפי GPS</span>
-      <span><i style="background:var(--svc);box-shadow:inset 0 0 0 2px #F5C542"></i>נערך ידנית</span>
-      <span class="muted">מעברים מתחת לק״מ לא מוצגים כפס, אבל נספרים בסכום</span>
-    </div>
   </div>
-  <aside class="panel" id="side" aria-live="polite"><div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div></aside>
 </main>
+    <footer class="legend" id="legend" aria-label="מקרא"><span class="lgh" aria-hidden="true">מקרא:</span>
+    <span class="lgm"><i style="background:var(--svc)"></i>נסיעה בשירות</span>
+    <span class="lgm"><i style="background:repeating-linear-gradient(135deg,var(--empty) 0 4px,#F3A957 4px 6px)"></i>נסיעה ריקה</span>
+    <span class="lgm"><i style="background:repeating-linear-gradient(135deg,var(--rein) 0 4px,#5BB585 4px 6px)"></i>נסיעת תגבור</span>
+    <span class="lgm"><i style="background:repeating-linear-gradient(135deg,var(--depot) 0 4px,#7D5BB0 4px 6px)"></i>נסיעה ריקה לחניון / מחניון</span>
+    <span><i style="background:#fff;outline:2px solid var(--warn)"></i>נתון חשוד (חפיפה / אין מספיק זמן)</span>
+    <span><i style="background:repeating-linear-gradient(135deg,#9AA1AB 0 4px,#C9CED6 4px 6px)"></i>התחלה כפולה (אוחדה)</span>
+    <span><i style="background:var(--svc);outline:2px dashed var(--warn);outline-offset:-2px"></i>לא הושלמה לפי GPS</span>
+    <span><i style="background:var(--svc);box-shadow:inset 0 0 0 2px #F5C542"></i>נערך ידנית</span>
+    <span class="muted">מעברים מתחת לק״מ לא מוצגים כפס, אבל נספרים בסכום</span>
+  </footer>
+
+<dialog id="dlgVeh" class="vehdlg" aria-labelledby="vehT">
+  <div class="dlg-h vehhd"><h2 id="vehT" tabindex="-1"></h2><button class="btn small" id="vehClose">סגירה</button></div>
+  <div class="vehnav" role="group" aria-label="מעבר לסידור אחר או ליום אחר">
+    <div class="grp"><button type="button" class="btn small" id="vehPrev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg> הסידור הקודם</button>
+      <span class="pos" id="vehPos"></span>
+      <button type="button" class="btn small" id="vehNext">הסידור הבא <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button></div>
+    <span class="sp"></span>
+    <div class="grp"><button type="button" class="btn small iconbtn" id="vehDPrev" aria-label="אותו רכב, ביום הקודם" title="אותו רכב, ביום הקודם"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      <select id="vehDay" aria-label="אותו רכב, ביום אחר"></select>
+      <button type="button" class="btn small iconbtn" id="vehDNext" aria-label="אותו רכב, ביום הבא" title="אותו רכב, ביום הבא"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button></div>
+  </div>
+  <aside class="panel" id="side" aria-label="פרטי הסידור"><div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div></aside>
+  <div class="vehft"><div id="vehSave" hidden role="group" aria-label="שינויים שלא נשמרו"><button type="button" class="btn primary" id="vehSaveBtn">שמירה <span id="vehSaveN"></span></button><button type="button" class="btn" id="vehUndo">ביטול</button></div><span class="msg" id="vehSaveMsg" role="status"></span></div>
+  <div class="sr-only" id="vehLive" aria-live="polite"></div>
+</dialog>
 
 <dialog id="dlgSav" aria-labelledby="savTitle">
   <div class="dlg-h"><h3 id="savTitle">הצעות חיסכון</h3><button class="btn small" id="savClose">סגירה</button></div>
@@ -426,11 +457,11 @@ body.locked>header,body.locked>section,body.locked>main{visibility:hidden}
   <div class="dlg-f" id="setFoot"><button class="btn primary" id="setSave">החלה</button><span class="msg" id="setMsg" aria-live="polite"></span></div>
 </dialog>
 
-<script src="assets/logo.js?v=2026-11-17.33"></script>
-<script src="assets/core.js?v=2026-11-17.33"></script>
-<script src="assets/route.js?v=2026-11-17.33"></script>
-<script src="assets/map.js?v=2026-11-17.33"></script>
-<script src="assets/app.js?v=2026-11-17.33"></script>
-<script src="mobile/mobile.js?v=2026-11-17.33"></script>
+<script src="assets/logo.js?v=2026-11-17.34"></script>
+<script src="assets/core.js?v=2026-11-17.34"></script>
+<script src="assets/route.js?v=2026-11-17.34"></script>
+<script src="assets/map.js?v=2026-11-17.34"></script>
+<script src="assets/app.js?v=2026-11-17.34"></script>
+<script src="mobile/mobile.js?v=2026-11-17.34"></script>
 </body>
 </html>

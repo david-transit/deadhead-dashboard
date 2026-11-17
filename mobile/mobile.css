@@ -98,10 +98,18 @@
   .m-dep{background:repeating-linear-gradient(135deg,var(--depot) 0 4px,#7D5BB0 4px 7px)}
   .m-more{width:100%;min-height:44px}
 
-  /* one vehicle: the side panel full screen, as a vertical list */
-  body:not(.m-veh) #side,body:not(.m-veh) #mVehBar{display:none!important}
-  body.m-veh #mTop,body.m-veh #orph,body.m-veh #rwBar{display:none!important}
-  #mVehBar{position:sticky;top:calc(61px + env(safe-area-inset-top));z-index:25;display:flex!important;align-items:center;gap:6px;background:var(--card);border-bottom:1px solid var(--line);padding:6px 8px}
+  /* one vehicle: the vehicle dialog (#dlgVeh) full screen, its block as a vertical list; #mVehBar is its top bar */
+  #dlgVeh{background:var(--bg)}
+  #dlgVeh .vehhd{display:none}
+  .vehnav{padding:8px 10px;gap:8px;background:var(--card)}
+  .vehnav .grp{flex:1;justify-content:space-between}
+  .vehnav .sp{display:none}
+  .vehnav .btn.small{min-height:40px;font-size:14px;padding:0 10px}
+  .vehnav .btn.iconbtn{min-width:44px}
+  .vehnav select{flex:1;max-width:none;min-height:40px}
+  .vehft{padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--card)}
+  .vehft .btn{min-height:44px;font-size:16px}
+  #mVehBar{position:sticky;top:0;z-index:25;display:flex!important;align-items:center;gap:6px;background:var(--card);border-bottom:1px solid var(--line);padding:6px 8px}
   #mVehBar[hidden]{display:none!important}
   #mBack{border:0;background:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--text);cursor:pointer;flex:none}
   #mBack svg{width:26px;height:26px}
@@ -158,6 +166,10 @@
   #mToast[hidden]{display:none!important}
   #mToast.err{background:var(--warn)}
   body.m-saving #mToast{bottom:calc(80px + env(safe-area-inset-bottom))}
+  /* legend strip: the four kinds drawn in the vehicle cards, kept at the bottom of the screen */
+  .legend{padding:6px 12px calc(6px + env(safe-area-inset-bottom));gap:2px 12px;font-size:12px}
+  .legend>span:not(.lgm):not(.lgh){display:none}
+  body.m-saving .legend{bottom:calc(76px + env(safe-area-inset-bottom))}
 
   /* dialogs (settings, control room, block editor, savings, account): full screen */
   dialog:not(.small):not(.m-sheet){width:100%;max-width:100%!important;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0}

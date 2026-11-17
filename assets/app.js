@@ -329,7 +329,7 @@ function render(){
   const tw=Math.max(($("#gantt").clientWidth||800)-(document.body.classList.contains("dense")?215:240),720), step=[1,2,3,4].find(k=>tw/((T1-T0)/60)*k>=44)||4;
   const nearEnd=m=>m<S0+1440&&(S0+1440-m)/60*tw/((T1-T0)/60)<82; // an hour label that would touch "סוף יום"
   let ticks=""; for(let m=T0;m<=T1;m+=60) ticks+=`<div class="tick${m===S0||m===S0+1440?" day":""}" style="left:${pct(m)}%">${m===S0+1440?'<span class="dl" title="סוף יום השירות">סוף יום</span>':((m-T0)/60)%step===0&&!nearEnd(m)?`<span>${fmt(m)}</span>`:""}</div>`;
-  let h=`<div class="axis"><div class="lab">רכב <button class="linkbtn legbtn" data-legend aria-controls="legendPop" aria-expanded="${$("#legendPop").classList.contains("open")}">מקרא</button></div><div class="track">${ticks}</div></div>`;
+  let h=`<div class="axis"><div class="lab">רכב</div><div class="track">${ticks}</div></div>`;
   const grid=ticks.replace(/<span[^>]*>.*?<\/span>/g,"");
   for(const [v,s] of vs){
     let b="";const hlS=HL&&HL.veh===v.veh?HL.sched:null;
@@ -352,7 +352,9 @@ function render(){
   }
   if(!vs.length) h+='<div class="empty-state">לא נמצאו רכבים</div>';
   window.YS_VIEW={vs,vsAll}; // mobile/mobile.js draws its list from the same filtered + sorted view
+  const fv=document.activeElement&&document.activeElement.closest&&document.activeElement.closest("#gantt .row")?.dataset.v; // keep the focused row through a redraw
   $("#gantt").innerHTML=h;
+  if(fv) document.querySelector(`#gantt .row[data-v="${CSS.escape(fv)}"]`)?.focus({preventScroll:true});
   side(sel);
 }
 // one line of a night leg in the side panel
@@ -370,7 +372,9 @@ function legActs(kind,start){
 function ovnSelect(N,veh,mode){
   if(!canEdit()) return `<span class="sub">${esc(OVMODES.find(x=>x[0]===mode)?.[1]||mode)}</span>`;
   return `<span class="sub"><select data-ovn="${esc(N)}" data-veh="${esc(veh)}" aria-label="מה הרכב עשה בלילה שלפני ${dl(N)}">${OVMODES.filter(([k])=>k!=="rein"||mode==="rein").map(([k,t])=>`<option value="${k}" ${mode===k?"selected":""}>${t}</option>`).join("")}</select></span>`}
-function side(veh){
+// the block (סידור) of the selected vehicle: drawn into #side, which lives in the vehicle dialog (#dlgVeh)
+function side(veh){sideBody(veh);vehHead()}
+function sideBody(veh){
   const box=$("#side"); MAPI=[];
   if(!veh){box.innerHTML='<div class="empty-state">בחר רכב בציר הזמן כדי לראות את הסידור שלו</div>';return}
   const v=D.vehicles.find(x=>x.veh===veh);
@@ -559,7 +563,7 @@ async function rwClick(e){const t=e.target,d=$("#dlgRw");
   if(t.dataset.rokshow!=null){ROKOPEN=!ROKOPEN;drawRouteList();$("#rwList [data-rokshow]")?.focus();return}
   if(t.dataset.rokdel!=null){const k=t.dataset.rokdel;rokSet(k,DRAFT.rok[k]===null||(DRAFT.rok[k]&&!ROK.some(r=>rokRowKey(r)===k))?undefined:null);$("#rwList [data-rokshow]")?.focus();return}
   const n=t.dataset.rgmap??t.dataset.rgvia??t.dataset.rgnote??t.dataset.rgsend??t.dataset.rgnoteok??t.dataset.rgok??t.dataset.rgokok;const g=n!=null?RP[+n]:null;
-  if(t.dataset.rgv){d.close();await selectVehicle(t.dataset.rgv);document.querySelector(`.row[data-v="${CSS.escape(t.dataset.rgv)}"]`)?.scrollIntoView({block:"nearest"});return}
+  if(t.dataset.rgv){d.close();if(!(await selectVehicle(t.dataset.rgv))) return;document.querySelector(`.row[data-v="${CSS.escape(t.dataset.rgv)}"]`)?.scrollIntoView({block:"nearest"});openVehDlg();return}
   if(!g) return;
   if(t.dataset.rgmap!=null){d.close();const x=g.legs[0];legMap({a:g.a,b:g.b,km:g.km,min:g.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:`בעיית מסלול: ${g.legs.length} נסיעות`,back:openRouteList})}
   else if(t.dataset.rgnote!=null){const w=t.closest(".rwg").querySelector(".rwnote");w.hidden=!w.hidden;if(!w.hidden) w.querySelector("textarea").focus()}
@@ -698,7 +702,8 @@ function setVehDraft(veh,patch){ // patch: field -> value (null/"" removes the f
   touched()}
 function drawSaveBar(){const n=nDraft(),b=$("#bSave");if(!b) return;
   $("#saveBar").hidden=!canEdit()||!n; $("#nDraft").textContent=n?`(${n})`:""; b.disabled=!n; $("#bUndo").disabled=!n;
-  b.classList.toggle("pending",n>0); b.title=n?`יש ${n} שינויים שלא נשמרו`:"אין שינויים לשמירה"}
+  b.classList.toggle("pending",n>0); b.title=n?`יש ${n} שינויים שלא נשמרו`:"אין שינויים לשמירה";
+  const vs=$("#vehSave");if(vs){vs.hidden=!canEdit()||!n;$("#vehSaveN").textContent=n?`(${n})`:"";$("#vehSaveBtn").disabled=!n;$("#vehUndo").disabled=!n}}
 async function saveAll(){
   const msg=$("#saveMsg"); if(!nDraft()) return true;
   if(!canEdit()){msg.className="msg err";msg.textContent=ERR.not_allowed;return false}
@@ -747,6 +752,50 @@ async function selectVehicle(veh){
   if(sel&&nDraft()){const r=await askSave("המשך בלי לשמור");if(r==="back") return false;if(r==="save"&&!(await saveAll())) return false}
   sel=veh;pick=null;BLKMODE=false;SHOWORIG=false;HL=null;document.querySelectorAll(".row.sel").forEach(x=>x.classList.remove("sel"));
   document.querySelector(`.row[data-v="${CSS.escape(veh)}"]`)?.classList.add("sel");side(sel);return true}
+
+// ---- the vehicle dialog: the block of the selected vehicle over the full-width schedule. "הסידור הקודם / הבא" walk the
+// schedule as shown (filters + sort); the date control shows the same vehicle on another day. Closing it (Esc / סגירה)
+// returns to where the user was: the day, the vehicle, the schedule's scroll position and the focused row. ----
+let VRET=null;
+const DOWV=["א'","ב'","ג'","ד'","ה'","ו'","ש'"];
+const vehDayTxt=d=>`יום ${DOWV[new Date(d+"T12:00:00Z").getUTCDay()]} ${d.slice(8,10)}.${d.slice(5,7)}.${d.slice(0,4)}`;
+function vehHead(){const d=$("#dlgVeh");if(!d||!D) return;
+  const h=$("#side h2");$("#vehT").innerHTML=h?h.innerHTML:(sel?`רכב ${esc(sel)}`:""); // the h2 is built with esc() in sideBody
+  const vs=(window.YS_VIEW&&window.YS_VIEW.vs)||[],i=vs.findIndex(([v])=>v.veh===sel);
+  $("#vehPrev").disabled=i<=0;$("#vehNext").disabled=i<0||i>=vs.length-1;
+  $("#vehPos").textContent=i<0?(D.vehicles.some(v=>v.veh===sel)?"לא ברשימה המסוננת":"לא ברשימה של היום"):`${nf(i+1)} מתוך ${nf(vs.length)}`;
+  const ds=[...days].sort(),k=ds.indexOf(D.day),sl=$("#vehDay"),sig=ds.join();
+  if(sl.dataset.sig!==sig){sl.innerHTML=[...ds].reverse().map(x=>`<option value="${esc(x)}">${esc(vehDayTxt(x))}</option>`).join("");sl.dataset.sig=sig}
+  sl.value=D.day;$("#vehDPrev").disabled=k<=0;$("#vehDNext").disabled=k<0||k>=ds.length-1}
+function openVehDlg(from){const d=$("#dlgVeh");if(!sel||!D) return;if(d.open){vehHead();return}
+  const g=$("#gantt");VRET={veh:sel,day:D.day,top:g.scrollTop,left:g.scrollLeft,x:scrollX,y:scrollY,el:from||document.activeElement};
+  side(sel);d.showModal();$("#side").scrollTop=0;$("#vehT").focus()}
+const vehAnnounce=()=>{$("#vehLive").textContent=`${$("#vehT").textContent} · ${D?vehDayTxt(D.day):""}`};
+async function vehStep(k){const vs=(window.YS_VIEW&&window.YS_VIEW.vs)||[],i=vs.findIndex(([v])=>v.veh===sel),n=vs[i+k];if(i<0||!n) return;
+  if(!(await selectVehicle(n[0].veh))) return;$("#side").scrollTop=0;vehAnnounce();
+  const b=$(k<0?"#vehPrev":"#vehNext");if(b.disabled) $(k<0?"#vehNext":"#vehPrev").focus()}
+function vehDay(day){if(!day||!D||day===D.day) return;loadDay(day,()=>{$("#side").scrollTop=0;vehAnnounce()})}
+function vehDayStep(k){const ds=[...days].sort(),i=ds.indexOf(D.day);vehDay(ds[i+k]);
+  setTimeout(()=>{const b=$(k<0?"#vehDPrev":"#vehDNext");if(b.disabled) $("#vehDay").focus()},0)}
+$("#vehPrev").onclick=()=>vehStep(-1);$("#vehNext").onclick=()=>vehStep(1);
+$("#vehDPrev").onclick=()=>vehDayStep(-1);$("#vehDNext").onclick=()=>vehDayStep(1);
+$("#vehDay").onchange=e=>vehDay(e.target.value);
+$("#vehClose").onclick=()=>$("#dlgVeh").close();
+// focus stays inside the dialog: Tab from the last control goes to the first, Shift+Tab from the first to the last
+$("#dlgVeh").addEventListener("keydown",e=>{if(e.key!=="Tab") return;
+  const f=[...$("#dlgVeh").querySelectorAll('button,select,input,textarea,a[href],[tabindex]:not([tabindex="-1"])')].filter(x=>!x.disabled&&x.getClientRects().length);if(!f.length) return;
+  const a=f[0],z=f[f.length-1],el=document.activeElement;
+  if(e.shiftKey&&(el===a||!$("#dlgVeh").contains(el)||el===$("#vehT"))){e.preventDefault();z.focus()}else if(!e.shiftKey&&el===z){e.preventDefault();a.focus()}});
+$("#vehSaveBtn").onclick=async e=>{e.currentTarget.disabled=true;await saveAll();drawSaveBar()};
+$("#vehUndo").onclick=()=>$("#bUndo").click();
+new MutationObserver(()=>{const m=$("#saveMsg"),v=$("#vehSaveMsg");v.textContent=m.textContent;v.className=m.className.replace("savemsg","")}).observe($("#saveMsg"),{childList:true,characterData:true,subtree:true,attributes:true});
+$("#dlgVeh").addEventListener("close",()=>{const r=VRET;VRET=null;BLKMODE=false;SHOWORIG=false;if(!r){render();return}
+  const vis=el=>el&&el.isConnected&&el!==document.body&&el.getClientRects().length>0;
+  const back=()=>{if(sel!==r.veh){sel=r.veh;pick=null;HL=null}render();
+    const g=$("#gantt");g.scrollTop=r.top;g.scrollLeft=r.left;scrollTo(r.x,r.y);
+    const q=CSS.escape(r.veh),el=[r.el,document.querySelector(`.row[data-v="${q}"]`),document.querySelector(`.m-vc[data-v="${q}"]`)].find(vis);
+    if(el) el.focus({preventScroll:true})};
+  if(D&&r.day&&D.day!==r.day) loadDay(r.day,back); else back()});
 
 // ---- manual block edits (fixing data errors): every edit is a draft override (block_edits) on the vehicle-day; the
 // original day file never changes. assets/core.js applyBlockEdits() rebuilds the edited blocks (empty legs by road,
@@ -1095,7 +1144,7 @@ $("#setClose").onclick=()=>{if(applySettings()) $("#dlgSet").close()};
 $("#bSettings").onclick=openSettings;
 
 // ---- wiring ----
-$("#gantt").addEventListener("click",e=>{const r=e.target.closest(".row");if(r) selectVehicle(r.dataset.v)});
+$("#gantt").addEventListener("click",async e=>{const r=e.target.closest(".row");if(r&&(await selectVehicle(r.dataset.v))) openVehDlg(r)});
 $("#gantt").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){const r=e.target.closest(".row");if(r){e.preventDefault();r.click()}}});
 // a full vehicle number in the search box selects that vehicle (also kept when the day changes)
 const knownVeh=q=>/^\d{4,}$/.test(q)&&(D&&D.vehicles.some(v=>v.veh===q)||Object.values(ENDS).some(d=>d[q]));
@@ -1103,6 +1152,7 @@ $("#q").oninput=async()=>{const q=$("#q").value.trim();if(knownVeh(q)&&q!==sel&&
   if(lineQ(q)) openFind(q,false); render()}; $("#sort").onchange=render; $("#br").onchange=render; $("#acc").onchange=render; $("#day").onchange=e=>loadDay(e.target.value);
 // a phone keyboard changes only the height: re-render only when the width changes (a re-render would drop the focused field)
 let _rw=innerWidth;addEventListener("resize",()=>{if(innerWidth===_rw) return;_rw=innerWidth;clearTimeout(window._rt);window._rt=setTimeout(render,150)});
+$("#q").addEventListener("keydown",async e=>{if(e.key!=="Enter") return;const q=$("#q").value.trim();if(knownVeh(q)&&(await selectVehicle(q))) openVehDlg()});
 $("#bToday").onclick=()=>loadDay(today); $("#bYest").onclick=()=>loadDay(yest);
 const QP=new URLSearchParams(location.search);
 // ---- control room (חדר בקרה): platform admin = all users; operator admin = users of his operators. Server: manage_users ----
@@ -1217,16 +1267,12 @@ $("#dlgFind").addEventListener("keydown",e=>{if(e.key==="Escape"){e.preventDefau
 $("#fdRes").addEventListener("click",async e=>{const b=e.target.closest(".fdrow");if(!b) return;const veh=b.dataset.v,sc=+b.dataset.s;
   if(!(await selectVehicle(veh))) return; HL={veh,sched:sc}; render();
   document.querySelector(`.row[data-v="${CSS.escape(veh)}"]`)?.scrollIntoView({block:"center"});
-  document.querySelector(`.row[data-v="${CSS.escape(veh)}"] .bar.hl`)?.scrollIntoView({block:"nearest",inline:"center"})});
+  document.querySelector(`.row[data-v="${CSS.escape(veh)}"] .bar.hl`)?.scrollIntoView({block:"nearest",inline:"center"});openVehDlg()});
 
-// ---- compact layout: summary popovers, legend popover, collapsible top area, density (per user, in this browser) ----
+// ---- compact layout: summary popovers, collapsible top area, density (per user, in this browser) ----
 document.querySelectorAll(".card[tabindex]").forEach(c=>{c.addEventListener("click",()=>{const o=!c.classList.contains("open");document.querySelectorAll(".card.open").forEach(x=>x.classList.remove("open"));c.classList.toggle("open",o)});
   c.addEventListener("keydown",e=>{if(e.key==="Escape"){c.classList.remove("open");c.blur()}else if(e.key==="Enter"||e.key===" "){e.preventDefault();c.click()}})});
-const legend=$("#legendPop"), legOpen=o=>{legend.classList.toggle("open",o);document.querySelectorAll("[data-legend]").forEach(b=>b.setAttribute("aria-expanded",String(o)))};
-$("#gantt").addEventListener("click",e=>{if(e.target.closest("[data-legend]")){e.stopPropagation();legOpen(!legend.classList.contains("open"))}},true);
-document.addEventListener("click",e=>{if(!e.target.closest(".card")) document.querySelectorAll(".card.open").forEach(x=>x.classList.remove("open"));
-  if(legend.classList.contains("open")&&!legend.contains(e.target)&&!e.target.closest("[data-legend]")) legOpen(false)});
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&legend.classList.contains("open")){legOpen(false);document.querySelector("[data-legend]")?.focus()}});
+document.addEventListener("click",e=>{if(!e.target.closest(".card")) document.querySelectorAll(".card.open").forEach(x=>x.classList.remove("open"))});
 const prefKey=k=>`ys_${k}_${(PROFILE&&PROFILE.username)||lsGet("ys_user")||""}`;
 function setTopMin(min,save){document.body.classList.toggle("topmin",min);const b=$("#bCollapse");b.setAttribute("aria-expanded",String(!min));
   b.title=min?"הרחבת החלק העליון":"כיווץ החלק העליון";b.setAttribute("aria-label",b.title);if(save) lsSet(prefKey("topmin"),min?"1":"0");setTimeout(render,0)}

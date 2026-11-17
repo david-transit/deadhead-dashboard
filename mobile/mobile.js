@@ -50,7 +50,7 @@
     <span id="mSaveTxt" aria-live="polite"></span><button class="btn" id="mUndo" type="button">ביטול</button><button class="btn primary" id="mSaveBtn" type="button">שמירה</button></div>`);
   const toast = el(`<div class="m-only" id="mToast" role="status" hidden></div>`);
   const hdr = document.querySelector("body>header"), mainEl = document.querySelector("body>main");
-  hdr.after(vbar); mainEl.before(top); document.body.append(sheet, sbar, toast);
+  $("#dlgVeh").prepend(vbar); mainEl.before(top); document.body.append(sheet, sbar, toast);
   // the account menu gets the actions that live in the desktop toolbar (hidden on the phone)
   const menu = $("#meMenu");
   menu.insertAdjacentHTML("afterbegin", '<div class="m-only m-who" id="mWho"></div>');
@@ -127,7 +127,9 @@
     }
     if (!V.vs.length) h = '<div class="empty-state">לא נמצאו רכבים</div>';
     else if (V.vs.length > shown) h += `<button type="button" class="btn m-more" id="mMore">עוד ${nf(Math.min(LIMIT, V.vs.length - shown))} רכבים (מתוך ${nf(V.vs.length - shown)})</button>`;
+    const fv = document.activeElement && document.activeElement.closest && document.activeElement.closest("#mList .m-vc")?.dataset.v; // keep the focused card through a redraw
     $("#mList").innerHTML = h;
+    if (fv) document.querySelector(`#mList .m-vc[data-v="${CSS.escape(fv)}"]`)?.focus({ preventScroll: true });
   }
   $("#mList").addEventListener("click", async e => {
     if (e.target.closest("#mMore")) { shown += LIMIT; drawList(); return; }
@@ -147,20 +149,16 @@
     drawList();
   }
 
-  // ---- one vehicle: the app's own side panel, shown full screen ----
-  let listY = 0, pushed = false;
-  function openVeh() {
-    if (!on() || document.body.classList.contains("m-veh")) return;
-    listY = scrollY; document.body.classList.add("m-veh"); drawVehTitle(); scrollTo(0, 0);
-    try { history.pushState({ mveh: 1 }, ""); pushed = true; } catch { pushed = false; }
-  }
-  function closeVeh(fromPop) {
-    if (!document.body.classList.contains("m-veh")) return;
-    document.body.classList.remove("m-veh"); BLKMODE = false; drawList(); scrollTo(0, listY);
-    if (!fromPop && pushed) { pushed = false; history.back(); } else pushed = false;
-  }
-  addEventListener("popstate", () => { if (document.body.classList.contains("m-veh")) { pushed = false; closeVeh(true); } });
-  $("#mBack").onclick = () => closeVeh(false);
+  // ---- one vehicle: the app's vehicle dialog (#dlgVeh, assets/app.js), full screen; the phone's back button closes it ----
+  let pushed = false;
+  const vdlg = $("#dlgVeh");
+  function openVeh() { if (!on()) return; openVehDlg(); }
+  // every opening on the phone (list, trip search, route problems) gets a history entry, so "back" closes the dialog
+  { const f = window.openVehDlg; window.openVehDlg = function (...a) { const was = vdlg.open, r = f.apply(this, a);
+      try { if (on() && !was && vdlg.open) { document.body.classList.add("m-veh"); drawVehTitle(); history.pushState({ mveh: 1 }, ""); pushed = true; } } catch { pushed = false; } return r; }; }
+  vdlg.addEventListener("close", () => { document.body.classList.remove("m-veh"); drawList(); if (pushed) { pushed = false; history.back(); } });
+  addEventListener("popstate", () => { if (vdlg.open) { pushed = false; vdlg.close(); } });
+  $("#mBack").onclick = () => vdlg.close();
   // sticky top bar: "רכב X · סוג · יום א' 15.11" (the date stays visible while scrolling the vehicle's day)
   const DOW = ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"];
   const dayTxt = d => d ? `יום ${DOW[new Date(d + "T12:00:00Z").getUTCDay()]} ${d.slice(8, 10)}.${d.slice(5, 7)}` : "";
@@ -197,7 +195,6 @@
   // a trip chosen in the trip panel (full screen on the phone): close the panel and show that vehicle's day
   { const f = window.selectVehicle; if (typeof f === "function") window.selectVehicle = async function (...a) { const r = await f.apply(this, a);
       try { const d = $("#dlgFind"); if (r && on() && d && d.open) { d.close(); openVeh(); } } catch (e) { console.warn("mobile selectVehicle", e); } return r; }; }
-  wrap("loadDay", () => { if (on()) closeVeh(false); });
   MQ.addEventListener("change", () => { if (!on()) { document.body.classList.remove("m-veh", "m-saving"); sheet.open && sheet.close(); } else { drawTop(); } drawSave(); });
   drawSave();
 })();
