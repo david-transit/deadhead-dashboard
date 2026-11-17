@@ -198,11 +198,16 @@ async function ensureRoad(){
   try{do{roadAgain=false;const todo=[...nightPairs().values()];let buf=[];if(todo.length) render();
     const flush=async()=>{if(!buf.length||!canEdit()) return;const rows=buf;buf=[];
       try{await upsert("road_cache",rows,ROADPK)}catch(e){console.warn("road save",e)}};
+    // saved every 10 pairs (an editor who leaves the page keeps what was computed); a pair that failed (slow public
+    // OSRM) is tried once more at the end of the pass
+    const again=[];
     for(let i=0;i<todo.length;i++){const [a,b]=todo[i],r=await osrm(a,b);
-      if(r){ROAD.set(roadKey(a,b),r);buf.push(roadRow(a,b,r))} else roadFail++;
-      if(buf.length>=50) await flush();
+      if(r){ROAD.set(roadKey(a,b),r);buf.push(roadRow(a,b,r))} else again.push(todo[i]);
+      if(buf.length>=10) await flush();
       if(i%10===9) render();
       await new Promise(r=>setTimeout(r,150))}
+    for(const [a,b] of again){await new Promise(r=>setTimeout(r,1500));const r=await osrm(a,b);
+      if(r){ROAD.set(roadKey(a,b),r);buf.push(roadRow(a,b,r))} else roadFail++;if(buf.length>=10) await flush()}
     await flush(); if(todo.length) render();
   }while(roadAgain)}finally{roadBusy=false}}
 const legKm=l=>l.km==null?"":`${l.road?nf(l.km)+" ק״מ לפי כביש":"כ־"+nf(l.km)+" ק״מ (הערכה"+(roadBusy?" · מחשב…":"")+")"}`;
@@ -584,7 +589,8 @@ const ERRK=[["rp","בעיית מסלול"],["inc","לא הושלמה לפי GPS"
 // a route problem on an empty leg: "time" = needs more driving time than it has (tight), "detour" = road > 2.5 x air
 // and > 4 km, "route" = suspicious route the route check could not fix
 const RPTXT={time:"לא נכנס בזמן",detour:"עיקוף גדול",route:"מסלול חשוד",okchg:"השתנה מאז שאושר"};
-function legProblems(i){if(i.kind!=="empty"||i.overlap||i.km==null) return null;let p=[];
+// a leg still waiting for its road km (anchor / approved link) shows the day file's km: not judged until it is computed
+function legProblems(i){if(i.kind!=="empty"||i.overlap||i.km==null||i.wait) return null;let p=[];
   if(i.tight) p.push("time");
   const ax=i.a&&i.b?hav(i.a,i.b):null; if(ax!=null&&i.km>4&&i.km>2.5*Math.max(ax,0.01)) p.push("detour");
   if(ROUTE.unresolved(i.rt)) p.push("route");
