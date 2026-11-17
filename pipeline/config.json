@@ -1,4 +1,6 @@
 {
   "timezone": "Asia/Jerusalem",
-  "_note": "Per-operator settings (operator_ref, service_day_start_hour, ...) live in operators.json."
+  "_note": "Per-operator settings (operator_ref, service_day_start_hour, ...) live in operators.json.",
+  "gps_end_snap": {"_note": "build_day.py SNAP: a GPS end ('ליד …') moves to the planned last stop only when gps_km >= share * km_plan, the last point is <= max_km (air) from the stop and not past it along the route (before_tol_km), and the time to the next trip covers the rest at the line's planned speed; start mirrored (first point within start_share of the route, <= start_max_km). Otherwise marked trunc_end/trunc_start ('קטיעה אפשרית').",
+    "enabled": true, "share": 0.95, "max_km": 1.0, "before_tol_km": 0.0, "start_share": 0.05, "start_max_km": 1.0}
 }
