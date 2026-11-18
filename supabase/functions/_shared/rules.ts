@@ -51,3 +51,15 @@ export function spendOnce(seen: Set<string>, waMessageId: string): boolean {
   seen.add(waMessageId);
   return true;
 }
+
+// An agent's file (PRD R7א): which WhatsApp media type it becomes, within Meta's size limits.
+// WhatsApp images are jpeg/png only; other images go as documents.
+export type MediaKind = "image" | "audio" | "video" | "document";
+const LIMIT_MB: Record<MediaKind, number> = { image: 5, audio: 16, video: 16, document: 100 };
+export function mediaKind(mime: string, size: number): { kind: MediaKind } | { error: "empty" } | { error: "too_large"; limitMb: number } {
+  if (!mime || size <= 0) return { error: "empty" };
+  const kind: MediaKind = /^image\/(jpeg|png)$/.test(mime) ? "image"
+    : /^audio\/(aac|mp4|mpeg|amr|ogg)/.test(mime) ? "audio"
+    : /^video\/(mp4|3gpp)$/.test(mime) ? "video" : "document";
+  return size > LIMIT_MB[kind] * 1024 * 1024 ? { error: "too_large", limitMb: LIMIT_MB[kind] } : { kind };
+}

@@ -3,12 +3,14 @@
 //   * support agent (browser, /support/): JWT of a user in support_agents, session aal2 (personal data).
 //       {action:"reply", conversation, body}   free text inside the 24h window
 //       {action:"resend", message}             a failed outgoing text message again
+//       multipart/form-data action=file, conversation, file   an agent's file (PRD R7א); forwarded to Meta, no copy kept
 //   * server (manage_users, portal login code): header x-internal-key = WA_INTERNAL_KEY (never in a browser).
 //       {action:"template", to, template, params, quickReply?}   template name must be in TEMPLATES
 // Secrets (Edge Function env, typed by David): WA_TOKEN, WA_PHONE_ID, WA_INTERNAL_KEY.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { sendMessage } from "../_shared/send.ts";
-import { normPhone, type Category } from "../_shared/rules.ts";
+import { mediaKind, normPhone, type Category } from "../_shared/rules.ts";
+import { mediaUpload } from "../_shared/meta.ts";
 import { supabaseDb } from "../_shared/db.ts";
 
 const ORIGINS = ["https://yalla-sa.app"];
@@ -39,7 +41,10 @@ Deno.serve(async (req) => {
   const deps = { db, cfg: { token, phoneId } };
 
   try {
-    const b = await req.json().catch(() => { throw new Fail("bad_input"); });
+    const isForm = (req.headers.get("content-type") || "").startsWith("multipart/form-data");
+    const form = isForm ? await req.formData().catch(() => { throw new Fail("bad_input"); }) : null;
+    const b = form ? Object.fromEntries([...form.entries()].filter(([, v]) => typeof v === "string"))
+      : await req.json().catch(() => { throw new Fail("bad_input"); });
 
     // server-to-server: templates only
     const ik = req.headers.get("x-internal-key") || "";
@@ -73,6 +78,20 @@ Deno.serve(async (req) => {
       if (r.ok && (cv.status !== "assigned" || !cv.assignee)) {
         await admin.from("support_conversations").update({ status: "assigned", assignee: cv.assignee ?? me.user.id }).eq("id", cv.id);
       }
+      return out(r, r.ok ? 200 : 422);
+    }
+    if (b.action === "file" && form) {
+      const file = form.get("file");
+      if (!(file instanceof File)) throw new Fail("bad_input");
+      const mk = mediaKind(file.type, file.size);
+      if ("error" in mk) return out(mk, 413);
+      const { data: cv } = await admin.from("support_conversations").select("id, support_contacts(wa_id)").eq("id", b.conversation).maybeSingle();
+      if (!cv) throw new Fail("not_found", 404);
+      const filename = String(file.name || "file").slice(0, 200);
+      const mediaId = await mediaUpload(file, filename, deps.cfg);
+      const r = await sendMessage(deps, { to: cv.support_contacts.wa_id, kind: "media",
+        media: { kind: mk.kind, id: mediaId, filename, size: file.size }, category: "service",
+        sender: "agent", agentId: me.user.id, conversationId: cv.id });
       return out(r, r.ok ? 200 : 422);
     }
     if (b.action === "resend") {

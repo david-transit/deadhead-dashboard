@@ -43,6 +43,26 @@ export async function graphSend(payload: object, cfg: { token: string; phoneId: 
   return last;
 }
 
+// upload an agent's file to Meta; WhatsApp keeps it ~30 days, we keep no copy (PRD R7א)
+export async function mediaUpload(file: Blob, filename: string, cfg: { token: string; phoneId: string },
+  fetchFn: typeof fetch = fetch): Promise<string> {
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("file", file, filename);
+  const res = await fetchFn(`${GRAPH}/${cfg.phoneId}/media`, {
+    method: "POST", headers: { Authorization: `Bearer ${cfg.token}` }, body: form, signal: AbortSignal.timeout(60000),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j?.id) throw new Error(j?.error?.message || `media upload HTTP ${res.status}`);
+  return j.id;
+}
+
+export function mediaPayload(to: string, kind: "image" | "audio" | "video" | "document", id: string, filename?: string): object {
+  const media: Record<string, string> = { id };
+  if (kind === "document" && filename) media.filename = filename;
+  return { messaging_product: "whatsapp", to, type: kind, [kind]: media };
+}
+
 export function textPayload(to: string, body: string): object {
   return { messaging_product: "whatsapp", to, type: "text", text: { body } };
 }

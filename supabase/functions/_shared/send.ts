@@ -1,8 +1,8 @@
 // The one way to send a WhatsApp message (yalla-sa support, spec §1, §3, §6).
 // Every rule (opt-out, consent, 24h window, budget) is checked here; storage goes through SupportDb,
 // so this file is tested with an in-memory DB and used with Supabase in wa_send / wa_webhook.
-import { budgetLevel, costIls, sendBlock, type Block, type Category, type Settings } from "./rules.ts";
-import { graphSend, templatePayload, textPayload } from "./meta.ts";
+import { budgetLevel, costIls, sendBlock, type Block, type Category, type MediaKind, type Settings } from "./rules.ts";
+import { graphSend, mediaPayload, templatePayload, textPayload } from "./meta.ts";
 import type { Hours } from "./bot.ts";
 
 export interface SupportSettings extends Settings {
@@ -27,7 +27,8 @@ export interface Deps {
   fetchFn?: typeof fetch; sleep?: (ms: number) => Promise<void>; now?: Date;
 }
 export interface SendReq {
-  to: string; kind: "text" | "template"; body?: string; template?: string; params?: string[]; quickReply?: string;
+  to: string; kind: "text" | "template" | "media"; body?: string;
+  media?: { kind: MediaKind; id: string; filename: string; size: number }; template?: string; params?: string[]; quickReply?: string;
   category: Category; sender: "agent" | "bot" | "system"; agentId?: string; conversationId?: string;
   isAlert?: boolean; // budget alerts to David: never blocked by the budget and never trigger another alert
 }
@@ -39,16 +40,20 @@ export async function sendMessage(d: Deps, r: SendReq): Promise<SendOut> {
   const now = d.now ?? new Date();
   const [s, c, spent, last] = await Promise.all([d.db.settings(), d.db.contactByPhone(r.to), d.db.monthSpend(), d.db.lastInboundAt(r.to)]);
   const block = sendBlock({
-    kind: r.kind, category: r.category, optedOut: !!c?.optedOut, consent: !!c?.consent,
+    kind: r.kind === "template" ? "template" : "text", // a file is a free reply, like text
+    category: r.category, optedOut: !!c?.optedOut, consent: !!c?.consent,
     lastInboundAt: last, now, spentIls: r.isAlert ? 0 : spent, s,
   });
   if (block) return { ok: false, block };
 
   const id = await d.db.insertMessage({
     to: r.to, conversation_id: r.conversationId ?? null, sender: r.sender, agent_id: r.agentId ?? null,
-    body: r.kind === "text" ? r.body ?? "" : (r.params ?? []).join(" | "), template: r.template ?? null, status: "queued",
+    body: r.kind === "text" ? r.body ?? "" : r.kind === "media" ? fileLabel(r.media!) : (r.params ?? []).join(" | "),
+    template: r.template ?? null, status: "queued",
   });
-  const payload = r.kind === "text" ? textPayload(r.to, r.body ?? "") : templatePayload(r.to, r.template!, r.params ?? [], r.quickReply);
+  const payload = r.kind === "text" ? textPayload(r.to, r.body ?? "")
+    : r.kind === "media" ? mediaPayload(r.to, r.media!.kind, r.media!.id, r.media!.filename)
+    : templatePayload(r.to, r.template!, r.params ?? [], r.quickReply);
   const res = await graphSend(payload, d.cfg, d.fetchFn, d.sleep);
   await d.db.updateMessage(id, res.ok ? { status: "sent", wa_message_id: res.wamid } : { status: "failed", error: res.error });
 
@@ -57,6 +62,12 @@ export async function sendMessage(d: Deps, r: SendReq): Promise<SendOut> {
     if (level !== "ok" && await d.db.markAlertSent(level)) await sendAlert(d, BUDGET_TEXT[level]);
   }
   return res.ok ? { ok: true, wamid: res.wamid } : { ok: false, error: res.error };
+}
+
+// what we keep of a sent file: its name and size only (PRD R7א)
+function fileLabel(m: { filename: string; size: number }): string {
+  const kb = Math.max(1, Math.round(m.size / 1024));
+  return `📎 ${m.filename} (${kb >= 1024 ? (kb / 1024).toFixed(1) + " MB" : kb + " KB"})`;
 }
 
 // Alert to David (R3) on the channel chosen in the settings. Email waits for the mail sub-project.
