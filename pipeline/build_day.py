@@ -41,7 +41,7 @@ PROFILE = os.environ.get("OSRM_PROFILE", "bus-strict") if os.environ.get("OSRM_B
 # route, and the time to the next trip is enough to drive the rest at the line's planned speed. The end time stays the
 # GPS time. Otherwise the raw point stays, marked trunc_end ("קטיעה אפשרית"). The same, mirrored, for the start.
 # pipeline/config.json "gps_end_snap" (settings, not code); GPS_END_SNAP=0 turns it off (before/after comparison).
-SNAP = dict(dict(enabled=True, share=0.95, max_km=1.0, before_tol_km=0.0, start_share=0.05, start_max_km=1.0, next_at_stop_km=0.3),
+SNAP = dict(dict(enabled=True, share=0.95, max_km=1.0, before_tol_km=0.0, start_share=0.05, start_max_km=1.0, next_at_stop_km=0.3, contra_next_km=1.0),
             **json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("gps_end_snap", {}))
 if os.environ.get("GPS_END_SNAP") == "0": SNAP["enabled"] = False
 # An empty leg that starts (ends) at a raw GPS point on the road (not a stop) is routed in the bus's direction of travel:
@@ -493,6 +493,30 @@ def on_line(road, t, pos, along_km, end):
     return [round(best[1][0], 6), round(best[1][1], 6)], best[2], round(best[0])
 
 
+def contra(t, nx, d, rb, g, v, road):
+    """A trip whose GPS ended before its planned last stop counts as completed (any rule: strict, 85% / 2 km, groups
+    א/ב/ג) only when nothing contradicts it (David, 18.11.2026, line 139 on 17.11): "here" = the bus's next trip leaves
+    within contra_next_km of where GPS ended and not from the planned last stop (> contra_next_km from it: it never got
+    there); "time" = from the
+    later of the GPS end + the rest of the route at the line's planned speed and, for a trip lost early, its estimated end
+    (planned end, or departure + planned duration), there is not enough time to drive from the last stop to the next
+    trip. Returns (reason or None, dict(gap, drive, next_km))."""
+    if nx is None: return None, None
+    nxa = nx.get("gps_raw_a") or nx["a"]
+    # "not from the stop": farther than contra_next_km from it too (a terminal area: GPS 340 m before the stop, the next
+    # trip 360 m from it, is no contradiction), and nearer the GPS end than the stop
+    if hav(rb, nxa) <= SNAP["contra_next_km"] < hav(d, nxa) and hav(rb, nxa) < hav(d, nxa): return "here", None
+    rem = (max(t["km_plan"] - g, 0) if g else hav(rb, d) * 1.35) / v  # SIRI's 0 km along the route = unknown
+    km2, mn2 = round(hav(d, nx["a"]), 2), 0
+    if hav(d, nx["a"]) > SNAP["next_at_stop_km"]:
+        r = road([round(d[0], 5), round(d[1], 5)], nx["a"], (True, True)) if road is not None else (None, None, None)
+        km2, mn2 = (r[0], r[1]) if r[1] is not None else (hav(d, nx["a"]) * 1.35, hav(d, nx["a"]) * 1.35 / 40 * 60)
+    end = t["end"] + rem
+    if t.get("incomplete"): end = max(end, t["sched"] + t["dur"], t["start"] + t["dur"])
+    gap = nx["start"] - end
+    return ("time" if mn2 > gap else None), dict(gap=round(gap), drive=round(mn2), next_km=round(km2, 1))
+
+
 def snap_ends(ts, road=None):
     """Move a GPS trip end (start) that is a raw point to the planned last (first) stop under the strict rule (SNAP).
     Runs on one vehicle's trips in order, after merge_false_starts: the next/previous trip is the next/previous event."""
@@ -507,27 +531,24 @@ def snap_ends(ts, road=None):
             if g is None or g < SNAP["share"] * t["km_plan"]: why.append("share")
             if hav(rb, d) > SNAP["max_km"] or (g is not None and g > t["km_plan"] + SNAP["before_tol_km"]): why.append("far")
             nx = ts[i + 1] if i + 1 < len(ts) else None
-            if nx is not None and g is not None and nx["start"] - t["end"] < max(t["km_plan"] - g, 0) / v: why.append("time")
+            c, ci = contra(t, nx, d, rb, g, v, road)
+            if c: why.append(c)
             if why:
                 t["trunc_end"] = why
-                if t.get("incomplete"):
+                if t.get("incomplete") and not c:
                     # GPS lost it early (David, 18.11.2026, the 157 checked): counted as completed by assumption, marked "asm" with
-                    # the numbers behind it, when (א) the bus's next trip leaves from this trip's planned last stop, (ב) it leaves
-                    # elsewhere but the planned end leaves time to drive there (existing routing), (ג) it has no next trip that day
+                    # the numbers behind it, when nothing contradicts it (contra) and (א) the bus's next trip leaves from this
+                    # trip's planned last stop, (ב) it leaves elsewhere, with time to drive there, (ג) it has no next trip that day
                     base = dict(gps_km=g, share=round(100 * (g or 0) / t["km_plan"]), last_km=round(hav(rb, d), 1))
-                    asm = None
-                    if nx is None:
-                        asm = dict(base, g="c")
-                    elif hav(d, nx["a"]) <= SNAP["next_at_stop_km"]:
-                        asm = dict(base, g="a", next_m=round(hav(d, nx["a"]) * 1000), gap=round(nx["start"] - t["end"]))
-                    elif road is not None:
-                        km2, mn2, _ = road([round(d[0], 5), round(d[1], 5)], nx["a"], (True, True))
-                        # time to the next trip from the planned end, or later when the bus left late: departure + planned duration
-                        avail = nx["start"] - max(t["sched"] + t["dur"], t["start"] + t["dur"])
-                        if mn2 is not None and mn2 <= avail:
-                            asm = dict(base, g="b", next_km=round(km2, 1), gap=round(avail), drive=round(mn2))
-                    if asm:
-                        t.pop("incomplete", None); t["km"] = t["km_plan"]; t["asm"] = asm
+                    if nx is None: asm = dict(base, g="c")
+                    elif hav(d, nx["a"]) <= SNAP["next_at_stop_km"]: asm = dict(base, g="a", next_m=round(hav(d, nx["a"]) * 1000), gap=ci["gap"])
+                    else: asm = dict(base, g="b", **ci)
+                    t.pop("incomplete", None); t["km"] = t["km_plan"]; t["asm"] = asm
+                elif c:
+                    # counted as completed (85% / 2 km rule) or by assumption, but contradicted: not completed, the km by GPS
+                    # (when SIRI gives them), the empty leg from where GPS ended
+                    if not t.get("incomplete") and g: t["km"] = g
+                    t["incomplete"] = True; t["contra"] = c
                 if not t.get("incomplete"):
                     # counted as completed (km = the planned km): the empty leg leaves from the planned last stop, as if the bus
                     # had driven the rest (David, 18.11.2026); the trip stays marked "קטיעה אפשרית" with where GPS ended
@@ -723,7 +744,7 @@ def build(day):
             items.append(dict(kind="trip", start=t["start"], end=t["end"], line=t["line"], km=t["km"], cls=t["cls"], sched=t["sched"],
                               frm=t["frm"], to=t["to"], a=t["a"], b=t["b"], ca=t["ca"], cb=t["cb"],
                               **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute",
-                                           "snap_end", "snap_start", "trunc_end", "trunc_start", "trunc_to", "asm", "dev")
+                                           "snap_end", "snap_start", "trunc_end", "trunc_start", "trunc_to", "asm", "contra", "dev")
                                  if t.get(k) is not None}))
         items += dups + ghosts.pop(v, [])
         # an empty leg sits right before the trip it leads to (also when SIRI shows overlapping rides)
