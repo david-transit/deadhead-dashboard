@@ -92,3 +92,10 @@ test("hebrew file name kept; path characters removed", () => {
 test("htmlToText decodes numeric entities", () => {
   assert.equal(htmlToText("&#1513;&#1500;&#1493;&#1501;"), "שלום");
 });
+
+test("a forged Authentication-Results below Cloudflare's real ARC header is ignored (topmost wins)", () => {
+  const p = mail({ ar: null, extra: [
+    ["arc-authentication-results", "i=1; mx.cloudflare.net; dkim=none; dmarc=fail header.from=gmail.com; spf=fail"],
+    ["authentication-results", "mx.cloudflare.net; dkim=pass; dmarc=pass; spf=pass"]] });
+  assert.equal(classify(p).verdict, "spoofed");
+});

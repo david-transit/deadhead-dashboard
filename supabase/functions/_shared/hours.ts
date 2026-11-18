@@ -4,8 +4,9 @@
 import { inHours, type Hours } from "./bot.ts";
 
 const MIN = 60_000, CAP = 60 * 24 * 60;
-export function businessMs(from: Date, to: Date, h: Hours): number {
+export function businessMs(from: Date, to: Date, h: Hours, stopAt = Infinity): number {
   let n = 0;
-  for (let t = from.getTime(), i = 0; t < to.getTime() && i < CAP; t += MIN, i++) if (inHours(new Date(t), h)) n++;
+  const stop = stopAt / MIN;
+  for (let t = from.getTime(), i = 0; t < to.getTime() && i < CAP && n < stop; t += MIN, i++) if (inHours(new Date(t), h)) n++;
   return n * MIN;
 }

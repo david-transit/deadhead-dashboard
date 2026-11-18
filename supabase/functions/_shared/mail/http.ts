@@ -2,7 +2,10 @@
 import type { Brand } from "./template.ts";
 
 export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-export class Fail extends Error { constructor(public code: string, public status = 400) { super(code); } }
+export class Fail extends Error {
+  code: string; status: number;
+  constructor(code: string, status = 400) { super(code); this.code = code; this.status = status; }
+}
 
 // payload of a JWT, read only after admin.auth.getUser accepted the token
 export function claimsOf(t: string): Record<string, unknown> {

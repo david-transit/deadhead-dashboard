@@ -28,7 +28,7 @@ export function waitingSince(msgs: { direction: string; sender: string; at: Date
 export async function runReminders(d: { db: JobsDb; hours: Hours; alert: (t: string) => Promise<unknown> }, now: Date): Promise<number> {
   let n = 0;
   for (const c of await d.db.dueReminders()) {
-    if (businessMs(c.since, now, d.hours) < REMIND_AFTER_MS) continue;
+    if (businessMs(c.since, now, d.hours, REMIND_AFTER_MS) < REMIND_AFTER_MS) continue;
     await d.db.markReminded(c.id);
     await d.alert(REMINDER_TEXT);
     n++;

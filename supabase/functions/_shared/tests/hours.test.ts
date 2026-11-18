@@ -19,3 +19,8 @@ test("across the switch to winter time (25.10.2026): local hours, no one-hour dr
 test("to before from = 0", () => {
   assert.equal(businessMs(new Date("2026-11-18T10:00:00Z"), new Date("2026-11-18T07:00:00Z"), H), 0);
 });
+
+test("stopAt: counting stops once the threshold is reached", () => {
+  const far = new Date("2027-01-01T00:00:00Z");
+  assert.equal(businessMs(new Date("2026-11-01T00:00:00Z"), far, H, h(24)), h(24));
+});

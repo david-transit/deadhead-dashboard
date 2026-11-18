@@ -17,8 +17,9 @@ const header = (p: Parsed, k: string) => p.headers.filter((h) => h.key.toLowerCa
 
 // Cloudflare Email Routing's own verdict; null when no Cloudflare header (then we cannot judge and let it through)
 function authResults(p: Parsed): { spf: string; dkim: string[]; dmarc: string } | null {
-  const v = [...header(p, "authentication-results"), ...header(p, "arc-authentication-results")]
-    .find((x) => x.replace(/^\s*(i=\d+;\s*)?/, "").toLowerCase().startsWith(CF_AUTHSERV));
+  // topmost wins: Cloudflare prepends its own; anything below it came with the mail and may be forged
+  const v = p.headers.filter((h) => ["authentication-results", "arc-authentication-results"].includes(h.key.toLowerCase()))
+    .map((h) => h.value).find((x) => x.replace(/^\s*(i=\d+;\s*)?/, "").toLowerCase().startsWith(CF_AUTHSERV));
   if (!v) return null;
   const all = (k: string) => [...v.toLowerCase().matchAll(new RegExp(`\\b${k}=(\\w+)`, "g"))].map((m) => m[1]);
   return { spf: all("spf")[0] ?? "none", dkim: all("dkim"), dmarc: all("dmarc")[0] ?? "none" };

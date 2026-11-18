@@ -2,6 +2,7 @@
 // filter, find the conversation, store, upload attachments, alert (no name, no content: M9).
 import type { Mail, Verdict } from "./parse.ts";
 import { pickConversation, type ThreadDb } from "./thread.ts";
+import { EMAIL_RE } from "./http.ts";
 
 export interface InboundMailDb extends ThreadDb {
   seen(emailMessageId: string): Promise<boolean>;
@@ -26,10 +27,11 @@ export const storageName = (i: number, name: string) => `${i + 1}${(name.match(/
 const droppedNote = (n: number) => `[היו ${n} קבצים מצורפים מעל 10MB שלא נשמרו]`;
 
 export async function handleMail(d: InDeps, m: Mail):
-  Promise<{ stored: boolean; reason?: Verdict | "blocked" | "flood" | "duplicate" }> {
+  Promise<{ stored: boolean; reason?: Verdict | "blocked" | "flood" | "duplicate" | "no_address" }> {
   const now = d.now ?? new Date();
   if (m.verdict === "bounce") { if (m.refs.length) await d.db.markBounced(m.refs); return { stored: false, reason: "bounce" }; }
   if (m.verdict !== "ok") return { stored: false, reason: m.verdict };
+  if (!EMAIL_RE.test(m.email)) return { stored: false, reason: "no_address" };
   if (await d.db.seen(m.messageId)) return { stored: false, reason: "duplicate" };
 
   const contactId = await d.db.emailContact(m.email, m.name ?? undefined);

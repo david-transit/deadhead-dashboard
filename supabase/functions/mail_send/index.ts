@@ -11,6 +11,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { sendMail, type MailDeps } from "../_shared/mail/send.ts";
 import { supabaseMailDb } from "../_shared/mail/db.ts";
 import { brandFor, claimsOf, safeEq, Fail, EMAIL_RE } from "../_shared/mail/http.ts";
+import { alerter } from "../_shared/mail/alert.ts";
 
 const ORIGINS = ["https://yalla-sa.app"];
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -19,13 +20,10 @@ const admin = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY
 const db = supabaseMailDb(admin);
 
 async function deps(): Promise<MailDeps> {
-  const { data: s } = await admin.from("support_settings").select("mail_daily_cap, alert_channel, alert_email").eq("id", 1).single();
-  const d: MailDeps = { db, fetch, apiKey: Deno.env.get("RESEND_API_KEY")!, brand: brandFor(SUPABASE_URL), cap: s?.mail_daily_cap ?? 100 };
-  // the 80% warning goes by mail to the alert address (no recursion into the warning: alerts are below 80% or queued)
-  if (s?.alert_channel === "email" && s.alert_email) {
-    d.alert = (text) => sendMail({ ...d, alert: undefined }, { kind: "alert", to: s.alert_email, subject: "יאללה־סע: התראה", body: text });
-  }
-  return d;
+  const { data: s } = await admin.from("support_settings").select("mail_daily_cap").eq("id", 1).single();
+  // the 80% warning goes on the chosen alert channel (WhatsApp or mail); warn=false so it cannot warn about itself
+  return { db, fetch, apiKey: Deno.env.get("RESEND_API_KEY")!, brand: brandFor(SUPABASE_URL), cap: s?.mail_daily_cap ?? 100,
+    alert: alerter(admin, SUPABASE_URL, false) };
 }
 
 Deno.serve(async (req) => {

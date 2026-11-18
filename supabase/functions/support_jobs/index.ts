@@ -27,7 +27,8 @@ Deno.serve(async (req) => {
     if (job === "queued") {
       const apiKey = Deno.env.get("RESEND_API_KEY");
       if (!apiKey) return json({ ok: true, n: 0, note: "not_configured" });
-      const d = { db: supabaseMailDb(admin), fetch, apiKey, brand: brandFor(SUPABASE_URL), cap: s.mail_daily_cap ?? 100 };
+      const d = { db: supabaseMailDb(admin), fetch, apiKey, brand: brandFor(SUPABASE_URL), cap: s.mail_daily_cap ?? 100,
+        alert: alerter(admin, SUPABASE_URL, false) };
       return json({ ok: true, n: await flushQueued({ db, send: (r) => sendMail(d, r) }) });
     }
     if (job === "files") return json({ ok: true, n: await cleanupFiles({ db }) });

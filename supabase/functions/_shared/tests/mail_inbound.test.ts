@@ -121,3 +121,10 @@ test("oversize notice: conversation with the note and an alert", async () => {
   assert.equal(st.msgs[0].contactId, "c-moshe@gmail.com");
   assert.deepEqual(st.alerts, ["מייל גדול מ־12MB הגיע לתיבה הטכנית"]);
 });
+
+test("mail without a usable From address: dropped quietly, no contact, no alert", async () => {
+  const { d, st } = fake();
+  assert.deepEqual(await handleMail(d, M({ email: "" })), { stored: false, reason: "no_address" });
+  assert.deepEqual(await handleMail(d, M({ email: "undisclosed-recipients:;", messageId: "<m9@x>" })), { stored: false, reason: "no_address" });
+  assert.equal(st.contacts.size + st.alerts.length, 0);
+});
