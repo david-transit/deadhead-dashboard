@@ -17,4 +17,4 @@ export function safeEq(a: string, b: string): boolean {
   let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0;
 }
 export const brandFor = (supabaseUrl: string): Brand =>
-  ({ logoUrl: `${supabaseUrl}/storage/v1/object/public/brand/email-logo.png`, siteUrl: "https://yalla-sa.app" });
+  ({ logoUrl: `${supabaseUrl}/storage/v1/object/public/brand/email-logo.gif`, siteUrl: "https://yalla-sa.app" });
