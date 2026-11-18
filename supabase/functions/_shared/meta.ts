@@ -1,7 +1,7 @@
 // WhatsApp Cloud API (Meta Graph) client and webhook parsing (yalla-sa support, spec §1, §6).
 // Uses only fetch + Web Crypto, so it runs in Deno (Edge Functions) and in node --test.
 
-const GRAPH = "https://graph.facebook.com/v23.0";
+const GRAPH = "https://graph.facebook.com/v26.0"; // v26.0: July 2026, newest stable with no end date yet (checked 19.11.2026)
 const DELAYS = [500, 1000, 2000]; // wait before retries 2 and 3 (the third value is spare)
 
 export interface SendResult { ok: boolean; wamid?: string; error?: string; retryable?: boolean }

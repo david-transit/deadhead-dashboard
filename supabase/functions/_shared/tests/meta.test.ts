@@ -48,7 +48,7 @@ test("graphSend: 200 returns the message id and posts to the phone's messages UR
   const f = fakeFetch([200], { messages: [{ id: "wamid.X" }] });
   const r = await graphSend({ a: 1 }, cfg, f.fn, noSleep);
   assert.deepEqual(r, { ok: true, wamid: "wamid.X" });
-  assert.equal(f.calls[0].url, "https://graph.facebook.com/v23.0/PID/messages");
+  assert.equal(f.calls[0].url, "https://graph.facebook.com/v26.0/PID/messages");
   assert.equal((f.calls[0].init.headers as Record<string, string>).Authorization, "Bearer T");
 });
 
