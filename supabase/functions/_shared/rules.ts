@@ -27,13 +27,14 @@ export function budgetLevel(spentIls: number, s: Settings): "ok" | "warn80" | "o
   return spentIls >= 0.8 * s.monthly_cap_ils ? "warn80" : "ok";
 }
 
-// Why a message may not be sent (null = may send). Order matters: opt-out wins over everything (R1א);
-// login codes (authentication) never need marketing-style consent and never stop on budget (R11).
+// Why a message may not be sent (null = may send). Opt-out stops every message WE start (templates), even login
+// codes (R1א); a reply to someone who wrote to us inside the 24h window is still allowed (R1א: "פנייה חוזרת").
+// Login codes (authentication) need no consent tick and never stop on budget (R11).
 export function sendBlock(o: {
   kind: "template" | "text"; category: Category; optedOut: boolean; consent: boolean;
   lastInboundAt: Date | null; now: Date; spentIls: number; s: Settings;
 }): Block {
-  if (o.optedOut) return "opted_out";
+  if (o.optedOut && o.kind === "template") return "opted_out";
   if (o.kind === "text") {
     if (!o.lastInboundAt || o.now.getTime() - o.lastInboundAt.getTime() > WINDOW_MS) return "window_closed";
     return null; // a reply inside the window is a free service message

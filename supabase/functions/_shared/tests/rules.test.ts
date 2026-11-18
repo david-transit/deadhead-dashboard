@@ -37,6 +37,12 @@ test("sendBlock: opted-out blocks everything, even authentication", () => {
   assert.equal(sendBlock({ ...base, optedOut: true, category: "authentication" }), "opted_out");
 });
 
+test("sendBlock: an opted-out person who writes to us still gets replies inside the 24h window (PRD R1א)", () => {
+  const text = { ...base, kind: "text" as const, category: "service" as const, optedOut: true,
+    lastInboundAt: new Date(now.getTime() - H) };
+  assert.equal(sendBlock(text), null);
+});
+
 test("sendBlock: template without consent is blocked, except authentication", () => {
   assert.equal(sendBlock({ ...base, consent: false }), "no_consent");
   assert.equal(sendBlock({ ...base, consent: false, category: "authentication" }), null);

@@ -1,5 +1,6 @@
 // In-memory SupportDb for tests (test utility only).
-import type { SupportDb, SupportSettings, Contact } from "../send.ts";
+import type { SupportSettings, Contact } from "../send.ts";
+import type { InboundDb } from "../inbound.ts";
 
 export const SETTINGS: SupportSettings = {
   monthly_cap_ils: 20, usd_ils: 3.7, ai_daily_per_contact: 20, menu_daily_per_contact: 50,
@@ -19,7 +20,37 @@ export function fakeDb(over: Partial<{ settings: SupportSettings; spent: number 
     conversations: [] as any[],
     spend: [] as any[],
   };
-  const db: SupportDb = {
+  const answers: Record<string, string> = { "1": "תשובה 1", "2": "תשובה 2", hours_off: "קיבלנו. נחזור אליך ביום העבודה הבא" };
+  const inbound = new Set<string>();
+  const db: InboundDb = {
+    answers: async () => answers,
+    upsertContact: async (waId, name) => {
+      const c = st.contacts.get(waId) ?? { id: "c-" + waId, consent: false, optedOut: false };
+      c.name = name; st.contacts.set(waId, c); return c.id;
+    },
+    activeConversation: async (contactId) => {
+      let cv = st.conversations.find((x) => x.contact_id === contactId && x.status !== "closed");
+      if (!cv) { cv = { id: "cv" + (st.conversations.length + 1), contact_id: contactId, status: "open", assignee: null, bot_state: null }; st.conversations.push(cv); }
+      return cv;
+    },
+    recordInbound: async (cvId, contactId, waId, wamid, text, ts) => {
+      if (inbound.has(wamid)) return false;
+      inbound.add(wamid);
+      st.messages.push({ id: "in" + inbound.size, conversation_id: cvId, contact_id: contactId, direction: "in", sender: "contact", body: text, wa_message_id: wamid });
+      st.lastInbound.set(waId, ts);
+      return true;
+    },
+    saveConversation: async (cvId, patch) => { Object.assign(st.conversations.find((x) => x.id === cvId), patch); },
+    setOptOut: async (waId) => { const c = st.contacts.get(waId)!; c.optedOut = true; },
+    botRepliesToday: async (contactId, _now) => st.messages.filter((m) => m.sender === "bot" && m.to && st.contacts.get(m.to)?.id === contactId).length,
+    addSpend: async (wamid, category, amountIls) => {
+      if (st.spend.some((x) => x.wamid === wamid)) return false;
+      st.spend.push({ wamid, category, amountIls }); st.spent += amountIls; return true;
+    },
+    setStatus: async (wamid, status, error) => {
+      const m = st.messages.find((x) => x.wa_message_id === wamid);
+      if (m) Object.assign(m, { status }, error ? { error } : {});
+    },
     settings: async () => st.settings,
     contactByPhone: async (p) => st.contacts.get(p) ?? null,
     lastInboundAt: async (p) => st.lastInbound.get(p) ?? null,
