@@ -57,6 +57,12 @@ if os.environ.get("GPS_HEADING") == "0": HEAD["enabled"] = False
 # GPS trace (cache/trace_<slug>_<day>.json, stride.fetch_traces). GPS_TRACES=0: no traces (no Stride calls for them).
 SHAPES = {}
 SHC = {}
+# Shape guard (David, 18.11.2026): an empty leg leaving from a GPS point on the line's road towards the line's last stop
+# (next start within near_km of it) that is >= ratio x and >= min_km longer than the rest of the shape is routed along the
+# shape instead; when that cannot be done the build fails (no file is written). No warning in the dashboard.
+SHAPE_GUARD = dict(dict(ratio=1.5, min_km=1.0, near_km=0.4),
+                   **json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("shape_guard", {}))
+SHAPE_GUARD_FAIL = []
 # Route deviation ("סטייה מהמסלול ברישוי"): the ride's own GPS points farther than m from its licensed shape over more than
 # run_m of driving, between points on the shape (David, 18.11.2026; threshold not decided yet: 150/250/400, running with 250).
 # pipeline/config.json "route_dev"; ROUTE_DEV=0 turns it off.
@@ -465,8 +471,8 @@ def on_line(road, t, pos, along_km, end):
         if g and len(g[1]) >= 2 and g[0] <= (hi - lo) / 1000 * 1.3 + 0.2:
             r = on_road(g[1], q)
             if r and r[0] <= 30 and r[2] is not None:
-                return [round(r[1][0], 6), round(r[1][1], 6)], r[2], round(hav(pos, r[1]) * 1000)
-        return ([round(q[0], 6), round(q[1], 6)], h, round(d)) if h is not None else None
+                return [round(r[1][0], 6), round(r[1][1], 6)], r[2], round(hav(pos, r[1]) * 1000), cum[-1] - m
+        return ([round(q[0], 6), round(q[1], 6)], h, round(d), cum[-1] - m) if h is not None else None
     st = t.get("st")
     if not st or len(st) < 2 or pos is None: return None
     m = along_km * 1000
@@ -504,6 +510,10 @@ def snap_ends(ts):
             if nx is not None and g is not None and nx["start"] - t["end"] < max(t["km_plan"] - g, 0) / v: why.append("time")
             if why:
                 t["trunc_end"] = why
+                if not t.get("incomplete"):
+                    # counted as completed (km = the planned km): the empty leg leaves from the planned last stop, as if the bus
+                    # had driven the rest (David, 18.11.2026); the trip stays marked "קטיעה אפשרית" with where GPS ended
+                    t.update(trunc_to=t["to"], b=[round(d[0], 5), round(d[1], 5)], to=f'{d[3]}, {d[2]}', cb=d[3])
             else:
                 t["snap_end"] = dict(b=t["b"], to=t["to"], m=round(hav(rb, d) * 1000))
                 t.update(b=[round(d[0], 5), round(d[1], 5)], to=f'{d[3]}, {d[2]}', cb=d[3])
@@ -652,22 +662,33 @@ def build(day):
                 p = ts[i - 1]; gap = t["start"] - p["end"]
                 term = (not p["to"].startswith(("ליד", "מיקום")), not t["frm"].startswith(("ליד", "מיקום")))  # snapped to a terminal stop
                 hd = (None if term[0] or not HEAD["enabled"] else p.get("hb"), None if term[1] or not HEAD["enabled"] else t.get("ha"))
-                A, B, lr = p["b"], t["a"], [None, None]
+                A, B, lr, rest = p["b"], t["a"], [None, None], None
                 if HEAD["enabled"] and not term[0] and p.get("gps_raw_b"):
                     s = on_line(road, p, p["gps_raw_b"], p.get("gps_km"), 1)
-                    if s: A, hd, lr[0] = s[0], (s[1], hd[1]), s[2]
+                    if s: A, hd, lr[0], rest = s[0], (s[1], hd[1]), s[2], (s[3] if len(s) > 3 else None)
                     elif trace_heading(p, 1) is not None: hd = (trace_heading(p, 1), hd[1])
                 if HEAD["enabled"] and not term[1] and t.get("gps_raw_a") and not t.get("late_login"):
                     s = on_line(road, t, t["gps_raw_a"], t.get("f_km"), 0)
                     if s: B, hd, lr[1] = s[0], (hd[0], s[1]), s[2]
                     elif trace_heading(t, 0) is not None: hd = (hd[0], trace_heading(t, 0))
                 km, mn, rt = road(A, B, term, hd)
+                sg = None
+                if rest is not None and km is not None and p.get("d") and hav(p["d"], B) <= SHAPE_GUARD["near_km"]:
+                    # safety net: an empty leg from the point on the line's road to (near) the line's last stop must not be much
+                    # longer than the rest of the line's shape (OSRM snapping to a ramp: 4.58 km instead of 1.02 on Golda Meir)
+                    base = rest / 1000 + hav(p["d"], B)
+                    if km >= SHAPE_GUARD["ratio"] * base and km - base >= SHAPE_GUARD["min_km"]:
+                        k2, m2, _ = road([round(p["d"][0], 5), round(p["d"][1], 5)], B, (True, term[1]), (None, hd[1]))
+                        if k2 is None: SHAPE_GUARD_FAIL.append(f'{p["line"]} {v} {p["end"]}: {km} km vs shape {base:.2f}')
+                        else: sg, km, mn = km, round(rest / 1000 + k2, 2), round(rest / 1000 / 30 * 60 + m2, 1)
                 leg = dict(kind="empty", start=p["end"], end=t["start"], km=km, drive_min=mn, frm=p["to"], to=t["frm"], next_sched=t["sched"],
                            a=p["b"], b=t["a"])
                 if rt and (rt.get("fix") or rt.get("u") or max(rt.get("s") or [0]) > 30):
                     leg["rt"] = {x: rt[x] for x in ("s", "fix", "km0", "u", "ok") if x in rt}  # route check (assets/route.js)
                 if rt and rt.get("hd"):
                     leg["hd"] = rt["hd"]  # routed in the bus's direction of travel ([heading at a, heading at b])
+                if sg is not None:
+                    leg["sg"] = sg  # km before the shape guard: now along the rest of the line's shape to its last stop, then on
                 if any(x is not None for x in lr):
                     leg["lr"] = lr  # [m from the GPS point to the line's road at a, at b]: routed from the point on the line's road
                     leg["la"] = [A if lr[0] is not None else None, B if lr[1] is not None else None]  # those points on the line's road
@@ -684,7 +705,7 @@ def build(day):
             items.append(dict(kind="trip", start=t["start"], end=t["end"], line=t["line"], km=t["km"], cls=t["cls"], sched=t["sched"],
                               frm=t["frm"], to=t["to"], a=t["a"], b=t["b"], ca=t["ca"], cb=t["cb"],
                               **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute",
-                                           "snap_end", "snap_start", "trunc_end", "trunc_start", "dev")
+                                           "snap_end", "snap_start", "trunc_end", "trunc_start", "trunc_to", "dev")
                                  if t.get(k) is not None}))
         items += dups + ghosts.pop(v, [])
         # an empty leg sits right before the trip it leads to (also when SIRI shows overlapping rides)
@@ -726,6 +747,9 @@ def build(day):
                snap_end=sum(1 for v in by.values() for t in v if t.get("snap_end")), snap_start=sum(1 for v in by.values() for t in v if t.get("snap_start")),
                trunc_end=sum(1 for v in by.values() for t in v if t.get("trunc_end")), trunc_start=sum(1 for v in by.values() for t in v if t.get("trunc_start")),
                route_dev=sum(1 for v in by.values() for t in v if t.get("dev")), gtfs_link=gm), vehicles=vehicles)
+    out["summary"]["shape_guard"] = sum(1 for v in vehicles for i in v["items"] if i.get("sg") is not None)
+    if SHAPE_GUARD_FAIL:
+        raise SystemExit(f"shape guard failed ({len(SHAPE_GUARD_FAIL)}): " + "; ".join(SHAPE_GUARD_FAIL[:10]))
     os.makedirs(DATA, exist_ok=True)
     json.dump(out, open(os.path.join(DATA, f"day_{day}.json"), "w", encoding="utf-8"), ensure_ascii=False)
     print(json.dumps(out["summary"], ensure_ascii=False))
