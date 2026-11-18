@@ -11,6 +11,8 @@ import { supabaseDb } from "../_shared/db.ts";
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   { auth: { persistSession: false, autoRefreshToken: false } });
 const db = supabaseDb(admin);
+// email alerts go through the email session's mail_send with the shared internal key
+const MAIL = { url: Deno.env.get("SUPABASE_URL") + "/functions/v1/mail_send", key: Deno.env.get("WA_INTERNAL_KEY") || "" };
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
 Deno.serve(async (req) => {
@@ -31,6 +33,6 @@ Deno.serve(async (req) => {
   const token = Deno.env.get("WA_TOKEN"), phoneId = Deno.env.get("WA_PHONE_ID");
   if (!token || !phoneId) return new Response("not_configured", { status: 503 });
 
-  EdgeRuntime.waitUntil(handleInbound({ db, cfg: { token, phoneId } }, parseWebhook(json)).catch((e) => console.error("wa_webhook", e)));
+  EdgeRuntime.waitUntil(handleInbound({ db, cfg: { token, phoneId }, mail: MAIL }, parseWebhook(json)).catch((e) => console.error("wa_webhook", e)));
   return new Response("ok", { status: 200 });
 });

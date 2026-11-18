@@ -93,3 +93,31 @@ test("sendAlert (a handoff alert) is blocked when the budget is full; a budget a
   const r2 = await sendAlert({ db: full.db, cfg, fetchFn: f.fn, now }, "תקציב", true);
   assert.equal(r2.ok, true);
 });
+
+test("sendAlert with channel 'email' calls mail_send with the internal key and a body without personal data (Task 6b)", async () => {
+  const { db } = fakeDb({ settings: { ...(await fakeDb().db.settings()), alert_channel: "email", alert_email: "david@example.com" } as any });
+  const calls: any[] = [];
+  const f = (async (url: string, init: RequestInit) => {
+    calls.push({ url, init });
+    return new Response(JSON.stringify({ ok: true, id: "m1" }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const r = await sendAlert({ db, cfg, fetchFn: f, now, mail: { url: "https://sb.test/functions/v1/mail_send", key: "K" } }, "פנייה חדשה בתיבת הפניות");
+  assert.equal(r.ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://sb.test/functions/v1/mail_send");
+  assert.equal((calls[0].init.headers as Record<string, string>)["x-internal-key"], "K");
+  const body = JSON.parse(String(calls[0].init.body));
+  assert.equal(body.action, "alert");
+  assert.equal(body.to, "david@example.com");
+  assert.equal(body.subject, "יאללה־סע: התראה");
+  assert.match(body.body, /^פנייה חדשה בתיבת הפניות\n\nלכלי הפניות: https:\/\/yalla-sa\.app\/support\/$/);
+});
+
+test("sendAlert with channel 'email' but no address or no mail config sends nothing", async () => {
+  const base = await fakeDb().db.settings();
+  const { db } = fakeDb({ settings: { ...base, alert_channel: "email", alert_email: null } as any });
+  const f = okFetch();
+  const r = await sendAlert({ db, cfg, fetchFn: f.fn, now, mail: { url: "u", key: "K" } }, "x");
+  assert.equal(r.ok, false);
+  assert.equal(f.calls.length, 0);
+});

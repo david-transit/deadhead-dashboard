@@ -19,6 +19,8 @@ const TEMPLATES: Record<string, Category> = { welcome_v1: "utility", alert_v1: "
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   { auth: { persistSession: false, autoRefreshToken: false } });
 const db = supabaseDb(admin);
+// email alerts go through the email session's mail_send with the shared internal key
+const MAIL = { url: Deno.env.get("SUPABASE_URL") + "/functions/v1/mail_send", key: Deno.env.get("WA_INTERNAL_KEY") || "" };
 
 class Fail extends Error { constructor(public code: string, public status = 400) { super(code); } }
 function claimsOf(t: string): Record<string, unknown> { // only after admin.auth.getUser accepted the token
@@ -39,7 +41,7 @@ Deno.serve(async (req) => {
 
   const token = Deno.env.get("WA_TOKEN"), phoneId = Deno.env.get("WA_PHONE_ID");
   if (!token || !phoneId) return out({ error: "not_configured" }, 503);
-  const deps = { db, cfg: { token, phoneId } };
+  const deps = { db, cfg: { token, phoneId }, mail: MAIL };
 
   try {
     const isForm = (req.headers.get("content-type") || "").startsWith("multipart/form-data");

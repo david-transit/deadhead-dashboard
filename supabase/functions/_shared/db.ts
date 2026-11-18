@@ -78,13 +78,13 @@ export function supabaseDb(admin: any): InboundDb & {
     },
     async activeConversation(contactId): Promise<Conversation> {
       const { data } = await admin.from("support_conversations").select("id, status, assignee, bot_state")
-        .eq("contact_id", contactId).neq("status", "closed").order("created_at", { ascending: false }).limit(1);
+        .eq("contact_id", contactId).eq("channel", "whatsapp").neq("status", "closed").order("created_at", { ascending: false }).limit(1);
       if (data?.length) return data[0];
-      const { data: ins, error } = await admin.from("support_conversations").insert({ contact_id: contactId, status: "open" })
+      const { data: ins, error } = await admin.from("support_conversations").insert({ contact_id: contactId, status: "open", channel: "whatsapp" })
         .select("id, status, assignee, bot_state").single();
       if (dup(error)) { // two webhooks at once: the unique index let only one insert win; use that one (review I7)
         const { data: again } = await admin.from("support_conversations").select("id, status, assignee, bot_state")
-          .eq("contact_id", contactId).neq("status", "closed").limit(1);
+          .eq("contact_id", contactId).eq("channel", "whatsapp").neq("status", "closed").limit(1);
         if (again?.length) return again[0];
       }
       if (error) throw error;
