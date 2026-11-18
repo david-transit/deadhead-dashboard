@@ -101,8 +101,8 @@ const clone=x=>JSON.parse(JSON.stringify(x));
 const dl=d=>d?d.slice(8,10)+"."+d.slice(5,7):"";
 const inPl=p=>/^(ליד|מיקום)/.test(p||"")?" "+esc(p):" ב"+esc(p), fromPl=p=>/^(ליד|מיקום)/.test(p||"")?" "+esc(p):" מ"+esc(p);
 let D=null,cls="",sel=null,T0=240,T1=26*60;
-const DEF={fuel_by_class:{"עירוני":"גז","בינעירוני":"סולר"},range_km_by_fuel:{"גז":null,"סולר":null},branches:["בני ברק","ירושלים"]};
-let S={depots:[],fuel_stations:[],driver_change_points:[],stop_anchors:[],defaults:clone(DEF),vehicles:{}};
+const DEF={fuel_by_class:{"עירוני":"גז","בינעירוני":"סולר"},range_km_by_fuel:{"גז":null,"סולר":null},branches:["בני ברק","ירושלים"],forced_out_km:5};
+let S={depots:[],fuel_stations:[],driver_change_points:[],stop_anchors:[],forced_legs:[],defaults:clone(DEF),vehicles:{}};
 // saved choices of the operator (all days), keyed "day|veh" (night before day) and "day|veh|scheduled start minute"
 let OVN={}, REIN={}, AUTOR={}, BLK={}, NOTES={}; // NOTES: my own saved leg notes (feedback to the product team)
 // days of the current operator: data/<slug>/days.js (built by the pipeline); service day D = D hh:00 … D+1 hh:00 (operators.json)
@@ -371,12 +371,21 @@ function render(){
   if(fv) document.querySelector(`#gantt .row[data-v="${CSS.escape(fv)}"]`)?.focus({preventScroll:true});
   side(sel);
 }
+// ---- "נסיעה ריקה מוכרחת" (PRD R53, David 18.11.2026): light severity, information and not a warning. (1) a day empty leg
+// from a stop that is not a depot to its fixed departure stop (settings "forced_legs": end stop -> departure stop, stop
+// names as in the data, matched like stop_anchors); (2) a pull-out from the depot to a first stop farther than
+// defaults.forced_out_km. Not counted as a problem anywhere. ----
+const stopIs=(n,want)=>{n=(n||"").trim();want=(want||"").trim();return !!want&&(n===want||n.split(",").slice(1).join(",").trim()===want)};
+function forcedOf(i){if(i.kind!=="empty"||!i.km) return null;return (eff().S.forced_legs||[]).find(r=>stopIs(i.frm,r.name)&&stopIs(i.to,r.to_stop))||null}
+const forcedOut=l=>l.kind==="out"&&l.km!=null&&l.km>(eff().S.defaults?.forced_out_km??DEF.forced_out_km);
+const FORCEDB=`<span class="badge forced">ריקה מוכרחת</span>`;
+const forcedTxt=i=>{const r=forcedOf(i);return r?`<span class="sub forcedx">${FORCEDB} הרכב סיים ב־${esc(i.frm)}, שאינה חניון, והיציאה הקבועה ממנה היא ${esc(r.to_stop)}${r.note?` (${esc(r.note)})`:""}</span>`:""};
 // one line of a night leg in the side panel
 function nightLine(l,day){
   const when=`${fmt(l.start)}–${fmt(l.end)}`;
   if(l.km==null) return `<div class="it dep"><span>${LEGNAME[l.kind]}<span class="sub" style="color:var(--warn)">חסר: ${esc(MISSTXT[l.missing]||"")}${l.depot?" ("+esc(l.depot)+")":""}. הרכב לא נעלם מהסכום: שאר הק״מ שלו נספרים.</span></span><span class="t">–</span></div>`;
   if(l.kind==="over"&&l.km===0) return `<div class="it wait"><span>התחיל את היום במקום שבו סיים<span class="sub">אין נסיעה ריקה לתחילת היום</span></span><span class="t"></span></div>`;
-  return `<div class="it ${l.kind==="rein"?"rein":"dep"}"${l.a&&l.b?mi({k:"night",l}):""}><span>${LEGNAME[l.kind]}${l.line?" · קו "+esc(l.line):""}: ${nf(l.km)} ק״מ${day?` <span class="badge">נספר ב־${dl(day)}</span>`:""}<span class="sub">${l.frm?esc(l.frm)+" ← "+esc(l.to||"")+" · ":""}${esc(l.kind==="rein"?"ק״מ תגבור":legKm(l))}</span>${day||l.kind==="rein"?"":legActs("overnight",Math.round(l.start))}</span><span class="t">${when}</span></div>`}
+  return `<div class="it ${l.kind==="rein"?"rein":"dep"}"${l.a&&l.b?mi({k:"night",l}):""}><span>${LEGNAME[l.kind]}${l.line?" · קו "+esc(l.line):""}: ${nf(l.km)} ק״מ${day?` <span class="badge">נספר ב־${dl(day)}</span>`:""}<span class="sub">${l.frm?esc(l.frm)+" ← "+esc(l.to||"")+" · ":""}${esc(l.kind==="rein"?"ק״מ תגבור":legKm(l))}</span>${forcedOut(l)?`<span class="sub forcedx">${FORCEDB} החניון רחוק מתחילת הקו (${nf(l.km)} ק״מ, מעל ${nf(eff().S.defaults?.forced_out_km??DEF.forced_out_km)})</span>`:""}${day||l.kind==="rein"?"":legActs("overnight",Math.round(l.start))}</span><span class="t">${when}</span></div>`}
 // every empty leg (day and overnight): "עריכה" = the block editor of this vehicle-day (a reinforcement is added there as
 // a trip on a chosen line), "הערה" = free-text feedback to the product team (leg_notes; read only by platform admins)
 function legActs(kind,start){
@@ -427,7 +436,7 @@ function sideBody(veh){
           <span class="sub" style="color:#B4630E">ריק לפני ${nf(r.before_km)} ק״מ · ריק אחרי ${nf(r.after_km)} ק״מ (במקום ${nf(i.km)} ק״מ ריק)</span>
           ${canEdit()&&BLKMODE?`<button class="btn small" data-unrein="${i.next_sched}">ביטול התגבור</button>`:""}${legActs("day",i.start)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
       else h+=`<div class="it emp${legProblems(i)?" rpw":""}${hlLeg(v,i)?" hl":""}"${mi({k:"emp",v,i})}><span>ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}${i.fb?" · חושב ברכב פרטי (גיבוי)":""} · כ־${nf(i.drive_min)} דק׳<span class="sub">${esc(i.frm)} ← ${esc(i.to)} · זמן פנוי ${Math.round(i.end-i.start)} דק׳</span>
-          ${i.tight?`<span class="sub" style="color:var(--warn)">אין מספיק זמן לנסוע את זה: נתון חשוד</span>${fixLink()}`:""}${routeNote(i)}${legEdTxt(i)}
+          ${forcedTxt(i)}${i.tight?`<span class="sub" style="color:var(--warn)">אין מספיק זמן לנסוע את זה: נתון חשוד</span>${fixLink()}`:""}${routeNote(i)}${legEdTxt(i)}
           ${legActs("day",i.start)}${legEdBtn(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
     else h+=`<div class="it wait${hlLeg(v,i)?" hl":""}"><span>המתנה${i.km>0.05?` · מעבר ${nf(i.km)} ק״מ`:""}${legEdTxt(i)}${legEdBtn(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
   }
@@ -1103,6 +1112,8 @@ const LISTS={
   stop_anchors:{cols:[["name","תחנה (השם כפי שמופיע בנתונים)"],["addr","כתובת או קישור"],["lat","קו רוחב לניתוב"],["lon","קו אורך לניתוב"],["note","הערה"]],
     hint:"נקודת עיגון = המקום שבו האוטובוס באמת עולה לכביש ליד התחנה (למשל היציאה ממסוף). כל נסיעה ריקה מהתחנה או אליה (גם בלילה) תחושב לפי כביש מהנקודה הזו. מתאים לתחנות שבהן המסלול נצמד לכביש הלא נכון. את שם התחנה בוחרים מהרשימה שנפתחת בהקלדה."}
 };
+LISTS.forced_legs={cols:[["name","תחנת סיום (השם כפי שמופיע בנתונים)"],["to_stop","תחנת היציאה הקבועה ממנה"],["note","הערה (למשל קודי התחנות)"]],noloc:true,
+  hint:"נסיעה ריקה מוכרחת (דרגה קלה, מידע ולא אזהרה): הרכב סיים בתחנה שאינה חניון, ולכן חייב לנסוע ריק לתחנת היציאה הקבועה שלה. שורה לכל צמד; אותה תחנת סיום יכולה להופיע בכמה שורות."};
 let tab="depots", draft=null, look=null;
 const PRIVHINT="<b>פרטיות:</b> רק כתובות של חניונים, מסופים ואתרי החברה. לא כתובות מגורים של אנשים (הכתובת נשלחת לשירות המפות OpenStreetMap).";
 const LOCHINT="<b>איך מכניסים מיקום:</b> בשדה \"כתובת או קישור\" כותבים כתובת רגילה (למשל: מבצע קדש, בני ברק) ולוחצים \"איתור\". אפשר גם להדביק קישור מלא מ־Waze או מגוגל מפות, או שני מספרים שהועתקו בקליק ימני בגוגל מפות. שמות מקומות כמו \"חניון אפיקים\" לא תמיד נמצאים בחיפוש, ואז עדיף קישור או כתובת. החיפוש נעשה ב־OpenStreetMap.";
@@ -1117,10 +1128,10 @@ document.querySelectorAll(".secsw .btn").forEach(b=>b.onclick=()=>setSec(b.datas
 function showTab(t){tab=t;document.querySelectorAll("#sysTabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   const ro=!canEdit(); let h=ro?`<p class="hint" style="color:var(--warn)">צפייה בלבד: ההרשאה שלך היא לצפייה. לשינויים פנה למנהל המפעיל.</p>`:"";
   if(LISTS[t]){const L=LISTS[t],rows=draft[t]||[];
-    h+=`<p class="hint">${LOCHINT}</p><p class="hint">${PRIVHINT}</p><p class="hint">${L.hint}</p><table class="ed"><thead><tr>${L.cols.map(c=>`<th>${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>`+
+    h+=`${L.noloc?"":`<p class="hint">${LOCHINT}</p><p class="hint">${PRIVHINT}</p>`}<p class="hint">${L.hint}</p><table class="ed"><thead><tr>${L.cols.map(c=>`<th>${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>`+
       rows.map((r,i)=>`<tr>${L.cols.map(([k])=>`<td>${k==="fuel"?`<select data-i="${i}" data-k="${k}" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${r[k]===f?"selected":""}>${f}</option>`).join("")}</select>`
         :k==="addr"?`<div style="display:flex;gap:4px"><input data-i="${i}" data-k="addr" value="${esc(r.addr??"")}" placeholder="כתובת חניון או מסוף, קישור Waze/גוגל או מספרים" style="min-width:200px" ${ro?"disabled":""}>${ro?"":`<button class="btn small" data-find="${i}">איתור</button>`}</div>${look&&look.i===i?`<div class="look">${look.html}</div>`:""}`
-        :`<input data-i="${i}" data-k="${k}" value="${esc(r[k]??"")}" ${t==="stop_anchors"&&k==="name"?'list="stopNames" style="min-width:220px"':""} ${["lat","lon"].includes(k)?'class="num" inputmode="decimal" dir="ltr"':["from","to"].includes(k)?'type="time"':""} ${ro?"disabled":""}>`}</td>`).join("")}
+        :`<input data-i="${i}" data-k="${k}" value="${esc(r[k]??"")}" ${(t==="stop_anchors"||t==="forced_legs")&&(k==="name"||k==="to_stop")?'list="stopNames" style="min-width:220px"':""} ${["lat","lon"].includes(k)?'class="num" inputmode="decimal" dir="ltr"':["from","to"].includes(k)?'type="time"':""} ${ro?"disabled":""}>`}</td>`).join("")}
         <td>${ro?"":`<button class="btn small danger" data-del="${i}">מחיקה</button>`}</td></tr>`).join("")+
       `</tbody></table>${rows.length?"":`<p class="muted">עוד לא הוגדר כלום.</p>`}${ro?"":`<button class="btn small" id="addRow" style="margin-top:8px">+ הוספה</button>`}`;}
   else if(t==="via_links") h+=PLATFORM?viaTab(ro):`<p class="hint">רק מנהל מערכת מנהל את נקודות המעבר. אפשר להציע נקודת מעבר מתוך "בעיות מסלול".</p>`;
@@ -1129,6 +1140,7 @@ function showTab(t){tab=t;document.querySelectorAll("#sysTabs button").forEach(b
       ["עירוני","בינעירוני"].map(c=>`<tr><td>${c}</td><td><select data-def="fuel_by_class" data-c="${c}" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${d.fuel_by_class?.[c]===f?"selected":""}>${f}</option>`).join("")}</select></td></tr>`).join("")+
       `</table><table class="ed" style="margin-top:14px"><tr><th>דלק</th><th>טווח נסיעה בק״מ (ממלא עד ריק)</th></tr>`+
       ["גז","סולר"].map(f=>`<tr><td>${f}</td><td><input class="num" inputmode="decimal" data-def="range_km_by_fuel" data-c="${f}" value="${esc(d.range_km_by_fuel?.[f]??"")}" ${ro?"disabled":""}></td></tr>`).join("")+`</table>`+
+      `<div class="field" style="margin-top:14px;max-width:420px"><label for="dfo"><b>יציאה מוכרחת מחניון רחוק</b>: יציאה מחניון לתחילת הקו מעל (ק״מ)</label><input id="dfo" class="num" inputmode="decimal" data-defn="forced_out_km" value="${esc(d.forced_out_km??DEF.forced_out_km)}" ${ro?"disabled":""}></div>`+
       `<div class="field" style="margin-top:14px;max-width:420px"><label for="dbr"><b>סניפים</b> (מופרדים בפסיקים)</label><input id="dbr" data-defl="branches" value="${esc((d.branches||DEF.branches).join(", "))}" ${ro?"disabled":""}></div>`;}
   else if(t==="vehicles"){const vs=D?D.vehicles:[];
     h+=`<p class="hint">שדה ריק = ברירת מחדל. הרשימה מציגה את הרכבים של ${D?D.day.split("-").reverse().join("."):""}. לפני שמשייכים חניון, צריך להוסיף אותו בלשונית "חניונים" ולשמור.</p><input type="search" id="vq" placeholder="חיפוש מספר רכב" style="margin-bottom:8px">
@@ -1141,7 +1153,7 @@ function showTab(t){tab=t;document.querySelectorAll("#sysTabs button").forEach(b
           <td><select data-vk="fuel" ${ro?"disabled":""}><option></option>${["סולר","גז"].map(f=>`<option ${x.fuel===f?"selected":""}>${f}</option>`).join("")}</select></td>
           <td><input class="num" inputmode="decimal" data-vk="range_km" value="${esc(x.range_km??"")}" ${ro?"disabled":""}></td>
           <td><label class="acck"><input type="checkbox" data-vk="accessible" ${x.accessible?"checked":""} ${ro?"disabled":""} aria-label="רכב ${esc(v.veh)} נגיש"> נגיש</label></td></tr>`}).join("")+`</tbody></table>`;}
-  if(t==="stop_anchors"){const ns=new Set();for(const J of Object.values(window.DAY_DATA||{})) for(const v of J.vehicles) for(const i of v.items) if(i.kind==="trip") for(const n of [i.frm,i.to]) if(n&&!/^(ליד|מיקום)/.test(n)) ns.add(n);
+  if(t==="stop_anchors"||t==="forced_legs"){const ns=new Set();for(const J of Object.values(window.DAY_DATA||{})) for(const v of J.vehicles) for(const i of v.items) if(i.kind==="trip") for(const n of [i.frm,i.to]) if(n&&!/^(ליד|מיקום)/.test(n)) ns.add(n);
     h+=`<datalist id="stopNames">${[...ns].sort().map(n=>`<option value="${esc(n)}">`).join("")}</datalist>`}
   $("#setBody").innerHTML=h;
   const vq=$("#vq"); if(vq) vq.oninput=()=>document.querySelectorAll("#vrows tr").forEach(r=>r.hidden=!r.dataset.v.includes(vq.value.trim()));
@@ -1229,6 +1241,7 @@ $("#setBody").addEventListener("input",e=>{
     if(k==="lat"&&/^\s*-?\d+(\.\d+)?\s*[,\s]\s*-?\d+(\.\d+)?\s*$/.test(el.value)){const [a,b]=el.value.split(/[,\s]+/).filter(Boolean);r.lat=a;r.lon=b;showTab(tab);return}
     r[k]=el.value}
   else if(el.dataset.def){draft.defaults[el.dataset.def]={...(draft.defaults[el.dataset.def]||{}),[el.dataset.c]:el.value||null}}
+  else if(el.dataset.defn){const x=parseFloat(el.value);draft.defaults[el.dataset.defn]=isFinite(x)&&x>=0?x:null}
   else if(el.dataset.defl){draft.defaults[el.dataset.defl]=el.value.split(",").map(x=>x.trim()).filter(Boolean)}
   else if(el.dataset.vb){const v=el.closest("tr").dataset.v,x=draft.vehicles[v]={...(draft.vehicles[v]||{})};
     if(el.value==="__auto"){delete x.branch;delete x.branch_confirmed} else {x.branch=el.value;x.branch_confirmed=true}
