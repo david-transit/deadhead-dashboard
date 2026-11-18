@@ -107,6 +107,27 @@ jobs:
           echo "days=$list" >> "$GITHUB_OUTPUT"
           echo "to build:$list"
 
+      # Licensed route shapes of the operator from the MOT GTFS of each day built (pipeline/gtfs_shapes.py, README "קווי
+      # הרישוי"): the day's file from the Open Bus archive of the MOT GTFS (routes change from day to day), else today's MOT
+      # file; ~140 MB each, to the runner's temp folder (outside the checkout), only the operator's shapes kept.
+      - name: Line shapes from the MOT GTFS of each day
+        if: steps.days.outputs.days != ''
+        env:
+          SLUG: ${{ matrix.op.slug }}
+          DAYS: ${{ steps.days.outputs.days }}
+        run: |
+          set -eu
+          t="$RUNNER_TEMP/gtfs-mot"; mkdir -p "$t" pipeline/cache
+          for d in $DAYS; do
+            y=${d:0:4}; m=${d:5:2}; dd=${d:8:2}
+            if curl -sSf -m 900 --retry 3 -o "$t/gtfs.zip" "https://openbus-stride-public.s3.eu-west-1.amazonaws.com/gtfs_archive/$y/$m/$dd/israel-public-transportation.zip"                || curl -sSf -m 900 --retry 3 -A "Mozilla/5.0" -o "$t/gtfs.zip" https://gtfs.mot.gov.il/gtfsfiles/israel-public-transportation.zip; then
+              python -I pipeline/gtfs_shapes.py "$t/gtfs.zip" --op "$SLUG" --out "pipeline/cache/gtfs_shapes_${SLUG}_$d.json" || echo "::warning::GTFS shapes failed for $d"
+            else
+              echo "::warning::no GTFS for $d: empty legs from a GPS point use OSRM between stops, no route-deviation check"
+            fi
+            rm -f "$t/gtfs.zip"
+          done
+
       # Our own OSRM with the bus profile from transit-studio (pipeline/osrm/README.md): graph cached per extract week +
       # profile hash, rebuilt weekly; osrm-routed on 127.0.0.1:5000 for this job only.
       # OFF until David approves the bus-vs-car review: repository variable DEADHEAD_ROUTING=bus switches it on.

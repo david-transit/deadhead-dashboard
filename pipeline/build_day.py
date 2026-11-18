@@ -17,7 +17,7 @@ import json, sys, os, glob, hashlib, subprocess, math, datetime as dt, urllib.re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from stride import TZ, operator, fetch_rides, update_route_ends, fetch_locations
+from stride import TZ, operator, fetch_rides, update_route_ends, fetch_locations, fetch_traces, fetch_gtfs_rides
 
 REPO = os.path.dirname(HERE)
 CACHE_DIR = os.environ.get("DEADHEAD_CACHE") or os.path.join(HERE, "cache")
@@ -48,9 +48,21 @@ if os.environ.get("GPS_END_SNAP") == "0": SNAP["enabled"] = False
 # the SIRI heading of the last (first) point goes to OSRM as a bearing, so the leg leaves on the carriageway the bus was
 # on (David, 18.11.2026: line 137 lost on Golda Meir southbound was routed from the northbound side, 4.79 km instead of
 # ~1.2). pipeline/config.json "gps_heading"; GPS_HEADING=0 turns it off.
-HEAD = dict(dict(enabled=True, tol_deg=60, radius_m=15, line_m=60),
+HEAD = dict(dict(enabled=True, tol_deg=60, radius_m=15, line_m=60, shape_m=150, trace_n=2, trace_min_m=30),
             **json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("gps_heading", {}))
 if os.environ.get("GPS_HEADING") == "0": HEAD["enabled"] = False
+# The line's road = the licensed shape of the ride (MOT GTFS of that day, pipeline/gtfs_shapes.py -> cache/gtfs_shapes_<slug>_<day>.json,
+# else cache/gtfs_shapes_<slug>.json; David,
+# 18.11.2026). Without that file: OSRM between the two licensed stops around the point, checked against the ride's own
+# GPS trace (cache/trace_<slug>_<day>.json, stride.fetch_traces). GPS_TRACES=0: no traces (no Stride calls for them).
+SHAPES = {}
+SHC = {}
+# Route deviation ("סטייה מהמסלול ברישוי"): the ride's own GPS points farther than m from its licensed shape over more than
+# run_m of driving, between points on the shape (David, 18.11.2026; threshold not decided yet: 150/250/400, running with 250).
+# pipeline/config.json "route_dev"; ROUTE_DEV=0 turns it off.
+DEV = dict(dict(enabled=True, m=250, run_m=500),
+           **json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("route_dev", {}))
+if os.environ.get("ROUTE_DEV") == "0": DEV["enabled"] = False
 IL = (29.0, 34.0, 34.0, 36.5)  # valid GPS (lat/lon box); SIRI sends -1,-1 for "no position"
 
 
@@ -113,13 +125,22 @@ def osrm_router(cache_file):
             stat["geom"] += 1
         return cache[k]
 
+    def geomp(pts, hs, key):
+        """The road through points of a licensed shape, each in its direction (cached under key)."""
+        if key not in cache:
+            if proc[0] is None: ask(pts[0], pts[-1], [True, True])  # start the router process
+            proc[0].stdin.write(json.dumps(dict(g=1, p=pts, h=hs, rad=25)) + "\n"); proc[0].stdin.flush()
+            r = json.loads(proc[0].stdout.readline() or "null"); cache[key] = [r["km"], r["g"]] if r else None
+            stat["geom"] += 1
+        return cache[key]
+
     def save():
         if proc[0] is not None:
             proc[0].stdin.close(); proc[0].wait(); proc[0] = None
         json.dump(cache, open(cache_file, "w", encoding="utf-8"))
         if stat: print("routes:", dict(stat))
 
-    road.geom = geom
+    road.geom = geom; road.geomp = geomp
     return road, save, miss
 
 
@@ -168,7 +189,7 @@ def merge_false_starts(ts):
                 and -2 <= t["f_t"] - p["end"] <= 5 and abs(t["f_km"] - p["gps_km"]) <= 2):
             keep, other = (p, t) if t.get("auto") and not p.get("auto") else (t, p)
             m = dict(keep, start=p["start"], a=p["a"], frm=p["frm"], ca=p["ca"], end=t["end"], b=t["b"], to=t["to"], cb=t["cb"], ha=p.get("ha"), hb=t.get("hb"),
-                     gps_raw_a=p.get("gps_raw_a"), gps_raw_b=t.get("gps_raw_b"),
+                     gps_raw_a=p.get("gps_raw_a"), gps_raw_b=t.get("gps_raw_b"), rid_a=p.get("rid_a"), rid_b=t.get("rid_b"),
                      km=t["km"], gps_km=t["gps_km"], sched=keep["sched"])
             m.pop("late_login", None)
             if not t.get("incomplete"): m.pop("incomplete", None)
@@ -186,7 +207,7 @@ def merge_false_starts(ts):
             if short and (p.get("incomplete") or p.get("unmapped")) and -5 <= gap <= FALSE_START_GAP and reach:
                 dups.append(dict(kind="dup", start=p["start"], end=p["end"], line=p["line"], sched=p["sched"], frm=p["frm"], to=p["to"],
                                  merged_into=t["sched"], **({"auto": True} if p.get("auto") else {})))
-                t.update(start=p["start"], a=p["a"], frm=p["frm"], ca=p["ca"], ha=p.get("ha"), gps_raw_a=p.get("gps_raw_a"), f_km=p.get("f_km")); t.pop("late_login", None)
+                t.update(start=p["start"], a=p["a"], frm=p["frm"], ca=p["ca"], ha=p.get("ha"), gps_raw_a=p.get("gps_raw_a"), f_km=p.get("f_km"), rid_a=p.get("rid_a")); t.pop("late_login", None)
                 out[-1] = t
                 continue
         out.append(t)
@@ -202,11 +223,250 @@ def brg(a, b):
     return round(math.degrees(math.atan2(y, x))) % 360
 
 
+TRACE = {}
+
+
+def near(t, pos, end):
+    """The ride's own GPS points just before its last point (end=1) / just after its first (end=0): up to trace_n, each at
+    least trace_min_m away from pos, nearest first."""
+    tr = TRACE.get(t.get("rid_b" if end else "rid_a")) or []
+    seq = reversed(tr) if end else tr
+    out = []
+    for x in seq:
+        q = [x[1], x[2]]
+        if hav(q, pos) * 1000 < HEAD["trace_min_m"] or hav(q, pos) > 2: continue
+        out.append(q)
+        if len(out) >= HEAD["trace_n"]: break
+    return out
+
+
+def trace_heading(t, end):
+    """Direction of travel at a GPS end (start) from the ride's own previous (next) point, or None."""
+    pos = t.get("gps_raw_b" if end else "gps_raw_a"); n = near(t, pos, end) if pos else []
+    if not n: return None
+    return brg(n[0], pos) if end else brg(pos, n[0])
+
+
+def proj(pos, a, b):
+    """(metres from pos to segment a-b, the nearest point, share along the segment)."""
+    k = math.cos(math.radians(pos[0]))
+    ax, ay, bx, by = a[1] * k, a[0], b[1] * k, b[0]; px, py = pos[1] * k, pos[0]
+    dx, dy = bx - ax, by - ay; u = 0 if dx == dy == 0 else max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+    q = [ay + u * dy, (ax + u * dx) / k]
+    return hav(pos, q) * 1000, q, u
+
+
+def shape(sid):
+    """A licensed shape: (points, metres along it at each point)."""
+    if sid not in SHC:
+        pts = SHAPES["shapes"][sid]; cum = [0.0]
+        for i in range(1, len(pts)): cum.append(cum[-1] + hav(pts[i - 1], pts[i]) * 1000)
+        SHC[sid] = (pts, cum)
+    return SHC[sid]
+
+
+def on_shape(sid, pos, target):
+    """pos on the shape: (m off, point, m along, direction), the candidate within shape_m nearest to target m along (a route
+    that passes the same street twice), or the nearest one when target is None; None when none is within shape_m."""
+    pts, cum = shape(sid); cands = []
+    for j in range(len(pts) - 1):
+        d, q, u = proj(pos, pts[j], pts[j + 1])
+        if d > HEAD["shape_m"]: continue
+        cands.append((d, q, cum[j] + u * (cum[j + 1] - cum[j]), brg(pts[j], pts[j + 1]) if cum[j + 1] - cum[j] > 3 else None))
+    if not cands: return None
+    d0 = min(c[0] for c in cands)
+    # the nearest place on the shape; only when the shape passes about as near again (within 30 m more, 300 m or more
+    # along it away: the same street twice) does the distance GPS says the bus had covered decide between them
+    near = [c for c in cands if c[0] <= d0 + 30]
+    far_apart = target is not None and max(c[2] for c in near) - min(c[2] for c in near) > 300
+    return min(near, key=lambda c: (abs(c[2] - target), c[0])) if far_apart else min(cands, key=lambda c: c[0])
+
+
+def at_m(sid, m):
+    """The shape's point and direction m metres along it."""
+    pts, cum = shape(sid); m = max(0, min(m, cum[-1]))
+    j = max(0, min(len(pts) - 2, next((i for i in range(len(cum) - 1) if cum[i + 1] >= m), len(pts) - 2)))
+    while j < len(pts) - 2 and cum[j + 1] - cum[j] < 0.5: j += 1
+    u = 0 if cum[j + 1] == cum[j] else (m - cum[j]) / (cum[j + 1] - cum[j])
+    a, b = pts[j], pts[j + 1]
+    return [round(a[0] + u * (b[0] - a[0]), 6), round(a[1] + u * (b[1] - a[1]), 6)], brg(a, b)
+
+
+def on_road(g, q):
+    """q onto an OSRM polyline: (m off, point, direction there)."""
+    best = None
+    for j in range(len(g) - 1):
+        d, p, _ = proj(q, g[j], g[j + 1])
+        if best is None or d < best[0]: best = (d, p, brg(g[j], g[j + 1]) if hav(g[j], g[j + 1]) > 0.003 else None)
+    return best
+
+
+def shape_grid(sid):
+    """Segments of a shape by ~220 m cell, for distance queries."""
+    k = ("grid", sid)
+    if k not in SHC:
+        pts, _ = shape(sid); g = collections.defaultdict(list)
+        for j in range(len(pts) - 1):
+            a, b = pts[j], pts[j + 1]
+            for cy in range(int(min(a[0], b[0]) / .002), int(max(a[0], b[0]) / .002) + 1):
+                for cx in range(int(min(a[1], b[1]) / .002), int(max(a[1], b[1]) / .002) + 1):
+                    g[(cy, cx)].append(j)
+        SHC[k] = g
+    return SHC[k]
+
+
+def off_shape(sid, q, lim):
+    """Metres from q to the shape, capped: anything beyond lim (and beyond ~2 cells) is reported as lim + 1."""
+    pts, _ = shape(sid); g = shape_grid(sid); r = int(lim / 200) + 1
+    cy, cx = int(q[0] / .002), int(q[1] / .002); seen = set(); best = lim + 1
+    for y in range(cy - r, cy + r + 1):
+        for x in range(cx - r, cx + r + 1):
+            for j in g.get((y, x), ()):
+                if j in seen: continue
+                seen.add(j); d = proj(q, pts[j], pts[j + 1])[0]
+                if d < best: best = d
+    return best
+
+
+def route_dev(sid, tr, m=None, run_m=None):
+    """GPS points of a ride off its licensed shape: [max m off, km driven off the shape, number of places] or None.
+    A place counts when the points farther than m from the shape run over more than run_m of driving and the bus is
+    back on the shape after it (a trip lost before its end is "קטיעה", not a deviation)."""
+    m = m or DEV["m"]; run_m = run_m or DEV["run_m"]
+    if not sid or sid not in SHAPES.get("shapes", {}) or not tr or len(tr) < 3: return None
+    # from the first point along the journey (before it SIRI may send the bus's position at the depot, or jumps); a point
+    # that would need > 120 km/h from the previous kept one is a GPS jump, not driving
+    k = next((i for i, x in enumerate(tr) if x[3]), None)
+    if k is None: return None
+    T = lambda x: dt.datetime.fromisoformat(x[0]).timestamp(); kept = [tr[k]]
+    for x in tr[k + 1:]:
+        h = max((T(x) - T(kept[-1])) / 3600, 1 / 3600)
+        if hav(kept[-1][1:3], x[1:3]) / h <= 120: kept.append(x)
+    tr = kept
+    if len(tr) < 3: return None
+    d = [off_shape(sid, [x[1], x[2]], max(m, 400)) for x in tr]
+    on = [z <= m for z in d]
+    first = next((i for i, o in enumerate(on) if o), None)
+    if first is None: return None
+    out = []; i = first
+    while i < len(tr):
+        if on[i]: i += 1; continue
+        j = i
+        while j < len(tr) and not on[j]: j += 1
+        if j >= len(tr): break  # not back on the shape: the end of the ride, not a deviation
+        p = lambda k: [tr[k][1], tr[k][2]]
+        run = hav(p(i - 1), p(i)) / 2 + sum(hav(p(k), p(k + 1)) for k in range(i, j - 1)) + hav(p(j - 1), p(j)) / 2
+        if run * 1000 > run_m: out.append((max(d[i:j]), run))
+        i = j
+    if not out: return None
+    return [round(min(max(x[0] for x in out), 999)), round(sum(x[1] for x in out), 1), len(out)]
+
+
+def own_gtfs(raw, day, LOC):
+    """Our own SIRI -> GTFS link (David, 18.11.2026: the whole system follows the MOT GTFS of that day). The licensed trips of
+    service day D (GTFS dates D and D+1, 04:00..04:00 local, from Stride's import of that day's MOT GTFS) are matched to the
+    SIRI rides of the same route (line_ref): first the rides whose scheduled departure is that trip's minute, then within 10
+    minutes. One licensed trip per ride and one ride per licensed trip: when two buses claim one trip, the trip goes to the bus
+    Stride linked to it when Stride linked only one of them (trip number, any date: after the 08.11 date fix); otherwise to the
+    bus whose first GPS point is nearest the trip's departure, on a tie the one that left first (David, 18.11.2026). The other
+    bus is a reinforcement trip, like a second departure of the line. Two licensed trips at that minute = two licensed rides.
+    Stride's link is replaced when it differs (08.11.2026: 1,626 rides tied to the 09.11 trips), added when Stride has none
+    (15.11.2026: 28 night trips after midnight), and removed when no licensed trip is left for the ride. Returns counts."""
+    a = dt.datetime.combine(dt.date.fromisoformat(day), dt.time(DAY_START_H), TZ); b = a + dt.timedelta(days=1)
+    L = []
+    for d in (day, (dt.date.fromisoformat(day) + dt.timedelta(days=1)).isoformat()):
+        L += fetch_gtfs_rides(d, OP["operator_ref"], os.path.join(CACHE_DIR, f"gtfs_rides_{OP['slug']}_{d}.json"))
+    P = dt.datetime.fromisoformat
+    L = [x for x in L if a <= P(x["start_time"]) < b]
+    if not L: return {}
+    by = collections.defaultdict(list)
+    for x in L: by[x["line_ref"]].append(x)
+    def dep(r):  # actual departure: the first GPS point, else the scheduled time
+        f = LOC.get(str(r.get("first_vehicle_location_id")))
+        try: return P(f[0]) if f and f[1] and IL[0] < f[1] < IL[1] else P(r["scheduled_start_time"])
+        except Exception: return P(r["scheduled_start_time"])
+    seen, rides = set(), []
+    for r in raw:  # one SIRI ride per (vehicle, scheduled start), as build() reads them
+        k = (r["vehicle_ref"], r["scheduled_start_time"])
+        if r["vehicle_ref"] and k not in seen: seen.add(k); rides.append(r)
+    cand = []
+    for r in rides:
+        t, d0 = P(r["scheduled_start_time"]), dep(r)
+        for x in by.get(r["siri_route__line_ref"], []):
+            dt_s = abs((P(x["start_time"]) - t).total_seconds())
+            if dt_s <= 600:
+                cand.append([0 if dt_s == 0 else 1, 0, abs((d0 - P(x["start_time"])).total_seconds()), d0, r["id"], x["id"], r, x])
+    sk = lambda r, x: (r["gtfs_ride__journey_ref"] or "").split("_")[0] == x["journey_ref"].split("_")[0] and r["gtfs_ride__start_time"]         and P(r["gtfs_ride__start_time"]).astimezone(TZ).time() == P(x["start_time"]).astimezone(TZ).time()  # Stride's link (any date)
+    claim = collections.defaultdict(set); slink = collections.defaultdict(set)
+    for c in cand:
+        if c[0] == 0: claim[c[5]].add(c[4])  # buses scheduled at that very minute
+        if sk(c[6], c[7]): slink[c[5]].add(c[4])
+    for c in cand:
+        if len(slink[c[5]]) == 1 and c[4] in slink[c[5]]: c[1] = -1  # the only bus Stride linked to this trip goes first
+    cand.sort(key=lambda c: c[:6])
+    used, got = set(), {}
+    n = collections.Counter()
+    for c in cand:
+        if c[4] in got or c[5] in used: continue
+        got[c[4]] = c[7]; used.add(c[5])
+    for tid, rs in claim.items():
+        if len(rs) > 1 and tid in used:  # two (or more) buses at one licensed trip's minute
+            n["two_buses"] += 1
+            n["two_buses_both_licensed" if sum(1 for r in rs if r in got) == len(rs) else
+              "two_buses_by_stride" if len(slink[tid] & rs) == 1 else "two_buses_by_rule"] += 1
+    n.update(licensed=len(L), matched=len(got), not_run=len(L) - len(used))
+    trip_rides = collections.Counter((r["gtfs_ride__journey_ref"] or "").split("_")[0] + "|" + str(r["gtfs_ride__start_time"]) for r in rides if r["gtfs_ride_id"])
+    for r in rides:
+        x = got.get(r["id"])
+        if not x:
+            if r["gtfs_ride_id"]:
+                two = trip_rides[(r["gtfs_ride__journey_ref"] or "").split("_")[0] + "|" + str(r["gtfs_ride__start_time"])] > 1
+                n["to_rein_second_bus" if two else "to_rein_no_trip"] += 1
+                for k in [k for k in r if k.startswith(("gtfs_ride", "gtfs_route"))]: r[k] = None
+                r["gtfs_ride_id"] = None; r["own_gtfs"] = "rein"
+            continue
+        if r["gtfs_ride_id"] and r["gtfs_ride__start_time"] and P(r["gtfs_ride__start_time"]) == P(x["start_time"])                 and (r["gtfs_ride__journey_ref"] or "").split("_")[0] == x["journey_ref"].split("_")[0]:
+            if trip_rides[x["journey_ref"].split("_")[0] + "|" + str(r["gtfs_ride__start_time"])] > 1: n["kept_second_bus"] += 1
+            continue
+        n["added" if not r["gtfs_ride_id"] else "other_date" if abs((P(r["gtfs_ride__start_time"]) - P(x["start_time"])).total_seconds()) >= 43200 else "relinked"] += 1
+        r.update(gtfs_ride_id=x["id"], gtfs_ride__gtfs_route_id=x["route_id"], gtfs_ride__journey_ref=x["journey_ref"],
+                 gtfs_ride__start_time=x["start_time"], gtfs_ride__end_time=x["end_time"], gtfs_route__line_ref=x["line_ref"],
+                 gtfs_route__route_short_name=x["short"], gtfs_route__route_mkt=x["mkt"], gtfs_route__route_direction=x["dir"],
+                 gtfs_route__route_alternative=x["alt"], own_gtfs=1)
+    return dict(n)
+
+
 def on_line(road, t, pos, along_km, end):
-    """A raw GPS point of a ride -> (point on the line's own road, that road's direction there, metres moved), or None.
-    The line's road = OSRM between the two licensed stops around the point (by distance along the route); used only when
-    it is plausible (<= 1.3 x the planned distance between the stops + 0.2 km) and the point is within LINE_M of it
-    (farther = the bus was not on the line's road: left as it is)."""
+    """A raw GPS end (start) of a ride -> (point on the line's own road, that road's direction there, metres moved), or None.
+    The line's road is the ride's licensed shape (MOT GTFS): the point goes to the shape where it is <= line_m away, or
+    <= shape_m away when the ride's own previous (next) GPS points are on the shape too (the bus was on the line's road just
+    before it was lost: David, 18.11.2026, line 137 on Golda Meir next to Begin). The place on the shape is the one nearest to
+    the distance GPS says the bus had covered (a route that passes a street twice). The road there is OSRM through shape
+    points around it, each in the shape's direction, so the empty leg leaves on the line's carriageway.
+    Without a shape: OSRM between the two licensed stops around the point (<= 1.3 x their planned distance + 0.2 km),
+    used only when the ride's own previous (next) GPS points are on it too."""
+    if pos is None: return None
+    sid = t.get("shp")
+    if sid and sid in SHAPES.get("shapes", {}):
+        pts, cum = shape(sid)
+        tg = along_km * 1000 * cum[-1] / (t["km_plan"] * 1000) if along_km is not None and t.get("km_plan") else None
+        c = on_shape(sid, pos, tg)
+        if not c: return None
+        d, q, m, h = c
+        if d > HEAD["line_m"]:
+            n = near(t, pos, end)
+            if not n or any((lambda z: not z or z[0] > HEAD["line_m"])(on_shape(sid, x, None)) for x in n): return None
+        lo, hi = (m - 600, m + 150) if end else (m - 150, m + 600)
+        lo, hi = max(lo, 0), min(hi, cum[-1])
+        marks = sorted({round(lo), round(hi), round(m)} | set(range(int(lo // 150 + 1) * 150, int(hi), 150)))
+        marks = [x for i, x in enumerate(marks) if i == 0 or x - marks[i - 1] >= 40 or x == round(m)]
+        way = [at_m(sid, x) for x in marks]
+        g = road.geomp([w[0] for w in way], [w[1] for w in way], f"gs|{sid}|{marks[0]}|{marks[-1]}|{round(m)}")
+        if g and len(g[1]) >= 2 and g[0] <= (hi - lo) / 1000 * 1.3 + 0.2:
+            r = on_road(g[1], q)
+            if r and r[0] <= 30 and r[2] is not None:
+                return [round(r[1][0], 6), round(r[1][1], 6)], r[2], round(hav(pos, r[1]) * 1000)
+        return ([round(q[0], 6), round(q[1], 6)], h, round(d)) if h is not None else None
     st = t.get("st")
     if not st or len(st) < 2 or pos is None: return None
     m = along_km * 1000
@@ -222,6 +482,8 @@ def on_line(road, t, pos, along_km, end):
         q = [ay + u * dy, (ax + u * dx) / k]; d = hav(pos, q) * 1000
         if best is None or d < best[0]: best = (d, q, brg(a, b) if hav(a, b) > 0.003 else None)
     if best[0] > HEAD["line_m"] or best[2] is None: return None
+    n = near(t, pos, end)
+    if TRACE and n and any(on_road(g[1], x)[0] > HEAD["line_m"] for x in n): return None  # the bus was not on this road
     return [round(best[1][0], 6), round(best[1][1], 6)], best[2], round(best[0])
 
 
@@ -233,16 +495,17 @@ def snap_ends(ts):
         if t.get("no_gps") or not t.get("km_plan") or not t.get("dur"): continue
         v = t["km_plan"] / t["dur"]  # planned km per minute
         g = t.get("gps_km")
-        if t["d"] and t["to"].startswith(RAW):
+        rb = t.get("gps_raw_b") or t["b"]
+        if t["d"] and (t["to"].startswith(RAW) or hav(rb, t["d"]) > SNAP_KM):  # a raw point, or another stop than the planned one
             d, why = t["d"], []
             if g is None or g < SNAP["share"] * t["km_plan"]: why.append("share")
-            if hav(t["b"], d) > SNAP["max_km"] or (g is not None and g > t["km_plan"] + SNAP["before_tol_km"]): why.append("far")
+            if hav(rb, d) > SNAP["max_km"] or (g is not None and g > t["km_plan"] + SNAP["before_tol_km"]): why.append("far")
             nx = ts[i + 1] if i + 1 < len(ts) else None
             if nx is not None and g is not None and nx["start"] - t["end"] < max(t["km_plan"] - g, 0) / v: why.append("time")
             if why:
                 t["trunc_end"] = why
             else:
-                t["snap_end"] = dict(b=t["b"], to=t["to"], m=round(hav(t["b"], d) * 1000))
+                t["snap_end"] = dict(b=t["b"], to=t["to"], m=round(hav(rb, d) * 1000))
                 t.update(b=[round(d[0], 5), round(d[1], 5)], to=f'{d[3]}, {d[2]}', cb=d[3])
         f = t.get("f_km")
         if t["o"] and t["frm"].startswith(RAW) and not t.get("late_login") and not t.get("midroute"):
@@ -262,8 +525,18 @@ def build(day):
     os.makedirs(CACHE_DIR, exist_ok=True)
     rf = os.path.join(CACHE_DIR, f"rides_{OP['slug']}_{day}_h{DAY_START_H}.json")
     raw = json.load(open(rf, encoding="utf-8")) if os.path.exists(rf) else fetch_rides(day, rf, OP["operator_ref"], DAY_START_H)
-    ends = update_route_ends(raw, os.path.join(CACHE_DIR, "route_ends.json"))
     LOC = fetch_locations(raw, os.path.join(CACHE_DIR, f"vloc_{OP['slug']}_{day}.json"))
+    gm = own_gtfs(raw, day, LOC) if os.environ.get("OWN_GTFS") != "0" else {}
+    print("own GTFS link:", gm, file=sys.stderr)
+    ends = update_route_ends(raw, os.path.join(CACHE_DIR, "route_ends.json"))
+    global TRACE
+    TRACE = {} if os.environ.get("GPS_TRACES") == "0" or not HEAD["enabled"] else fetch_traces(raw, os.path.join(CACHE_DIR, f"trace_{OP['slug']}_{day}.json"))
+    sf = os.path.join(CACHE_DIR, f"gtfs_shapes_{OP['slug']}_{day}.json")  # that day's GTFS (routes change: 152/154/160 in 11.2026)
+    if not os.path.exists(sf): sf = os.path.join(CACHE_DIR, f"gtfs_shapes_{OP['slug']}.json")  # else the latest one
+    SHAPES.clear(); SHC.clear()
+    if HEAD["enabled"] and os.path.exists(sf): SHAPES.update(json.load(open(sf, encoding="utf-8")))
+    print("line shapes:", f"{len(SHAPES.get('shapes', {}))} (GTFS {SHAPES.get('gtfs_date')})" if SHAPES else "none (OSRM between stops)",
+          "· traces:", len(TRACE), file=sys.stderr)
     at = locator(stop_index(ends))
     z = zipfile.ZipFile(os.path.join(HERE, "ClusterToLine.zip")).read("ClusterToLine.txt").decode("utf-8-sig")
     CL = {x["OfficeLineId"]: ("עירוני" if x["LineTypeDesc"] == "עירוני" else "בינעירוני")
@@ -297,7 +570,9 @@ def build(day):
             if not e or not x["gtfs_ride__start_time"]:
                 skipped += 1; continue
             dur = (dt.datetime.fromisoformat(x["gtfs_ride__end_time"]) - dt.datetime.fromisoformat(x["gtfs_ride__start_time"])).total_seconds() / 60
-            t = dict(line=x["gtfs_route__route_short_name"], mkt=x["gtfs_route__route_mkt"], o=e["o"], d=e["d"], km_plan=round(e["km"], 1), st=e.get("st"))
+            t = dict(line=x["gtfs_route__route_short_name"], mkt=x["gtfs_route__route_mkt"], o=e["o"], d=e["d"], km_plan=round(e["km"], 1), st=e.get("st"),
+                     shp=SHAPES.get("trips", {}).get((x["gtfs_ride__journey_ref"] or "").split("_")[0])
+                     or (SHAPES.get("routes", {}).get(str(x["gtfs_route__line_ref"])) or [None])[0])
         else:
             # ran in service but not in the licensed GTFS schedule -> automatic reinforcement candidate
             info = LR.get(str(x["siri_route__line_ref"]))
@@ -324,7 +599,10 @@ def build(day):
             G["gps"] += 1
             t0, t1 = max(mins(P(f[0])), sched), mins(P(l[0]))
             a, frm, ca = at([f[1], f[2]]); b, to, cb = at([l[1], l[2]])
-            t.update(gps_raw_a=[f[1], f[2]], gps_raw_b=[l[1], l[2]])
+            t.update(gps_raw_a=[f[1], f[2]], gps_raw_b=[l[1], l[2]], rid_a=str(x["id"]), rid_b=str(x["id"]))
+            if DEV["enabled"]:
+                dv = route_dev(t.get("shp"), TRACE.get(str(x["id"])))
+                if dv: t["dev"] = dv  # [max m off the licensed shape, km off it, places]
             gkm = round(l[3] / 1000, 1) if l[3] is not None else None
             ride_min = mins(P(l[0])) - mins(P(f[0]))
             if gkm is not None and gkm > 2 and (ride_min <= 0 or gkm / (ride_min / 60) > 100):
@@ -375,12 +653,14 @@ def build(day):
                 term = (not p["to"].startswith(("ליד", "מיקום")), not t["frm"].startswith(("ליד", "מיקום")))  # snapped to a terminal stop
                 hd = (None if term[0] or not HEAD["enabled"] else p.get("hb"), None if term[1] or not HEAD["enabled"] else t.get("ha"))
                 A, B, lr = p["b"], t["a"], [None, None]
-                if HEAD["enabled"] and not term[0] and p.get("gps_km") is not None:
-                    s = on_line(road, p, p.get("gps_raw_b"), p["gps_km"], 1)
+                if HEAD["enabled"] and not term[0] and p.get("gps_raw_b"):
+                    s = on_line(road, p, p["gps_raw_b"], p.get("gps_km"), 1)
                     if s: A, hd, lr[0] = s[0], (s[1], hd[1]), s[2]
-                if HEAD["enabled"] and not term[1] and t.get("f_km") is not None and not t.get("late_login"):
-                    s = on_line(road, t, t.get("gps_raw_a"), t["f_km"], 0)
+                    elif trace_heading(p, 1) is not None: hd = (trace_heading(p, 1), hd[1])
+                if HEAD["enabled"] and not term[1] and t.get("gps_raw_a") and not t.get("late_login"):
+                    s = on_line(road, t, t["gps_raw_a"], t.get("f_km"), 0)
                     if s: B, hd, lr[1] = s[0], (hd[0], s[1]), s[2]
+                    elif trace_heading(t, 0) is not None: hd = (hd[0], trace_heading(t, 0))
                 km, mn, rt = road(A, B, term, hd)
                 leg = dict(kind="empty", start=p["end"], end=t["start"], km=km, drive_min=mn, frm=p["to"], to=t["frm"], next_sched=t["sched"],
                            a=p["b"], b=t["a"])
@@ -390,6 +670,7 @@ def build(day):
                     leg["hd"] = rt["hd"]  # routed in the bus's direction of travel ([heading at a, heading at b])
                 if any(x is not None for x in lr):
                     leg["lr"] = lr  # [m from the GPS point to the line's road at a, at b]: routed from the point on the line's road
+                    leg["la"] = [A if lr[0] is not None else None, B if lr[1] is not None else None]  # those points on the line's road
                 if rt and rt.get("fb"):
                     leg["fb"] = 1  # our bus OSRM failed: routed as a private car (public server), "חושב ברכב פרטי (גיבוי)"
                 if km is None:  # OSRM failed: a marked estimate, never dropped
@@ -403,7 +684,7 @@ def build(day):
             items.append(dict(kind="trip", start=t["start"], end=t["end"], line=t["line"], km=t["km"], cls=t["cls"], sched=t["sched"],
                               frm=t["frm"], to=t["to"], a=t["a"], b=t["b"], ca=t["ca"], cb=t["cb"],
                               **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute",
-                                           "snap_end", "snap_start", "trunc_end", "trunc_start")
+                                           "snap_end", "snap_start", "trunc_end", "trunc_start", "dev")
                                  if t.get(k) is not None}))
         items += dups + ghosts.pop(v, [])
         # an empty leg sits right before the trip it leads to (also when SIRI shows overlapping rides)
@@ -439,10 +720,12 @@ def build(day):
     n_fb = sum(1 for v in vehicles for i in v["items"] if i.get("fb"))
     out = dict(day=day, day_start_min=DAY_START_H * 60, routing=dict(profile=PROFILE, fallback_legs=n_fb), operator=OP["name"], operator_slug=OP["slug"], built=dt.datetime.now(TZ).isoformat(timespec="minutes"),
                routes=routes, summary=dict(vehicles=len(vehicles), trips=sum(len(v) for v in by.values()),
-               empty_day_km=round(tot_day), skipped_rides=skipped, auto_rein=auto_n, auto_rein_unmapped=auto_unmapped,
+               empty_day_km=round(sum(v["empty_day_km"] for v in vehicles)),  # the vehicles' own (0.1 km) sums: the day = what the vehicles show
+               skipped_rides=skipped, auto_rein=auto_n, auto_rein_unmapped=auto_unmapped,
                gps=G["gps"], no_gps=G["no_gps"], incomplete=G["incomplete"], false_starts=n_dup, not_performed=G["ghost"], late_login=G["late_login"],
                snap_end=sum(1 for v in by.values() for t in v if t.get("snap_end")), snap_start=sum(1 for v in by.values() for t in v if t.get("snap_start")),
-               trunc_end=sum(1 for v in by.values() for t in v if t.get("trunc_end")), trunc_start=sum(1 for v in by.values() for t in v if t.get("trunc_start"))), vehicles=vehicles)
+               trunc_end=sum(1 for v in by.values() for t in v if t.get("trunc_end")), trunc_start=sum(1 for v in by.values() for t in v if t.get("trunc_start")),
+               route_dev=sum(1 for v in by.values() for t in v if t.get("dev")), gtfs_link=gm), vehicles=vehicles)
     os.makedirs(DATA, exist_ok=True)
     json.dump(out, open(os.path.join(DATA, f"day_{day}.json"), "w", encoding="utf-8"), ensure_ascii=False)
     print(json.dumps(out["summary"], ensure_ascii=False))
