@@ -41,7 +41,7 @@ PROFILE = os.environ.get("OSRM_PROFILE", "bus-strict") if os.environ.get("OSRM_B
 # route, and the time to the next trip is enough to drive the rest at the line's planned speed. The end time stays the
 # GPS time. Otherwise the raw point stays, marked trunc_end ("קטיעה אפשרית"). The same, mirrored, for the start.
 # pipeline/config.json "gps_end_snap" (settings, not code); GPS_END_SNAP=0 turns it off (before/after comparison).
-SNAP = dict(dict(enabled=True, share=0.95, max_km=1.0, before_tol_km=0.0, start_share=0.05, start_max_km=1.0),
+SNAP = dict(dict(enabled=True, share=0.95, max_km=1.0, before_tol_km=0.0, start_share=0.05, start_max_km=1.0, next_at_stop_km=0.3),
             **json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("gps_end_snap", {}))
 if os.environ.get("GPS_END_SNAP") == "0": SNAP["enabled"] = False
 # An empty leg that starts (ends) at a raw GPS point on the road (not a stop) is routed in the bus's direction of travel:
@@ -510,6 +510,10 @@ def snap_ends(ts):
             if nx is not None and g is not None and nx["start"] - t["end"] < max(t["km_plan"] - g, 0) / v: why.append("time")
             if why:
                 t["trunc_end"] = why
+                if t.get("incomplete") and nx is not None and hav(d, nx["a"]) <= SNAP["next_at_stop_km"]:
+                    # GPS lost it early, but the bus's next trip leaves from this trip's planned last stop: it got there, so the trip
+                    # counts as completed (planned km) and ends at that stop (David, 18.11.2026; group "א" of the 157 checked)
+                    t.pop("incomplete", None); t["km"] = t["km_plan"]; t["done_next"] = 1
                 if not t.get("incomplete"):
                     # counted as completed (km = the planned km): the empty leg leaves from the planned last stop, as if the bus
                     # had driven the rest (David, 18.11.2026); the trip stays marked "קטיעה אפשרית" with where GPS ended
@@ -705,7 +709,7 @@ def build(day):
             items.append(dict(kind="trip", start=t["start"], end=t["end"], line=t["line"], km=t["km"], cls=t["cls"], sched=t["sched"],
                               frm=t["frm"], to=t["to"], a=t["a"], b=t["b"], ca=t["ca"], cb=t["cb"],
                               **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute",
-                                           "snap_end", "snap_start", "trunc_end", "trunc_start", "trunc_to", "dev")
+                                           "snap_end", "snap_start", "trunc_end", "trunc_start", "trunc_to", "done_next", "dev")
                                  if t.get(k) is not None}))
         items += dups + ghosts.pop(v, [])
         # an empty leg sits right before the trip it leads to (also when SIRI shows overlapping rides)
@@ -743,7 +747,7 @@ def build(day):
                routes=routes, summary=dict(vehicles=len(vehicles), trips=sum(len(v) for v in by.values()),
                empty_day_km=round(sum(v["empty_day_km"] for v in vehicles)),  # the vehicles' own (0.1 km) sums: the day = what the vehicles show
                skipped_rides=skipped, auto_rein=auto_n, auto_rein_unmapped=auto_unmapped,
-               gps=G["gps"], no_gps=G["no_gps"], incomplete=G["incomplete"], false_starts=n_dup, not_performed=G["ghost"], late_login=G["late_login"],
+               gps=G["gps"], no_gps=G["no_gps"], incomplete=sum(1 for v in by.values() for t in v if t.get("incomplete")), done_next=sum(1 for v in by.values() for t in v if t.get("done_next")), false_starts=n_dup, not_performed=G["ghost"], late_login=G["late_login"],
                snap_end=sum(1 for v in by.values() for t in v if t.get("snap_end")), snap_start=sum(1 for v in by.values() for t in v if t.get("snap_start")),
                trunc_end=sum(1 for v in by.values() for t in v if t.get("trunc_end")), trunc_start=sum(1 for v in by.values() for t in v if t.get("trunc_start")),
                route_dev=sum(1 for v in by.values() for t in v if t.get("dev")), gtfs_link=gm), vehicles=vehicles)
