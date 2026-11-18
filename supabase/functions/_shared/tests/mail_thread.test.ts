@@ -36,3 +36,9 @@ test("unknown refs fall back to the open conversation", async () => {
   const { d } = db({ open: { id: "v2", status: "open" } });
   assert.equal((await pickConversation(d, "c1", ["<zzz@x>"], null)).id, "v2");
 });
+
+test("ref of a closed conversation while the contact has another open one: use the open one (one active per contact)", async () => {
+  const { d, calls } = db({ byRef: { "<a@x>": { id: "v1", status: "closed" } }, open: { id: "v2", status: "open" } });
+  assert.deepEqual(await pickConversation(d, "c1", ["<a@x>"], "s"), { id: "v2", isNew: false, reopened: false });
+  assert.deepEqual(calls, []);
+});

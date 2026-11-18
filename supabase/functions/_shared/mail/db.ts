@@ -84,9 +84,14 @@ export function supabaseInboundDb(admin: any, bucket = "support-attachments"): I
       return r[0] ?? null;
     },
     async newEmailConv(contactId, subject) {
-      const r = await one(admin.from("support_conversations").insert({ contact_id: contactId, channel: "email",
-        subject: subject?.slice(0, 300) ?? null, status: "open" }).select("id").single());
-      return r.id;
+      const { data, error } = await admin.from("support_conversations").insert({ contact_id: contactId, channel: "email",
+        subject: subject?.slice(0, 300) ?? null, status: "open" }).select("id").single();
+      if (error?.code === "23505") { // a parallel delivery opened it first (one active conversation per contact)
+        const r = await one(admin.from("support_conversations").select("id").eq("contact_id", contactId).neq("status", "closed").limit(1));
+        if (r[0]) return r[0].id;
+      }
+      if (error) throw error;
+      return data.id;
     },
     async reopen(convId) {
       await one(admin.from("support_conversations").update({ status: "open", closed_at: null, reminded_at: null }).eq("id", convId));

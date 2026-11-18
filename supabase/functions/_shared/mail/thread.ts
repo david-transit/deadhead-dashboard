@@ -13,6 +13,9 @@ export async function pickConversation(db: ThreadDb, contactId: string, refs: st
   const byRef = refs.length ? await db.convByRefs(refs) : null;
   if (byRef) {
     if (byRef.status !== "closed") return { id: byRef.id, isNew: false, reopened: false };
+    // one not-closed conversation per contact (20261119100000_support_one_active_conversation): never reopen beside it
+    const open = await db.openEmailConv(contactId);
+    if (open) return { id: open.id, isNew: false, reopened: false };
     await db.reopen(byRef.id);
     return { id: byRef.id, isNew: false, reopened: true };
   }
