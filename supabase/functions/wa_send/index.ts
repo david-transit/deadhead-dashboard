@@ -77,6 +77,7 @@ Deno.serve(async (req) => {
       const { data: cv } = await admin.from("support_conversations").select("id, status, assignee, support_contacts(wa_id)")
         .eq("id", b.conversation).maybeSingle();
       if (!cv) throw new Fail("not_found", 404);
+      if (!cv.support_contacts?.wa_id) throw new Fail("wrong_channel"); // an email conversation: answer it with mail_send
       const r = await sendMessage(deps, { to: cv.support_contacts.wa_id, kind: "text", body, category: "service",
         sender: "agent", agentId: me.user.id, conversationId: cv.id });
       if (r.ok && (cv.status !== "assigned" || !cv.assignee)) {
@@ -91,6 +92,7 @@ Deno.serve(async (req) => {
       if ("error" in mk) return out(mk, 413);
       const { data: cv } = await admin.from("support_conversations").select("id, support_contacts(wa_id)").eq("id", b.conversation).maybeSingle();
       if (!cv) throw new Fail("not_found", 404);
+      if (!cv.support_contacts?.wa_id) throw new Fail("wrong_channel"); // an email conversation: answer it with mail_send
       const filename = String(file.name || "file").slice(0, 200);
       const mediaId = await mediaUpload(file, filename, deps.cfg);
       const r = await sendMessage(deps, { to: cv.support_contacts.wa_id, kind: "media",
@@ -102,6 +104,7 @@ Deno.serve(async (req) => {
       const { data: m } = await admin.from("support_messages").select("id, body, template, status, direction, conversation_id, support_contacts(wa_id)")
         .eq("id", b.message).maybeSingle();
       if (!m || m.status !== "failed" || m.direction !== "out" || m.template) throw new Fail("bad_input");
+      if (!m.support_contacts?.wa_id) throw new Fail("wrong_channel");
       const r = await sendMessage(deps, { to: m.support_contacts.wa_id, kind: "text", body: m.body, category: "service",
         sender: "agent", agentId: me.user.id, conversationId: m.conversation_id });
       return out(r, r.ok ? 200 : 422);
