@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-18.46";
+const APP_VER="2026-11-18.47";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -79,7 +79,7 @@ async function loadAccess(){
   if(OP) lsSet("ys_op",OP.slug);
 }
 function applyOperator(){
-  $("#op").textContent=OP.name; document.title=`יאללה־סע · נסיעות ריקות · ${OP.name}`;
+  $("#op").textContent=OP.name; $("#bPva").hidden=!canEdit(); document.title=`יאללה־סע · נסיעות ריקות · ${OP.name}`;
   const lb=$("#opLogo"); lb.hidden=!OP.logo_url; lb.innerHTML=OP.logo_url?`<img src="${esc(OP.logo_url+(OP.logo_url.includes("?")?"&":"?")+"v="+APP_VER)}" alt="${esc(OP.name)}">`:"";
   const os=$("#opSel"); os.hidden=OPS.length<2; os.innerHTML=OPS.map(o=>`<option value="${esc(o.slug)}" ${o.id===OP.id?"selected":""}>${esc(o.name)}</option>`).join("");
   $("#bCtl").hidden=!canManage();

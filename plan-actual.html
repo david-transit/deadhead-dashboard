@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<!-- R53 "תכנון מול ביצוע". Same policy as index.html: every script is a file, no inline script or handler. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self' https://xghfcdgettrcdciwwzbl.supabase.co https://router.project-osrm.org; worker-src 'self'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<script src="assets/frame.js"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>יאללה־סע · תכנון מול ביצוע</title>
+<link rel="icon" href="mobile/icon.svg">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<link rel="stylesheet" href="assets/pva.css?v=2026-11-18.47">
+</head>
+<body>
+<header>
+  <a class="brand" href="index.html" title="חזרה לדשבורד הנסיעות הריקות"><img src="mobile/icon.svg" alt="יאללה־סע" class="ys"></a>
+  <span class="oplogo" id="opLogo" hidden></span>
+  <div class="title"><h1>תכנון מול ביצוע</h1><div id="sub" class="sub"></div></div>
+  <div class="controls">
+    <label class="per">מ־<input type="date" id="dFrom" aria-label="מתאריך"></label>
+    <label class="per">עד <input type="date" id="dTo" aria-label="עד תאריך"></label>
+    <button class="btn" id="bLoad">הצגה</button>
+    <button class="btn" id="bLocal" hidden title="מנהל מערכת, במחשב המקומי בלבד">טעינת הימים מהבנייה המקומית</button>
+    <a class="back" href="index.html">‹ חזרה לדשבורד</a>
+  </div>
+</header>
+<nav class="tabs" role="tablist" aria-label="לשוניות">
+  <button role="tab" id="tExcess" aria-selected="true" aria-controls="pExcess">ק״מ מעבר לתכנון</button>
+  <button role="tab" id="tSid" aria-selected="false" aria-controls="pSid">סידורים</button>
+  <button role="tab" id="tGap" aria-selected="false" aria-controls="pGap">פערי ק״מ מול המפעיל</button>
+  <button role="tab" id="tLes" aria-selected="false" aria-controls="pLes">לקחים</button>
+</nav>
+<div id="msg" class="msg" role="status" aria-live="polite"></div>
+<section class="cards" id="cards" aria-label="סיכום התקופה">
+  <div class="card"><div class="k">ק״מ ריקים מתוכננים</div><div class="v" id="cPlan">–</div></div>
+  <div class="card"><div class="k">ק״מ ריקים בפועל</div><div class="v" id="cAct">–</div></div>
+  <div class="card"><div class="k">ק״מ מעבר לתכנון</div><div class="v" id="cEx">–</div></div>
+  <div class="card"><div class="k">מתוכם תוספת סדרן</div><div class="v" id="cDis">–</div></div>
+</section>
+<main>
+  <section id="pExcess" role="tabpanel" aria-labelledby="tExcess" class="grid3">
+    <div class="col list" aria-label="רשימה ממוינת">
+      <div class="seg" role="group" aria-label="קיבוץ"><button class="on" id="gDrv" aria-pressed="true">לפי נהג</button><button id="gVeh" aria-pressed="false">לפי רכב</button></div>
+      <ol id="rank" class="rank"></ol>
+    </div>
+    <div class="col days" id="days" aria-live="polite"></div>
+    <div class="col mapcol">
+      <div class="mapcard"><div id="map" class="map" aria-label="מפה"></div>
+        <div id="mapLeg" class="mapleg"></div><div id="mapInfo" class="mapinfo"></div></div>
+    </div>
+  </section>
+  <section id="pSid" role="tabpanel" aria-labelledby="tSid" hidden></section>
+  <section id="pGap" role="tabpanel" aria-labelledby="tGap" hidden></section>
+  <section id="pLes" role="tabpanel" aria-labelledby="tLes" hidden></section>
+</main>
+<footer class="legend" aria-label="מקרא">
+  <b>מקרא:</b>
+  <span><span class="tag plan">כמתוכנן</span> = נסיעה לפי התכנון</span>
+  <span><span class="tag disp">תוספת סדרן</span> = נסיעה ריקה בסידור שאינו במפת הבסיס</span>
+  <span><span class="tag extra">נוספה</span> = נסיעה ריקה שנוספה לסידור</span>
+  <span><span class="tag forced">מוכרחת</span> = נסיעה ריקה מוכרחת (תפעולית)</span>
+  <span><i class="ln ours"></i> = הניתוב שלנו</span>
+</footer>
+<script src="assets/map.js?v=2026-11-18.47"></script>
+<script src="assets/pva.js?v=2026-11-18.47"></script>
+</body>
+</html>
