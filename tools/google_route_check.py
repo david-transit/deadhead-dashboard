@@ -39,7 +39,8 @@ def http(url, body=None, headers=None, method=None):
 
 class DB:
     def __init__(self, key, slug):
-        self.h = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"}
+        # new Supabase secret keys (sb_secret_...) go in "apikey" only (they are not JWTs); a legacy service_role JWT also as Bearer
+        self.h = {"apikey": key, "Content-Type": "application/json", **({} if key.startswith("sb_") else {"Authorization": "Bearer " + key})}
         self.op = http(f"{SB}/rest/v1/operators?select=id&slug=eq.{slug}", headers=self.h)[0]["id"]
 
     def get(self, table, q): return http(f"{SB}/rest/v1/{table}?{q}&operator_id=eq.{self.op}", headers=self.h) or []
