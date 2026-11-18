@@ -82,6 +82,11 @@ export function supabaseDb(admin: any): InboundDb & {
       if (data?.length) return data[0];
       const { data: ins, error } = await admin.from("support_conversations").insert({ contact_id: contactId, status: "open" })
         .select("id, status, assignee, bot_state").single();
+      if (dup(error)) { // two webhooks at once: the unique index let only one insert win; use that one (review I7)
+        const { data: again } = await admin.from("support_conversations").select("id, status, assignee, bot_state")
+          .eq("contact_id", contactId).neq("status", "closed").limit(1);
+        if (again?.length) return again[0];
+      }
       if (error) throw error;
       return ins;
     },

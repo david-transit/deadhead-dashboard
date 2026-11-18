@@ -69,7 +69,7 @@ test("parseWebhook: text message with the sender's name", () => {
     contacts: [{ wa_id: "972501234567", profile: { name: "משה" } }],
     messages: [{ id: "wamid.IN", from: "972501234567", timestamp: "1763460000", type: "text", text: { body: "שלום" } }],
   }));
-  assert.deepEqual(ev.messages, [{ wamid: "wamid.IN", from: "972501234567", name: "משה", text: "שלום", ts: new Date(1763460000 * 1000) }]);
+  assert.deepEqual(ev.messages, [{ wamid: "wamid.IN", from: "972501234567", name: "משה", text: "שלום", kind: "text", ts: new Date(1763460000 * 1000) }]);
   assert.deepEqual(ev.statuses, []);
 });
 test("parseWebhook: quick-reply button text is read as the message text", () => {
@@ -85,4 +85,11 @@ test("parseWebhook: failed status carries the error; other fields are ignored", 
   assert.equal(ev.statuses[0].error, "Re-engagement message");
   assert.deepEqual(parseWebhook(hook({ x: 1 }, "account_update")), { messages: [], statuses: [] });
   assert.deepEqual(parseWebhook(null), { messages: [], statuses: [] });
+});
+
+test("parseWebhook: message kind is kept (image, reaction) for the bot (review I8)", () => {
+  const ev = parseWebhook(hook({ messages: [
+    { id: "a", from: "1", timestamp: "1", type: "image", image: { id: "x" } },
+    { id: "b", from: "1", timestamp: "1", type: "reaction", reaction: { emoji: "👍" } }] }));
+  assert.deepEqual(ev.messages.map((m) => m.kind), ["image", "reaction"]);
 });

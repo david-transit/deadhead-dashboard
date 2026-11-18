@@ -30,7 +30,8 @@ export interface SendReq {
   to: string; kind: "text" | "template" | "media"; body?: string;
   media?: { kind: MediaKind; id: string; filename: string; size: number }; template?: string; params?: string[]; quickReply?: string;
   category: Category; sender: "agent" | "bot" | "system"; agentId?: string; conversationId?: string;
-  isAlert?: boolean; // budget alerts to David: never blocked by the budget and never trigger another alert
+  isAlert?: boolean;       // any alert to David: never triggers another (budget) alert
+  isBudgetAlert?: boolean; // the 80%/100% alert itself: the only paid message besides login codes that passes a full budget (R11)
 }
 export interface SendOut { ok: boolean; block?: Block; wamid?: string; error?: string }
 
@@ -42,7 +43,7 @@ export async function sendMessage(d: Deps, r: SendReq): Promise<SendOut> {
   const block = sendBlock({
     kind: r.kind === "template" ? "template" : "text", // a file is a free reply, like text
     category: r.category, optedOut: !!c?.optedOut, consent: !!c?.consent,
-    lastInboundAt: last, now, spentIls: r.isAlert ? 0 : spent, s,
+    lastInboundAt: last, now, spentIls: r.isBudgetAlert ? 0 : spent, s,
   });
   if (block) return { ok: false, block };
 
@@ -59,7 +60,7 @@ export async function sendMessage(d: Deps, r: SendReq): Promise<SendOut> {
 
   if (!r.isAlert && costIls(r.category, s) > 0) {
     const level = budgetLevel(spent + costIls(r.category, s), s);
-    if (level !== "ok" && await d.db.markAlertSent(level)) await sendAlert(d, BUDGET_TEXT[level]);
+    if (level !== "ok" && await d.db.markAlertSent(level)) await sendAlert(d, BUDGET_TEXT[level], true);
   }
   return res.ok ? { ok: true, wamid: res.wamid } : { ok: false, error: res.error };
 }
@@ -71,8 +72,8 @@ function fileLabel(m: { filename: string; size: number }): string {
 }
 
 // Alert to David (R3) on the channel chosen in the settings. Email waits for the mail sub-project.
-export async function sendAlert(d: Deps, text: string): Promise<SendOut> {
+export async function sendAlert(d: Deps, text: string, budgetAlert = false): Promise<SendOut> {
   const s = await d.db.settings();
   if (s.alert_channel !== "whatsapp" || !s.alert_to) return { ok: false, error: `alert_channel_${s.alert_channel}` };
-  return sendMessage(d, { to: s.alert_to, kind: "template", template: "alert_v1", params: [text], category: "utility", sender: "system", isAlert: true });
+  return sendMessage(d, { to: s.alert_to, kind: "template", template: "alert_v1", params: [text], category: "utility", sender: "system", isAlert: true, isBudgetAlert: budgetAlert });
 }

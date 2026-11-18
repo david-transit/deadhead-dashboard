@@ -5,7 +5,7 @@ const GRAPH = "https://graph.facebook.com/v26.0"; // v26.0: July 2026, newest st
 const DELAYS = [500, 1000, 2000]; // wait before retries 2 and 3 (the third value is spare)
 
 export interface SendResult { ok: boolean; wamid?: string; error?: string; retryable?: boolean }
-export interface InMsg { wamid: string; from: string; name: string; text: string; ts: Date }
+export interface InMsg { wamid: string; from: string; name: string; text: string; kind: string; ts: Date } // kind = Meta message type
 export interface StatusEv { wamid: string; status: string; billable: boolean; category: string; error?: string }
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -82,7 +82,7 @@ export function parseWebhook(json: any): { messages: InMsg[]; statuses: StatusEv
     const names = new Map<string, string>((v.contacts ?? []).map((k: any) => [k.wa_id, k.profile?.name ?? ""]));
     for (const m of v.messages ?? []) {
       const text = m.text?.body ?? m.button?.text ?? m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? "";
-      out.messages.push({ wamid: m.id, from: m.from, name: names.get(m.from) ?? "", text, ts: new Date(Number(m.timestamp) * 1000) });
+      out.messages.push({ wamid: m.id, from: m.from, name: names.get(m.from) ?? "", text, kind: String(m.type || "text"), ts: new Date(Number(m.timestamp) * 1000) });
     }
     for (const s of v.statuses ?? []) {
       const ev: StatusEv = { wamid: s.id, status: s.status, billable: !!s.pricing?.billable, category: s.pricing?.category ?? "" };

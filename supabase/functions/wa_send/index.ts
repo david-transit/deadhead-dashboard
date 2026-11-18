@@ -14,7 +14,8 @@ import { mediaUpload } from "../_shared/meta.ts";
 import { supabaseDb } from "../_shared/db.ts";
 
 const ORIGINS = ["https://yalla-sa.app"];
-const TEMPLATES: Record<string, Category> = { welcome_v1: "utility", alert_v1: "utility", login_code_v1: "authentication" };
+// login_code_v1 (authentication) is added when its copy-code button payload and the aal2 question are settled (review I9)
+const TEMPLATES: Record<string, Category> = { welcome_v1: "utility", alert_v1: "utility" };
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   { auth: { persistSession: false, autoRefreshToken: false } });
 const db = supabaseDb(admin);
@@ -66,6 +67,9 @@ Deno.serve(async (req) => {
     if (claimsOf(jwt).aal !== "aal2") throw new Fail("mfa_required", 403);
     const { data: agent } = await admin.from("support_agents").select("user_id").eq("user_id", me.user.id).maybeSingle();
     if (!agent) throw new Fail("not_allowed", 403);
+    // same bar as RLS (private.is_support_agent → is_active): a disabled user or one who must change the password cannot send
+    const { data: prof } = await admin.from("profiles").select("disabled, must_change_password").eq("user_id", me.user.id).maybeSingle();
+    if (!prof || prof.disabled || prof.must_change_password) throw new Fail("not_allowed", 403);
 
     if (b.action === "reply") {
       const body = String(b.body || "").trim().slice(0, 4096);

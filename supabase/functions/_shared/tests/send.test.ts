@@ -72,10 +72,10 @@ test("sendMessage: crossing 80% sends one budget alert to David per month", asyn
   assert.match(alerts[0].template.components[0].parameters[0].text, /80%/);
 });
 
-test("sendAlert: delivered even when the budget is full; nothing when the channel is off", async () => {
+test("sendAlert: a budget alert is delivered even when the budget is full; nothing when the channel is off", async () => {
   const full = fakeDb({ spent: 25 });
   const f = okFetch();
-  const r = await sendAlert({ db: full.db, cfg, fetchFn: f.fn, now }, "פנייה חדשה מ־משה");
+  const r = await sendAlert({ db: full.db, cfg, fetchFn: f.fn, now }, "תקציב", true);
   assert.equal(r.ok, true);
   assert.equal(f.calls[0].template.name, "alert_v1");
   const off = fakeDb({ settings: { ...full.st.settings, alert_channel: "off" } });
@@ -83,4 +83,13 @@ test("sendAlert: delivered even when the budget is full; nothing when the channe
   const r2 = await sendAlert({ db: off.db, cfg, fetchFn: g.fn, now }, "x");
   assert.equal(r2.ok, false);
   assert.equal(g.calls.length, 0);
+});
+
+test("sendAlert (a handoff alert) is blocked when the budget is full; a budget alert still goes out (review I2)", async () => {
+  const full = fakeDb({ spent: 25 });
+  const f = okFetch();
+  const r = await sendAlert({ db: full.db, cfg, fetchFn: f.fn, now }, "פנייה חדשה");
+  assert.equal(r.block, "budget_exceeded");
+  const r2 = await sendAlert({ db: full.db, cfg, fetchFn: f.fn, now }, "תקציב", true);
+  assert.equal(r2.ok, true);
 });
