@@ -493,7 +493,7 @@ def on_line(road, t, pos, along_km, end):
     return [round(best[1][0], 6), round(best[1][1], 6)], best[2], round(best[0])
 
 
-def snap_ends(ts):
+def snap_ends(ts, road=None):
     """Move a GPS trip end (start) that is a raw point to the planned last (first) stop under the strict rule (SNAP).
     Runs on one vehicle's trips in order, after merge_false_starts: the next/previous trip is the next/previous event."""
     if not SNAP["enabled"]: return
@@ -510,10 +510,24 @@ def snap_ends(ts):
             if nx is not None and g is not None and nx["start"] - t["end"] < max(t["km_plan"] - g, 0) / v: why.append("time")
             if why:
                 t["trunc_end"] = why
-                if t.get("incomplete") and nx is not None and hav(d, nx["a"]) <= SNAP["next_at_stop_km"]:
-                    # GPS lost it early, but the bus's next trip leaves from this trip's planned last stop: it got there, so the trip
-                    # counts as completed (planned km) and ends at that stop (David, 18.11.2026; group "א" of the 157 checked)
-                    t.pop("incomplete", None); t["km"] = t["km_plan"]; t["done_next"] = 1
+                if t.get("incomplete"):
+                    # GPS lost it early (David, 18.11.2026, the 157 checked): counted as completed by assumption, marked "asm" with
+                    # the numbers behind it, when (א) the bus's next trip leaves from this trip's planned last stop, (ב) it leaves
+                    # elsewhere but the planned end leaves time to drive there (existing routing), (ג) it has no next trip that day
+                    base = dict(gps_km=g, share=round(100 * (g or 0) / t["km_plan"]), last_km=round(hav(rb, d), 1))
+                    asm = None
+                    if nx is None:
+                        asm = dict(base, g="c")
+                    elif hav(d, nx["a"]) <= SNAP["next_at_stop_km"]:
+                        asm = dict(base, g="a", next_m=round(hav(d, nx["a"]) * 1000), gap=round(nx["start"] - t["end"]))
+                    elif road is not None:
+                        km2, mn2, _ = road([round(d[0], 5), round(d[1], 5)], nx["a"], (True, True))
+                        # time to the next trip from the planned end, or later when the bus left late: departure + planned duration
+                        avail = nx["start"] - max(t["sched"] + t["dur"], t["start"] + t["dur"])
+                        if mn2 is not None and mn2 <= avail:
+                            asm = dict(base, g="b", next_km=round(km2, 1), gap=round(avail), drive=round(mn2))
+                    if asm:
+                        t.pop("incomplete", None); t["km"] = t["km_plan"]; t["asm"] = asm
                 if not t.get("incomplete"):
                     # counted as completed (km = the planned km): the empty leg leaves from the planned last stop, as if the bus
                     # had driven the rest (David, 18.11.2026); the trip stays marked "קטיעה אפשרית" with where GPS ended
@@ -657,7 +671,7 @@ def build(day):
     for v, ts in sorted(by.items()):
         ts.sort(key=lambda t: (t.get("f_t", t["start"]), t["sched"]))  # in the order the GPS saw them
         ts, dups = merge_false_starts(ts); n_dup += len(dups); by[v] = ts
-        snap_ends(ts)
+        snap_ends(ts, road)
         cls = collections.Counter(t["cls"] for t in ts if not t.get("auto")).most_common(1)
         cls = cls[0][0] if cls else ts[0]["cls"]
         items = []
@@ -709,7 +723,7 @@ def build(day):
             items.append(dict(kind="trip", start=t["start"], end=t["end"], line=t["line"], km=t["km"], cls=t["cls"], sched=t["sched"],
                               frm=t["frm"], to=t["to"], a=t["a"], b=t["b"], ca=t["ca"], cb=t["cb"],
                               **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute",
-                                           "snap_end", "snap_start", "trunc_end", "trunc_start", "trunc_to", "done_next", "dev")
+                                           "snap_end", "snap_start", "trunc_end", "trunc_start", "trunc_to", "asm", "dev")
                                  if t.get(k) is not None}))
         items += dups + ghosts.pop(v, [])
         # an empty leg sits right before the trip it leads to (also when SIRI shows overlapping rides)
@@ -747,7 +761,7 @@ def build(day):
                routes=routes, summary=dict(vehicles=len(vehicles), trips=sum(len(v) for v in by.values()),
                empty_day_km=round(sum(v["empty_day_km"] for v in vehicles)),  # the vehicles' own (0.1 km) sums: the day = what the vehicles show
                skipped_rides=skipped, auto_rein=auto_n, auto_rein_unmapped=auto_unmapped,
-               gps=G["gps"], no_gps=G["no_gps"], incomplete=sum(1 for v in by.values() for t in v if t.get("incomplete")), done_next=sum(1 for v in by.values() for t in v if t.get("done_next")), false_starts=n_dup, not_performed=G["ghost"], late_login=G["late_login"],
+               gps=G["gps"], no_gps=G["no_gps"], incomplete=sum(1 for v in by.values() for t in v if t.get("incomplete")), assumed=dict(collections.Counter(t["asm"]["g"] for v in by.values() for t in v if t.get("asm"))), false_starts=n_dup, not_performed=G["ghost"], late_login=G["late_login"],
                snap_end=sum(1 for v in by.values() for t in v if t.get("snap_end")), snap_start=sum(1 for v in by.values() for t in v if t.get("snap_start")),
                trunc_end=sum(1 for v in by.values() for t in v if t.get("trunc_end")), trunc_start=sum(1 for v in by.values() for t in v if t.get("trunc_start")),
                route_dev=sum(1 for v in by.values() for t in v if t.get("dev")), gtfs_link=gm), vehicles=vehicles)
