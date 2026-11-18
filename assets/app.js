@@ -341,8 +341,8 @@ function render(){
     for(const i of v.items){
       if(i.kind==="ghost") continue;
       if(i.kind==="dup") b+=bar("dup",i.start,i.end,"",`${fmt(i.start)}–${fmt(i.end)} התחלה כפולה של קו ${i.line}: נסיעה קצרה שאוחדה עם הנסיעה הבאה (לא נסיעה, לא תגבור)`);
-      else if(i.kind==="trip"&&i.auto&&autoSt(v,i)!=="rejected") b+=bar("rein"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line,`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)} תגבור אוטומטי (לא בלוח הרישוי) · קו ${i.line}: ${i.frm} ← ${i.to} · ${AUTOTXT[autoSt(v,i)]}${i.incomplete?" · לא הושלמה לפי GPS":""}`,i.incomplete?"inc":"");
-      else if(i.kind==="trip") b+=bar("svc"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line,`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)} קו ${i.line}: ${i.frm} ← ${i.to}${i.incomplete?` · לא הושלמה לפי GPS (${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ)`:""}${i.no_gps?" · בלי GPS: לפי הלוח":""}`,i.incomplete?"inc":"");
+      else if(i.kind==="trip"&&i.auto&&autoSt(v,i)!=="rejected") b+=bar("rein"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} תגבור אוטומטי (לא בלוח הרישוי) · קו ${i.line}: ${i.frm} ← ${i.to} · ${AUTOTXT[autoSt(v,i)]}${i.incomplete?" · לא הושלמה לפי GPS":""}`,i.incomplete?"inc":"");
+      else if(i.kind==="trip") b+=bar("svc"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} קו ${i.line}: ${i.frm} ← ${i.to}${i.incomplete?` · לא הושלמה לפי GPS (${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ)`:""}${i.no_gps?" · בלי GPS: לפי הלוח":""}`,i.incomplete?"inc":"");
       else if(i.kind==="empty"&&reinOf(v,i)){const r=reinOf(v,i),m1=estMin(+r.before_km||0),m3=estMin(+r.after_km||0),m2=Math.max(i.end-i.start-m1-m3,5);
         if(+r.before_km>=1) b+=bar("emp",i.start,i.start+Math.max(m1,3),"",`ריק לפני התגבור ${nf(r.before_km)} ק״מ`);
         b+=bar("rein",i.start+m1,i.start+m1+m2,r.line,`תגבור קו ${r.line}: ${r.route_frm} ← ${r.route_to}, ${nf(r.rein_km)} ק״מ`);
@@ -407,10 +407,10 @@ function sideBody(veh){
       :`<div class="it wait"><span>התחלה כפולה · קו ${esc(i.line)}<span class="sub">נסיעה של ${Math.round(i.end-i.start)} דק׳${fromPl(i.frm)} שהופסקה או נרשמה פעמיים, ואותו קו נסע מיד. אוחדה עם הנסיעה: לא נסיעה, לא תגבור, אין ריק.</span>${fixLink()}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;continue}
     const gpsTxt=i.kind==="trip"?(i.midroute?`<span class="sub">הצטרף לקו באמצע (ה־GPS ראה אותו לראשונה ${nf(i.midroute)} ק״מ מתחילת הקו). נספרים ${nf(i.km)} ק״מ.</span>`:"")+snapTxt(i)+(i.late_login?`<span class="sub">נרשם באיחור ב־SIRI (${nf(i.late_login)} ק״מ אחרי תחילת הקו): תחילת הנסיעה מתחילת הקו, השעה משוערת</span>`:"")+(i.incomplete?`<span class="sub" style="color:var(--warn)">לא הושלמה לפי GPS: ${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ. נספרים ${nf(i.km)} ק״מ.</span>${fixLink()}`:i.no_gps?`<span class="sub">בלי GPS לנסיעה הזו: לפי הלוח</span>`:""):"";
     if(i.kind==="trip"&&i.auto){const st=autoSt(v,i),btn=(k,t)=>`<button class="btn small" data-ar="${i.sched}" data-st="${k}">${t}</button>`;
-      h+=`<div class="it ${st==="rejected"?"svc":"rein"}${HL&&HL.veh===v.veh&&HL.sched===i.sched?" hl":""}"${mi({k:"trip",v,i})}><span>${st==="rejected"?"":"תגבור אוטומטי (לא בלוח הרישוי) · "}קו ${esc(i.line)}${i.unmapped?` (קו לא מזוהה, line_ref ${esc(i.line_ref)})`:""} · ${esc(i.frm)} ← ${esc(i.to)}
+      h+=`<div class="it ${st==="rejected"?"svc":"rein"}${HL&&HL.veh===v.veh&&HL.sched===i.sched?" hl":""}"${mi({k:"trip",v,i})}><span>${st==="rejected"?"":"תגבור אוטומטי (לא בלוח הרישוי) · "}קו ${esc(i.line)}${asmBtn(i)}${i.unmapped?` (קו לא מזוהה, line_ref ${esc(i.line_ref)})`:""} · ${esc(i.frm)} ← ${esc(i.to)}${asmBox(i)}
         <span class="sub">${AUTOTXT[st]} · ${i.km==null?"? ק״מ":nf(i.km)+" ק״מ"}${i.dur_est?" · משך משוער":""}</span>${gpsTxt}${tripExtra(i)}
         ${canEdit()?`<span class="sub">${st!=="confirmed"?btn("confirmed","אישור כתגבור"):""}${st!=="rejected"?btn("rejected","דחייה (נסיעה רגילה)"):""}${st!=="pending"?btn("auto","ביטול החלטה"):""}</span>`:""}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
-    else if(i.kind==="trip") h+=`<div class="it svc${i.edited?" edt":""}${HL&&HL.veh===v.veh&&HL.sched===i.sched?" hl":""}"${mi({k:"trip",v,i})}><span>קו ${esc(i.line)} · ${esc(i.frm)} ← ${esc(i.to)}${gpsTxt}${tripExtra(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
+    else if(i.kind==="trip") h+=`<div class="it svc${i.edited?" edt":""}${HL&&HL.veh===v.veh&&HL.sched===i.sched?" hl":""}"${mi({k:"trip",v,i})}><span>קו ${esc(i.line)}${asmBtn(i)} · ${esc(i.frm)} ← ${esc(i.to)}${asmBox(i)}${gpsTxt}${tripExtra(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
     else if(i.overlap) h+=`<div class="it emp" style="color:var(--warn)"><span>חפיפה בין נסיעות (${i.edited?"אחרי עריכה ידנית":"שגיאה בנתוני SIRI"})<span class="sub">0 ק״מ ריק</span>${fixLink()}</span><span class="t"></span></div>`;
     else if(i.km>=1){const r=reinOf(v,i);
       if(r) h+=`<div class="it rein"${mi({k:"rein",v,i,r})}><span>תגבור קו ${esc(r.line)} · ${nf(r.rein_km)} ק״מ<span class="sub">${esc(r.route_frm)} ← ${esc(r.route_to)}</span>
@@ -620,10 +620,22 @@ const RPTXT={time:"לא נכנס בזמן",detour:"עיקוף גדול",route:"�
 // GPS trip ends/starts: moved to the planned stop under the strict rule (pipeline SNAP), or left raw ("קטיעה אפשרית")
 const snapTxt=i=>(i.snap_end?`<span class="sub">סוף הנסיעה בתחנה המתוכננת: ה־GPS הסתיים ${nf(i.snap_end.m)} מ׳ לפניה (${esc(i.snap_end.to)}). השעה לפי ה־GPS.</span>`:"")
   +(i.snap_start?`<span class="sub">תחילת הנסיעה בתחנה המתוכננת: ה־GPS התחיל ${nf(i.snap_start.m)} מ׳ אחריה (${esc(i.snap_start.frm)}). השעה לפי ה־GPS.</span>`:"")
-  +(i.trunc_end&&!i.incomplete?(t=>`<span class="sub" style="color:var(--warn)">קטיעה אפשרית: ה־GPS הסתיים ${/^(ליד|מיקום)/.test(t)?"":"ב"}${esc(t)}, לא בתחנת הסוף המתוכננת${i.trunc_to?`. הנסיעה נספרת כשלמה${i.done_next?` (ה־GPS ראה ${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ, אבל הנסיעה הבאה של הרכב יוצאת מתחנת הסוף)`:""}, והנסיעה הריקה אחריה נספרת מתחנת הסוף`:""}</span>`)(i.trunc_to||i.to):"")
+  +(i.trunc_end&&!i.incomplete?(t=>`<span class="sub" style="color:var(--warn)">קטיעה אפשרית: ה־GPS הסתיים ${/^(ליד|מיקום)/.test(t)?"":"ב"}${esc(t)}, לא בתחנת הסוף המתוכננת${i.trunc_to?`. הנסיעה נספרת כשלמה, והנסיעה הריקה אחריה נספרת מתחנת הסוף`:""}</span>`)(i.trunc_to||i.to):"")
   +(i.trunc_start?`<span class="sub" style="color:var(--warn)">קטיעה אפשרית: ה־GPS התחיל ${/^(ליד|מיקום)/.test(i.frm)?"":"ב"}${esc(i.frm)}, לא בתחנת המוצא המתוכננת</span>`:"")
   // pipeline DEV: GPS points off the licensed shape (MOT GTFS) over a stretch of driving, then back on it
   +(Array.isArray(i.dev)?`<span class="sub" style="color:var(--warn);font-weight:600">סטייה מהמסלול ברישוי: ${nf(i.dev[1])} ק״מ מחוץ למסלול${i.dev[2]>1?` ב־${nf(i.dev[2])} מקומות`:""} (עד ${i.dev[0]>=400?"400 מ׳ ויותר":nf(i.dev[0])+" מ׳"} ממנו)</span>`:"");
+// trips counted as completed by assumption, not by GPS (pipeline "asm", David 18.11.2026): a small star next to the trip in
+// the schedule, the block and the search; the reason with this trip's numbers on hover, and on click / Enter (keyboard,
+// screen readers, phone) shown in place
+function asmTxt(i){const a=i.asm;if(!a) return "";
+  return `ה־GPS אבד אחרי ${nf(a.gps_km??0)} ק״מ (${a.share}% מהמסלול). הנקודה האחרונה ${nf(a.last_km)} ק״מ מתחנת הסוף. `+(
+    a.g==="a"?`הנסיעה הבאה של אותו רכב יצאה מתחנת הסוף (${a.next_m} מ׳ ממנה) אחרי ${a.gap} דק׳. לכן הנחנו שהנסיעה הושלמה.`
+    :a.g==="b"?`הנסיעה הבאה של אותו רכב יצאה ${nf(a.next_km)} ק״מ משם, ${a.gap} דק׳ אחרי הסוף המשוער של הנסיעה (לפי הלוח, או לפי היציאה בפועל אם יצאה באיחור), והזמן מספיק (כ־${a.drive} דק׳ נסיעה). לכן הנחנו שהנסיעה הושלמה.`
+    :"אין לרכב נסיעה אחריה באותו יום. לכן הנחנו שהנסיעה הושלמה.")+" נספרים ק״מ הרישוי, והנסיעה הריקה אחריה יוצאת מתחנת הסוף."}
+const asmBtn=i=>i.asm?`<button type="button" class="asmb" aria-expanded="false" aria-controls="asmx-${i.sched}" title="${esc(asmTxt(i))}" aria-label="חושבה לפי הנחה: הצגת ההסבר">*</button>`:"";
+const asmBox=i=>i.asm?`<span class="sub asmx" id="asmx-${i.sched}">${esc(asmTxt(i))}</span>`:"";
+document.addEventListener("click",e=>{const b=e.target.closest(".asmb");if(!b) return;const x=document.getElementById(b.getAttribute("aria-controls"));if(!x) return;
+  const open=b.getAttribute("aria-expanded")!=="true";b.setAttribute("aria-expanded",open);x.classList.toggle("open",open)});
 function legProblems(i){if(i.kind!=="empty"||i.overlap||i.km==null||i.wait) return null;let p=[];
   if(i.tight) p.push("time");
   const ax=i.a&&i.b?hav(i.a,i.b):null; if(ax!=null&&i.km>4&&i.km>2.5*Math.max(ax,0.01)) p.push("detour");
@@ -1282,7 +1294,7 @@ function drawFind(){const line=$("#fdLine").value.trim(),dir=+$("#fdDir").value,
     out.push({v,i,dt})}
   out.sort((x,y)=>x.dt-y.dt||x.i.start-y.i.start);
   sum.textContent=out.length?`${out.length===1?"נסיעה אחת":out.length+" נסיעות"}${t!=null?` סביב ${fmt(t)}`:" ביום"} · לחיצה בוחרת את הרכב ומסמנת את הנסיעה`:`לא נמצאה נסיעה של קו ${line}${t!=null?` סביב ${fmt(t)}`:""}${dir>=0?" בכיוון הזה":""}.`;
-  box.innerHTML=out.slice(0,200).map(({v,i})=>{const fl=[i.auto?(autoSt(v,i)==="rejected"?"":"תגבור אוטומטי"):"",i.edited?"✎ נערך ידנית":"",i.incomplete?"לא הושלמה לפי GPS":"",i.no_gps?"בלי GPS":"",i.late_login?"נרשם באיחור":""].filter(Boolean);
+  box.innerHTML=out.slice(0,200).map(({v,i})=>{const fl=[i.auto?(autoSt(v,i)==="rejected"?"":"תגבור אוטומטי"):"",i.edited?"✎ נערך ידנית":"",i.incomplete?"לא הושלמה לפי GPS":"",i.no_gps?"בלי GPS":"",i.late_login?"נרשם באיחור":"",i.asm?"* לפי הנחה":""].filter(Boolean);
     return `<button type="button" class="fdrow" role="listitem" data-v="${esc(v.veh)}" data-s="${i.sched}"><span class="t">${fmt(i.start)}–${fmt(i.end)}${i.sched!=null&&Math.abs(i.sched-i.start)>=2?`<span class="muted" style="display:block;font-weight:400;font-size:11px">בלוח ${fmt(i.sched)}</span>`:""}</span><b>${esc(i.line)}</b><span>${esc(i.frm)} ← ${esc(i.to)}</span><span dir="ltr" style="text-align:right">${esc(v.veh)}${accIcon(v.veh)}</span><span class="fl">${fl.map(f=>`<span class="badge">${f}</span>`).join("")}</span></button>`}).join("");
   render()}
 ["fdTime","fdWin","fdDir","fdOnly"].forEach(id=>$("#"+id).addEventListener(id==="fdTime"?"input":"change",drawFind));
