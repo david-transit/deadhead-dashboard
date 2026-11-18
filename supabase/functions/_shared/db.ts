@@ -32,12 +32,10 @@ export function supabaseDb(admin: any): InboundDb & {
       return data as SupportSettings;
     },
     async contactByPhone(waId: string): Promise<Contact | null> {
-      const [{ data: c }, { data: p }] = await Promise.all([
-        admin.from("support_contacts").select("id, consent_at, opted_out_at").eq("wa_id", waId).maybeSingle(),
-        admin.from("profiles").select("user_id").eq("phone", waId).not("wa_consent_at", "is", null).limit(1),
-      ]);
-      if (!c && !p?.length) return null;
-      return { id: c?.id ?? "", consent: !!c?.consent_at || !!p?.length, optedOut: !!c?.opted_out_at };
+      // portal users' phone + consent are kept here too (support_contacts.user_id), written by manage_users
+      const { data: c } = await admin.from("support_contacts").select("id, consent_at, opted_out_at").eq("wa_id", waId).maybeSingle();
+      if (!c) return null;
+      return { id: c.id, consent: !!c.consent_at, optedOut: !!c.opted_out_at };
     },
     async lastInboundAt(waId: string): Promise<Date | null> {
       const { data } = await admin.from("support_conversations").select("last_inbound_at, support_contacts!inner(wa_id)")
