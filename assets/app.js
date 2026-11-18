@@ -377,7 +377,11 @@ function render(){
 // defaults.forced_out_km. Not counted as a problem anywhere. ----
 const stopIs=(n,want)=>{n=(n||"").trim();want=(want||"").trim();return !!want&&(n===want||n.split(",").slice(1).join(",").trim()===want)};
 function forcedOf(i){if(i.kind!=="empty"||!i.km) return null;return (eff().S.forced_legs||[]).find(r=>stopIs(i.frm,r.name)&&stopIs(i.to,r.to_stop))||null}
-const forcedOut=l=>l.kind==="out"&&l.km!=null&&l.km>(eff().S.defaults?.forced_out_km??DEF.forced_out_km);
+const forcedKm=()=>eff().S.defaults?.forced_out_km??DEF.forced_out_km;
+const forcedOut=l=>l.kind==="out"&&l.km!=null&&l.km>forcedKm();
+// a start of the day longer than the threshold of a vehicle with no depot set (David 18.11.2026, option ב'): an interim
+// note "מוכרחת? מחכה להגדרת חניון"; once the vehicle has a depot the day starts from it and forcedOut() decides
+const forcedWait=(l,veh)=>l.kind==="over"&&l.km!=null&&l.km>forcedKm()&&!(eff().S.vehicles[veh]||{}).depot;
 const FORCEDB=`<span class="badge forced">ריקה מוכרחת</span>`;
 const forcedTxt=i=>{const r=forcedOf(i);return r?`<span class="sub forcedx">${FORCEDB} הרכב סיים ב־${esc(i.frm)}, שאינה חניון, והיציאה הקבועה ממנה היא ${esc(r.to_stop)}${r.note?` (${esc(r.note)})`:""}</span>`:""};
 // one line of a night leg in the side panel
@@ -385,7 +389,7 @@ function nightLine(l,day){
   const when=`${fmt(l.start)}–${fmt(l.end)}`;
   if(l.km==null) return `<div class="it dep"><span>${LEGNAME[l.kind]}<span class="sub" style="color:var(--warn)">חסר: ${esc(MISSTXT[l.missing]||"")}${l.depot?" ("+esc(l.depot)+")":""}. הרכב לא נעלם מהסכום: שאר הק״מ שלו נספרים.</span></span><span class="t">–</span></div>`;
   if(l.kind==="over"&&l.km===0) return `<div class="it wait"><span>התחיל את היום במקום שבו סיים<span class="sub">אין נסיעה ריקה לתחילת היום</span></span><span class="t"></span></div>`;
-  return `<div class="it ${l.kind==="rein"?"rein":"dep"}"${l.a&&l.b?mi({k:"night",l}):""}><span>${LEGNAME[l.kind]}${l.line?" · קו "+esc(l.line):""}: ${nf(l.km)} ק״מ${day?` <span class="badge">נספר ב־${dl(day)}</span>`:""}<span class="sub">${l.frm?esc(l.frm)+" ← "+esc(l.to||"")+" · ":""}${esc(l.kind==="rein"?"ק״מ תגבור":legKm(l))}</span>${forcedOut(l)?`<span class="sub forcedx">${FORCEDB} החניון רחוק מתחילת הקו (${nf(l.km)} ק״מ, מעל ${nf(eff().S.defaults?.forced_out_km??DEF.forced_out_km)})</span>`:""}${day||l.kind==="rein"?"":legActs("overnight",Math.round(l.start))}</span><span class="t">${when}</span></div>`}
+  return `<div class="it ${l.kind==="rein"?"rein":"dep"}"${l.a&&l.b?mi({k:"night",l}):""}><span>${LEGNAME[l.kind]}${l.line?" · קו "+esc(l.line):""}: ${nf(l.km)} ק״מ${day?` <span class="badge">נספר ב־${dl(day)}</span>`:""}<span class="sub">${l.frm?esc(l.frm)+" ← "+esc(l.to||"")+" · ":""}${esc(l.kind==="rein"?"ק״מ תגבור":legKm(l))}</span>${forcedOut(l)?`<span class="sub forcedx">${FORCEDB} החניון רחוק מתחילת הקו (${nf(l.km)} ק״מ, מעל ${nf(forcedKm())})</span>`:forcedWait(l,sel)?`<span class="sub forcedw"><span class="badge forcedq">מוכרחת? מחכה להגדרת חניון</span> תחילת יום של ${nf(l.km)} ק״מ (מעל ${nf(forcedKm())}). כשיוגדר חניון לרכב, ההכרעה תהיה אוטומטית</span>`:""}${day||l.kind==="rein"?"":legActs("overnight",Math.round(l.start))}</span><span class="t">${when}</span></div>`}
 // every empty leg (day and overnight): "עריכה" = the block editor of this vehicle-day (a reinforcement is added there as
 // a trip on a chosen line), "הערה" = free-text feedback to the product team (leg_notes; read only by platform admins)
 function legActs(kind,start){
