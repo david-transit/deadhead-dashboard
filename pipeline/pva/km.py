@@ -41,6 +41,11 @@ def fill(t, op_km_by_mkt8, road, google, cfg):
     t['verdict'] = verdict(t['op_km'], t['our_km'], t['g_km'], cfg)
 
 
+def google_from_cache(cache):
+    """tools/google_route_check.py local cache ({pair: {km, min} | None}) -> {pair: km}."""
+    return {k: v['km'] for k, v in cache.items() if v and v.get('km') is not None}
+
+
 def pending_pairs(trips):
     return sorted({(pair_key(t['a'], t['b']), t['a']['lat'], t['a']['lon'], t['b']['lat'], t['b']['lon'], t['our_km'])
                    for t in trips if t.get('verdict') == 'pending'})

@@ -12,5 +12,5 @@
   "shape_guard": {"_note": "build_day.py SHAPE_GUARD: an empty leg from a GPS point on the line's road to (within near_km of) the line's last stop that is >= ratio x and >= min_km longer than the rest of the shape is routed along the shape; when that fails the build fails.",
     "ratio": 1.5, "min_km": 1.0, "near_km": 0.4},
   "pva": {"_note": "R53 תכנון מול ביצוע (החלטות של דוד 18.11): פער = יותר מ-gap_km וגם יותר מ-gap_pct אחוז; גוגל מכריע כשהוא עד google_tol_km מצד אחד בלבד, אחרת third (בדיקה פרטנית). depot_alias: שם במפת הבסיס -> id בהגדרת החניונים.",
-    "gap_km": 0.3, "gap_pct": 10, "google_tol_km": 0.3, "depot_alias": {"חניון מבצע קדש": "vvw78h5"}}
+    "gap_km": 0.3, "gap_pct": 10, "google_tol_km": 0.3, "depot_alias": {"חניון מבצע קדש": "vvw78h5"}, "gtfs_agency": "135"}
 }

@@ -48,3 +48,9 @@ class TestKm(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestGoogleCache(unittest.TestCase):
+    def test_google_cache_file_format(self):
+        c = {'31.80000,35.20000;31.90000,35.30000': {'km': 3.04, 'min': 6.0}, 'x;y': None}
+        self.assertEqual(km.google_from_cache(c), {'31.80000,35.20000;31.90000,35.30000': 3.04})

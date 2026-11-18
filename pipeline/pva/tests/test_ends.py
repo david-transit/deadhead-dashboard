@@ -11,10 +11,10 @@ FAR = dict(code='9', name='רחוק', lat=31.90, lon=35.30)
 def gtfs_zip():
     p = os.path.join(tempfile.mkdtemp(), 'g.zip')
     with zipfile.ZipFile(p, 'w') as z:
-        z.writestr('routes.txt', 'route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_color\n1,25,154,x,12154-2-#,3,\n2,25,1,x,99999-1-#,3,\n')
-        z.writestr('trips.txt', 'route_id,service_id,trip_id,trip_headsign,direction_id,shape_id,wheelchair_accessible\n1,1,t1,h,0,1,1\n1,1,t2,h,0,1,1\n2,1,t3,h,0,1,1\n')
+        z.writestr('routes.txt', 'route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_color\n1,25,154,x,12154-2-#,3,\n2,25,1,x,99999-1-#,3,\n3,135,139,x,16139-2-#,3,\n4,3,139,x,17139-2-#,3,\n')
+        z.writestr('trips.txt', 'route_id,service_id,trip_id,trip_headsign,direction_id,shape_id,wheelchair_accessible\n1,1,t1,h,0,1,1\n1,1,t2,h,0,1,1\n2,1,t3,h,0,1,1\n3,1,t4,h,0,1,1\n4,1,t5,h,0,1,1\n')
         z.writestr('stop_times.txt', 'trip_id,arrival_time,departure_time,stop_id,stop_sequence,pickup_type,drop_off_type,shape_dist_traveled\n'
-                   't1,1,1,10,1,0,0,0\nt1,1,1,11,2,0,0,0\nt1,1,1,12,3,0,0,0\nt2,1,1,10,1,0,0,0\nt2,1,1,12,2,0,0,0\nt3,1,1,11,1,0,0,0\n')
+                   't1,1,1,10,1,0,0,0\nt1,1,1,11,2,0,0,0\nt1,1,1,12,3,0,0,0\nt2,1,1,10,1,0,0,0\nt2,1,1,12,2,0,0,0\nt3,1,1,11,1,0,0,0\nt4,1,1,11,1,0,0,0\nt4,1,1,10,2,0,0,0\nt5,1,1,12,1,0,0,0\nt5,1,1,12,2,0,0,0\n')
         z.writestr('stops.txt', 'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,location_type,parent_station,zone_id\n'
                    '10,1106,היכל המשפט/אבא אבן,d,31.7865,35.2056,0,,1\n11,5,x,d,31,35,0,,1\n12,4156,ת. מרכזית ירושלים/יפו,d,31.7886,35.2026,0,,1\n')
     return p
@@ -34,6 +34,11 @@ class TestEnds(unittest.TestCase):
         self.assertEqual(r['12154-2'][0]['code'], '1106'); self.assertEqual(r['12154-2'][1]['code'], '4156')
         self.assertNotIn('99999-1', r)
 
+    def test_route_ends_by_line_and_direction_when_makat_differs(self):
+        # the operator's internal makat 33139 is 16139 at the MOT; same line 139, direction 2, operator's agency only
+        r = ends.route_ends(gtfs_zip(), {'33139200'}, lines={'33139200': 139}, agency='135')
+        self.assertEqual((r['33139-2'][0]['code'], r['33139-2'][1]['code'], r['33139-2'][2]), ('5', '1106', 'line'))
+
     def test_gtfs_key(self):
         self.assertEqual(ends.gtfs_key('12154240'), '12154-2'); self.assertEqual(ends.gtfs_key('11401149'), '11401-1')
 
@@ -47,6 +52,12 @@ class TestEnds(unittest.TestCase):
         ends.resolve(t, DEPOTS)
         self.assertEqual(t[0]['a']['depot'], 'gs7mosk'); self.assertEqual(t[0]['b']['code'], '1106')
         self.assertEqual(t[2]['b']['depot'], 'gs7mosk'); self.assertEqual(t[2]['end_src'], 'depot')
+
+    def test_depot_named_mid_day_wins_over_neighbour(self):
+        t = [svc(S1106, S4156), emp('ת.מ./רח.יפו-מוסך גבעת שאול'), emp('מוסך גבעת שאול-היכל המשפט'), svc(S1106, S4156)]
+        ends.resolve(t, DEPOTS)
+        self.assertEqual((t[1]['a']['code'], t[1]['b']['depot'], t[1]['end_src']), ('4156', 'gs7mosk', 'depot'))
+        self.assertEqual((t[2]['a']['depot'], t[2]['b']['code']), ('gs7mosk', '1106'))
 
     def test_empty_after_empty_unresolved(self):
         t = [svc(S1106, S4156), emp(), emp('א-ב'), svc(S1106, S4156)]
