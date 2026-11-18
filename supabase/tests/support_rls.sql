@@ -1,9 +1,9 @@
 -- RLS + retention checks for 20261119090000_support_whatsapp.sql. Runs in one transaction and ROLLS BACK: nothing stays.
 -- Uses two existing users picked at run time (no fixed ids); raises an exception on the first failed check.
-begin;
+-- On success it ALSO ends with an exception ('PASS: ...'), so the whole block always rolls back, whatever the client does.
 do $$
 declare
-  agent uuid; other uuid; c uuid; v_old uuid; v_new uuid; n int; ok boolean;
+  agent uuid; other uuid; sa uuid := gen_random_uuid(); so uuid := gen_random_uuid(); c uuid; v_old uuid; v_new uuid; n int; ok boolean;
   claims_agent1 text; claims_agent2 text; claims_other2 text;
 begin
   select user_id into agent from public.profiles where not disabled and not must_change_password order by created_at limit 1;
@@ -11,6 +11,8 @@ begin
   if agent is null or other is null then raise exception 'need two active users'; end if;
   insert into public.support_agents (user_id) values (agent) on conflict do nothing;
   delete from public.support_agents where user_id = other;
+  -- private.is_active() also needs a live Auth session (private.session_alive): one fake session per user, rolled back
+  insert into auth.sessions (id, user_id, created_at, updated_at) values (sa, agent, now(), now()), (so, other, now(), now());
 
   insert into public.support_contacts (wa_id, wa_name) values ('972500000001', 'בדיקה') returning id into c;
   insert into public.support_contacts (wa_id, opted_out_at) values ('972500000002', now());
@@ -18,9 +20,9 @@ begin
   insert into public.support_conversations (contact_id, status, closed_at) values (c, 'closed', now() - interval '11 months') returning id into v_new;
   insert into public.support_messages (conversation_id, contact_id, direction, sender, body) values (v_old, c, 'in', 'contact', 'ישן');
 
-  claims_agent1 := json_build_object('sub', agent, 'role', 'authenticated', 'aal', 'aal1')::text;
-  claims_agent2 := json_build_object('sub', agent, 'role', 'authenticated', 'aal', 'aal2')::text;
-  claims_other2 := json_build_object('sub', other, 'role', 'authenticated', 'aal', 'aal2')::text;
+  claims_agent1 := json_build_object('sub', agent, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sa)::text;
+  claims_agent2 := json_build_object('sub', agent, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sa)::text;
+  claims_other2 := json_build_object('sub', other, 'role', 'authenticated', 'aal', 'aal2', 'session_id', so)::text;
 
   set local role authenticated;
   perform set_config('request.jwt.claims', claims_agent1, true);
@@ -57,6 +59,5 @@ begin
   if not exists (select 1 from public.support_contacts where wa_id = '972500000002') then raise exception 'FAIL opted-out contact deleted'; end if;
   if not public.support_mark_alert('warn80') then raise exception 'FAIL first alert'; end if;
   if public.support_mark_alert('warn80') then raise exception 'FAIL second alert same month'; end if;
-  raise notice 'ALL SUPPORT RLS CHECKS PASSED';
+  raise exception 'PASS: ALL SUPPORT RLS CHECKS PASSED (rolled back)';
 end $$;
-rollback;
