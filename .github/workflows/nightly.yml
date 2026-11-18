@@ -177,7 +177,29 @@ jobs:
             echo "== $d"
             timeout 110m python pipeline/build_day.py "$d" --op "$SLUG"  # first run after the route check (v3) re-routes the whole cache
           done
-          rm -f "$DATA_KEY_FILE" data/*/day_*.json data/*/ends_*.json
+          rm -f "$DATA_KEY_FILE"
+
+      # Road warnings of the days built, checked against Google Routes (PRD R51, tools/google_route_check.py): only pairs
+      # without an answer in route_google; calls counted in the shared counter (google_take: 300 a day, 4,500 a month).
+      # A missing secret or a failure skips it quietly: never fails the build.
+      - name: Route warnings vs Google
+        if: steps.days.outputs.days != ''
+        continue-on-error: true
+        env:
+          GOOGLE_ROUTES_API_KEY: ${{ secrets.GOOGLE_ROUTES_API_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLUG: ${{ matrix.op.slug }}
+          DAYS: ${{ steps.days.outputs.days }}
+        run: |
+          set -u
+          if [ -z "${GOOGLE_ROUTES_API_KEY:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then echo "Google check skipped: secret missing"; exit 0; fi
+          f=""; for d in $DAYS; do [ -f "data/$SLUG/day_$d.json" ] && f="$f data/$SLUG/day_$d.json"; done
+          [ -n "$f" ] || { echo "no day file"; exit 0; }
+          timeout 10m python -I tools/google_route_check.py --op "$SLUG" --days $f || echo "::warning::Google check failed (skipped)"
+
+      - name: Remove plaintext day files
+        if: always()
+        run: rm -f data/*/day_*.json data/*/ends_*.json
 
       - name: Save caches
         if: always() && steps.days.outputs.days != ''

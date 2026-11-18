@@ -175,11 +175,14 @@ function rokOf(i){if(!i.a||!i.b) return null;const [A,B]=subPair(i.a,i.b),m=rokM
 const rokChanged=(r,km)=>{const d=Math.abs(km-r.km);return d>0.3||d>0.1*r.km};
 // ---- "אומת מול גוגל" (table route_google, written by tools/google_route_check.py, PRD R51): Google Routes km of a flagged
 // pair (the routed pair, as route_ok). ok = within pipeline/config.json google_check -> not a problem, listed apart with
-// Google's km; otherwise the warning stays for a manual check, with Google's km beside ours. A row counts only while
-// the leg's km is still the km that was checked (rokChanged). ----
+// Google's km; otherwise the warning stays for a manual check, with Google's km beside ours. The verdict is taken here,
+// with the leg's km as the dashboard has it now (the table's ok is the verdict at checking time). ----
 let GOO=new Map();
 async function loadGoo(){try{GOO=new Map((await getRows("route_google",`select=a_lat,a_lon,b_lat,b_lon,our_km,g_km,g_min,ok&${opq()}`)||[]).map(r=>[rokRowKey(r),{...r,km:+r.our_km,g_km:r.g_km==null?null:+r.g_km}]))}catch(e){console.warn("route google",e);GOO=new Map()}}
-function gooOf(i){if(!i.a||!i.b) return null;const [A,B]=subPair(i.a,i.b),r=GOO.get(rokKey(A,B));return r&&!rokChanged(r,i.km)?r:null}
+// close = |Google - the leg's km now| <= max(15%, 0.5 km): pipeline/config.json google_check (tol_pct, tol_km), the same rule
+const GOO_TOL={pct:15,km:0.5};
+function gooOf(i){if(!i.a||!i.b||i.km==null) return null;const [A,B]=subPair(i.a,i.b),r=GOO.get(rokKey(A,B));if(!r||r.g_km==null) return null;
+  return {...r,ok:Math.abs(r.g_km-i.km)<=Math.max(GOO_TOL.pct/100*i.km,GOO_TOL.km)}}
 function roadGet(a,b){const r=ROAD.get(roadKey(a,b));if(!r) return null;const ls=linksFor(a,b),vpc=r.meta&&r.meta.vpc;
   if((ls.length||(vpc&&vpc.length))&&!ROUTE.sameIds(vpc,ls.map(ROUTE.linkSig))) return null; // computed with another set of links
   return r}
