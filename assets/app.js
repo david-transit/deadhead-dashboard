@@ -620,7 +620,7 @@ const RPTXT={time:"לא נכנס בזמן",detour:"עיקוף גדול",route:"�
 // GPS trip ends/starts: moved to the planned stop under the strict rule (pipeline SNAP), or left raw ("קטיעה אפשרית")
 const snapTxt=i=>(i.snap_end?`<span class="sub">סוף הנסיעה בתחנה המתוכננת: ה־GPS הסתיים ${nf(i.snap_end.m)} מ׳ לפניה (${esc(i.snap_end.to)}). השעה לפי ה־GPS.</span>`:"")
   +(i.snap_start?`<span class="sub">תחילת הנסיעה בתחנה המתוכננת: ה־GPS התחיל ${nf(i.snap_start.m)} מ׳ אחריה (${esc(i.snap_start.frm)}). השעה לפי ה־GPS.</span>`:"")
-  +(i.trunc_end&&!i.incomplete?(t=>`<span class="sub" style="color:var(--warn)">קטיעה אפשרית: ה־GPS הסתיים ${/^(ליד|מיקום)/.test(t)?"":"ב"}${esc(t)}, לא בתחנת הסוף המתוכננת${i.trunc_to?". הנסיעה נספרת כשלמה, והנסיעה הריקה אחריה נספרת מתחנת הסוף":""}</span>`)(i.trunc_to||i.to):"")
+  +(i.trunc_end&&!i.incomplete?(t=>`<span class="sub" style="color:var(--warn)">קטיעה אפשרית: ה־GPS הסתיים ${/^(ליד|מיקום)/.test(t)?"":"ב"}${esc(t)}, לא בתחנת הסוף המתוכננת${i.trunc_to?`. הנסיעה נספרת כשלמה${i.done_next?` (ה־GPS ראה ${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ, אבל הנסיעה הבאה של הרכב יוצאת מתחנת הסוף)`:""}, והנסיעה הריקה אחריה נספרת מתחנת הסוף`:""}</span>`)(i.trunc_to||i.to):"")
   +(i.trunc_start?`<span class="sub" style="color:var(--warn)">קטיעה אפשרית: ה־GPS התחיל ${/^(ליד|מיקום)/.test(i.frm)?"":"ב"}${esc(i.frm)}, לא בתחנת המוצא המתוכננת</span>`:"")
   // pipeline DEV: GPS points off the licensed shape (MOT GTFS) over a stretch of driving, then back on it
   +(Array.isArray(i.dev)?`<span class="sub" style="color:var(--warn);font-weight:600">סטייה מהמסלול ברישוי: ${nf(i.dev[1])} ק״מ מחוץ למסלול${i.dev[2]>1?` ב־${nf(i.dev[2])} מקומות`:""} (עד ${i.dev[0]>=400?"400 מ׳ ויותר":nf(i.dev[0])+" מ׳"} ממנו)</span>`:"");
