@@ -8,7 +8,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import PostalMime from "npm:postal-mime@2.4.4";
 import { classify } from "../_shared/mail/parse.ts";
 import { handleMail, handleOversize } from "../_shared/mail/inbound.ts";
-import { supabaseInboundDb } from "../_shared/mail/db.ts";
+import { supabaseInboundDb } from "../_shared/mail/inbound_db.ts";
 import { alerter } from "../_shared/mail/alert.ts";
 import { safeEq } from "../_shared/mail/http.ts";
 

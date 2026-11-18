@@ -6,7 +6,8 @@
 //   files      daily 03:00: attachment folders whose conversation was deleted (retention, M17)
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { runReminders, flushQueued, cleanupFiles } from "../_shared/jobs.ts";
-import { supabaseJobsDb, supabaseMailDb } from "../_shared/mail/db.ts";
+import { supabaseJobsDb } from "../_shared/mail/jobs_db.ts";
+import { supabaseMailDb } from "../_shared/mail/db.ts";
 import { sendMail } from "../_shared/mail/send.ts";
 import { alerter } from "../_shared/mail/alert.ts";
 import { brandFor, safeEq } from "../_shared/mail/http.ts";
