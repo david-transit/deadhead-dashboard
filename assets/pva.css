@@ -40,14 +40,15 @@ main{flex:1;padding:0 16px 12px}
 .rank .bar i{display:block;height:4px;background:var(--svc);border-radius:2px}
 .days h2{font-size:17px;margin:0 0 8px}
 .day{border:1px solid var(--line);border-radius:8px;margin-bottom:8px}
-.day>button{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;width:100%;padding:10px 12px;cursor:pointer;font-weight:700}
-.day>button[aria-expanded=true]{background:var(--sel)}
-.day>button:focus-visible{outline:2px solid var(--svc)}
-.trip{all:unset;box-sizing:border-box;display:grid;grid-template-columns:44px 1fr auto auto;gap:8px;align-items:center;width:100%;padding:8px 12px;border-top:1px solid var(--line);cursor:pointer}
+.day>button:not(.trip){all:unset;box-sizing:border-box;display:flex;justify-content:space-between;width:100%;padding:10px 12px;cursor:pointer;font-weight:700}
+.day>button:not(.trip)[aria-expanded=true]{background:var(--sel)}
+.day>button:not(.trip):focus-visible{outline:2px solid var(--svc)}
+.trip{all:unset;box-sizing:border-box;display:grid;grid-template-columns:52px 1fr auto auto;gap:6px 12px;align-items:center;width:100%;padding:8px 12px;border-top:1px solid var(--line);cursor:pointer}
 .trip:focus-visible{outline:2px solid var(--svc);outline-offset:-2px}
 .trip[aria-current=true]{background:var(--sel)}
 .trip.nd{color:var(--muted);text-decoration:line-through}
-.trip .km{white-space:nowrap}
+.trip .km,.trip>span:first-child{white-space:nowrap}
+.trip>span:first-child{font-variant-numeric:tabular-nums;color:var(--muted)}
 .tag{display:inline-block;border-radius:6px;padding:1px 8px;font-size:12px;white-space:nowrap;border:1px solid transparent}
 .tag.plan{border-color:#9aa1ab;color:var(--char)}
 .tag.disp{background:var(--empty);color:#fff}
@@ -76,4 +77,6 @@ main{flex:1;padding:0 16px 12px}
   .controls{margin-inline-start:0}
   .mapcard .map{height:40vh}
   .card .v{font-size:22px}
+  .trip{grid-template-columns:48px 1fr auto}
+  .trip .tag{grid-column:2;justify-self:start}
 }

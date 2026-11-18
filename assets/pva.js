@@ -75,7 +75,7 @@
     if (SEL == null || !G.some(x => x.k === SEL)) SEL = G.length ? G[0].k : null;
     $("#rank").innerHTML = G.length ? G.map(x => `<li><button data-k="${esc(x.k)}" aria-current="${x.k === SEL}">
       <span class="nm">${esc(gname(x.k))}</span><span class="km">${nf(x.km)} ק״מ</span>
-      <span class="s">ב־${x.days.size} ימים · ${x.n} נסיעות</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(4, x.km / top * 100)}%"></i></span></button></li>`).join("")
+      <span class="s">${x.days.size === 1 ? "ביום אחד" : `ב־${x.days.size} ימים`} · ${x.n === 1 ? "נסיעה אחת" : `${x.n} נסיעות`}</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(4, x.km / top * 100)}%"></i></span></button></li>`).join("")
       : `<li class="empty">אין ק״מ מעבר לתכנון בתקופה</li>`;
     $("#rank").querySelectorAll("button").forEach(b => b.onclick = () => { SEL = GROUP === "veh" ? +b.dataset.k : b.dataset.k; OPENDAY = null; SELTRIP = null; rank(); detail(); if (innerWidth < 900) $("#days").scrollIntoView({ behavior: "smooth" }); });
     detail();
@@ -153,10 +153,19 @@
   }
   document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => tab(b.id));
 
+  // local preview (localhost + ?local=1): the built files in pipeline/cache, no database (they are never deployed)
+  const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has("local");
+  async function localDays(f, t) {
+    const out = [];
+    for (let d = new Date(f + "T12:00:00"); d <= new Date(t + "T12:00:00"); d = new Date(d.getTime() + 864e5)) {
+      const r = await fetch(`pipeline/cache/pva_${d.toISOString().slice(0, 10)}.json`, { cache: "no-store" }); if (r.ok) out.push(await r.json());
+    }
+    return out;
+  }
   async function load() {
     const f = $("#dFrom").value, t = $("#dTo").value; if (!f || !t) return;
     say("טוען…");
-    try { DAYS = (await rpc("get_pva", { p_operator: OP.id, p_from: f, p_to: t })) || []; }
+    try { DAYS = LOCAL ? await localDays(f, t) : (await rpc("get_pva", { p_operator: OP.id, p_from: f, p_to: t })) || []; }
     catch (e) { say("הטעינה נכשלה: " + e.message, true); return; }
     say(DAYS.length ? "" : "אין נתונים לתקופה הזו");
     SEL = null; OPENDAY = null; SELTRIP = null; cards(); rank();
@@ -180,6 +189,7 @@
   $("#bLoad").onclick = load; $("#bLocal").onclick = loadLocal;
 
   (async () => {
+    if (LOCAL) { $("#sub").textContent = "תצוגה מקומית מקבצי הבנייה (לא מהשרת)"; $("#dFrom").value = $("#dTo").value = new URLSearchParams(location.search).get("day") || "2026-11-10"; load(); return; }
     if (!SES) { say(""); $("main").innerHTML = `<div class="empty">צריך להיכנס קודם. <a href="index.html">כניסה לדשבורד</a></div>`; return; }
     try { await access(); } catch (e) { say("אין חיבור: " + e.message, true); return; }
     if (!OP || !allowed()) { $("main").innerHTML = `<div class="empty">אין לך הרשאה למסך הזה. הוא פתוח לעורכים ומעלה.</div>`; $("#cards").hidden = true; return; }
