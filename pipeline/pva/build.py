@@ -3,7 +3,7 @@
 The operator files stay outside the repo; the payload and SQL are written to --out (default pipeline/cache, git-ignored).
 Driver names are never read (pva.read); drivers appear by code only."""
 import argparse, collections, glob, json, os
-from pva import read, ends, km, lessons as lessons_mod
+from pva import read, ends, km, lessons as lessons_mod, plausibility
 from pva.classify import classify
 
 PLAN_FILES = dict(weekday='בסיס א-ה', fri='בסיס שישי', sat='בסיס שבת')
@@ -53,7 +53,17 @@ def _trip(t, sidur, day):
                 mkt8=(e or p)['mkt8'], line=(e['line'] if e else p.get('line')) or None, desc=t.get('desc', ''),
                 plan_t=p['dep_min'] if p else None, a=_stop(t.get('a') or t.get('first')), b=_stop(t.get('b') or t.get('last')),
                 op_km=t.get('op_km'), our_km=t.get('our_km'), g_km=t.get('g_km'), verdict=t.get('verdict'),
-                km_src=t.get('km_src'), end_src=t.get('end_src'), gtfs_match=t.get('gtfs_match'))
+                km_src=t.get('km_src'), end_src=t.get('end_src'), gtfs_match=t.get('gtfs_match'), plaus=t.get('plaus'), geom=t.get('geom'))
+
+
+def thin(pts, min_m=15):
+    """Drop points closer than min_m to the last kept one (keeps both ends): a lighter drawn road, same shape."""
+    import math
+    out = [pts[0]]
+    for p in pts[1:-1]:
+        if 111000 * math.hypot(p[0] - out[-1][0], (p[1] - out[-1][1]) * 0.85) >= min_m:
+            out.append(p)
+    return out + [pts[-1]] if len(pts) > 1 else out
 
 
 def excess_km(t):
@@ -96,8 +106,20 @@ def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, goog
         if t['kind'] == 'empty':
             km.fill(t, opk, road, google, cfg)
             t['forced'] = ends.is_forced(t, forced_legs, depots, forced_out_km)
+            g = getattr(road, 'geom', None)
+            if t['status'] == 'added' and g and t.get('a') and t.get('b'):  # the map draws this road and shows its km (R13)
+                r = g([round(t['a']['lat'], 5), round(t['a']['lon'], 5)], [round(t['b']['lat'], 5), round(t['b']['lon'], 5)])
+                if r and r[1]:
+                    t['geom'] = thin([[round(x[0], 5), round(x[1], 5)] for x in r[1]])
+                    t['our_km'] = round(r[0], 2)
+                    t['verdict'] = km.verdict(t['op_km'], t['our_km'], t['g_km'], cfg)
         else:
             t['op_km'] = (t.get('plan') or {}).get('km') or opk.get(t['exec']['mkt8'] if t['exec'] else None)
+    for seq in by_veh.values():  # dispatcher legs: does the vehicle's day explain them?
+        for t in seq:
+            if t['kind'] == 'service':
+                t.setdefault('a', t.get('first')); t.setdefault('b', t.get('last'))
+        plausibility.label_vehicle(seq)
     out_sid = [dict(sidur=s['sidur'], in_plan=s['in_plan'], trips=[_trip(t, s['sidur'], day) for t in s['trips']])
                for s in res['sidurim']]
     drivers = collections.defaultdict(lambda: dict(excess_km=0.0, dispatcher_km=0.0, n_excess=0, sidurim=set(), vehicles=set()))

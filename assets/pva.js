@@ -10,7 +10,7 @@
   const DOW = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
   const dlabel = d => { const x = new Date(d + "T12:00:00"); return `יום ${DOW[x.getDay()]} · ${x.getDate()}.${x.getMonth() + 1}`; };
   let SES = null; try { SES = JSON.parse(lsGet(SKEY) || "null"); } catch { }
-  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "drv", SEL = null, OPENDAY = null, SELTRIP = null;
+  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "place", SEL = null, OPENDAY = null, SELTRIP = null;
 
   // ---- session (same storage and refresh as the dashboard) ----
   async function http(url, opt = {}) {
@@ -55,28 +55,34 @@
     const T = trips().filter(t => t.kind === "empty");
     const plan = T.filter(t => t.status !== "added").reduce((a, t) => a + (t.op_km || 0), 0);
     const act = T.filter(t => t.status !== "not_done").reduce((a, t) => a + kmOf(t), 0);
-    const ex = T.reduce((a, t) => a + excess(t), 0), dis = T.filter(t => t.empty_kind === "dispatcher").reduce((a, t) => a + excess(t), 0);
+    const ex = T.reduce((a, t) => a + excess(t), 0), dis = T.filter(t => REVIEW.has(t.plaus)).reduce((a, t) => a + excess(t), 0);
     $("#cPlan").textContent = nf(Math.round(plan)); $("#cAct").textContent = nf(Math.round(act)); $("#cEx").textContent = nf(Math.round(ex)); $("#cDis").textContent = nf(Math.round(dis));
   }
 
   function groups() {
-    const key = t => GROUP === "drv" ? t.driver : t.veh, g = new Map();
+    const g = new Map();
     for (const t of trips()) {
-      const k = key(t); if (k == null) continue;
-      const x = g.get(k) || { k, km: 0, n: 0, days: new Set() }; g.set(k, x);
-      const e = excess(t); if (e) { x.km += e; x.n++; x.days.add(t.day); }
+      const k = gkey(t); if (k == null) continue;
+      const e = excess(t); if (!e) continue;
+      const x = g.get(k) || { k, km: 0, n: 0, r: 0, days: new Set() }; g.set(k, x);
+      x.km += e; x.n++; x.days.add(t.day); if (REVIEW.has(t.plaus)) x.r++;
     }
     return [...g.values()].filter(x => x.km > 0).sort((a, b) => b.km - a.km);
   }
-  const gname = k => GROUP === "drv" ? (k === "?" ? "נהג לא ידוע" : "נהג " + k) : "רכב " + k;
+  const gkey = t => GROUP === "place" ? (t.desc || `${place(t.a)} ← ${place(t.b)} (מסלול שאינו במפה)`) : GROUP === "veh" ? t.veh : t.sidur;
+  const gname = k => GROUP === "place" ? k : GROUP === "veh" ? "רכב " + k : "סידור " + k;
+  const REVIEW = new Set(["round_trip", "via_depot", "inconsistent", "end_of_day_review", "unknown"]);
+  const PL = { explained: ["ok", "מוסבר"], end_of_day: ["ok", "סוף יום למוסך"], end_of_day_review: ["mid", "סוף יום, לבדיקה"], round_trip: ["bad", "הלוך ושוב"],
+    via_depot: ["mid", "דרך מוסך"], inconsistent: ["bad", "לא מסתדר"], unknown: ["nd", "קצה לא ידוע"] };
+  const PTAG = t => t.plaus && PL[t.plaus] ? `<span class="tag ${PL[t.plaus][0]}">${PL[t.plaus][1]}</span>` : "";
 
   function rank() {
     const G = groups(), top = G.length ? G[0].km : 1;
     if (SEL == null || !G.some(x => x.k === SEL)) SEL = G.length ? G[0].k : null;
     $("#rank").innerHTML = G.length ? G.map(x => `<li><button data-k="${esc(x.k)}" aria-current="${x.k === SEL}">
       <span class="nm">${esc(gname(x.k))}</span><span class="km">${nf(x.km)} ק״מ</span>
-      <span class="s">${x.days.size === 1 ? "ביום אחד" : `ב־${x.days.size} ימים`} · ${x.n === 1 ? "נסיעה אחת" : `${x.n} נסיעות`}</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(4, x.km / top * 100)}%"></i></span></button></li>`).join("")
-      : `<li class="empty">אין ק״מ מעבר לתכנון בתקופה</li>`;
+      <span class="s">${x.days.size === 1 ? "ביום אחד" : `ב־${x.days.size} ימים`} · ${x.n === 1 ? "נסיעה אחת" : `${x.n} נסיעות`}${x.r ? ` · ${x.r} לבדיקה` : ""}</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(4, x.km / top * 100)}%"></i></span></button></li>`).join("")
+      : `<li class="empty">אין תוספות בתקופה</li>`;
     $("#rank").querySelectorAll("button").forEach(b => b.onclick = () => { SEL = GROUP === "veh" ? +b.dataset.k : b.dataset.k; OPENDAY = null; SELTRIP = null; rank(); detail(); if (innerWidth < 900) $("#days").scrollIntoView({ behavior: "smooth" }); });
     detail();
   }
@@ -87,18 +93,18 @@
 
   function detail() {
     const box = $("#days");
-    if (SEL == null) { box.innerHTML = `<div class="empty">בחר נהג מהרשימה</div>`; drawMap(null); return; }
-    const mine = trips().filter(t => (GROUP === "drv" ? t.driver === SEL : t.veh === SEL) && t.kind === "empty");
+    if (SEL == null) { box.innerHTML = `<div class="empty">בחר שורה מהרשימה</div>`; drawMap(null); return; }
+    const mine = trips().filter(t => gkey(t) === SEL && excess(t) > 0);
     const tot = mine.reduce((a, t) => a + excess(t), 0);
     const byDay = new Map(); mine.forEach(t => (byDay.get(t.day) || byDay.set(t.day, []).get(t.day)).push(t));
     const dayKm = d => byDay.get(d).reduce((a, t) => a + excess(t), 0);
     const ds = [...byDay.keys()].sort();
     if (OPENDAY == null) OPENDAY = ds.slice().sort((a, b) => dayKm(b) - dayKm(a))[0];
-    box.innerHTML = `<h2>${esc(gname(SEL))} · ${nf(tot)} ק״מ מעבר לתכנון</h2>` + ds.map(d => {
+    box.innerHTML = `<h2>${esc(gname(SEL))} · ${nf(tot)} ק״מ שהוסיף הסדרן</h2>` + ds.map(d => {
       const open = d === OPENDAY, L = byDay.get(d).sort((a, b) => a.t0 - b.t0);
       return `<div class="day"><button aria-expanded="${open}" data-d="${d}"><span>${dlabel(d)} · ${nf(dayKm(d))} ק״מ</span><span aria-hidden="true">${open ? "▴" : "▾"}</span></button>
         ${open ? L.map((t, i) => `<button class="trip${t.status === "not_done" ? " nd" : ""}" data-i="${d}|${i}" aria-current="${SELTRIP && SELTRIP.day === d && SELTRIP.i === i}">
-          <span>${hm(t.t0)}</span><span>${esc(place(t.a))} ← ${esc(place(t.b))}</span><span class="km">${nf(kmOf(t))} ק״מ</span>${TAG(t)}</button>`).join("") : ""}</div>`;
+          <span>${hm(t.t0)}</span><span>${esc(place(t.a))} ← ${esc(place(t.b))}</span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}</span></button>`).join("") : ""}</div>`;
     }).join("");
     box.querySelectorAll(".day>button").forEach(b => b.onclick = () => { OPENDAY = OPENDAY === b.dataset.d ? "" : b.dataset.d; SELTRIP = null; detail(); });
     box.querySelectorAll(".trip").forEach(b => b.onclick = () => {
@@ -140,15 +146,20 @@
     L.circleMarker(A, { radius: 8, color: "#2E9E4F", fillOpacity: 1 }).bindTooltip(esc(place(t.a)), { permanent: true, direction: "top" }).addTo(lay);
     L.circleMarker(B, { radius: 8, color: "#C62828", fillOpacity: 1 }).bindTooltip(esc(place(t.b)), { permanent: true, direction: "top" }).addTo(lay);
     map.fitBounds([A, B], { padding: [40, 40] });
+    if (t.geom && t.geom.length > 1) {  // the road our km was measured on (R13)
+      L.polyline(t.geom, { color: "#E8871E", weight: 5 }).addTo(lay); map.fitBounds(L.latLngBounds(t.geom).extend(A).extend(B), { padding: [30, 30] });
+      return;
+    }
+    $("#mapLeg").insertAdjacentHTML("beforeend", `<span>(הקו משוער, ממסלול רכב ציבורי; הק״מ בטבלה מהניתוב שלנו)</span>`);
     try {
       const pts = await YMAP.osrmLine(A, B); if (my !== drawn) return;
-      L.polyline(pts, { color: "#E8871E", weight: 5 }).addTo(lay); map.fitBounds(L.latLngBounds(pts).extend(A).extend(B), { padding: [30, 30] });
+      L.polyline(pts, { color: "#E8871E", weight: 3, dashArray: "6 6" }).addTo(lay); map.fitBounds(L.latLngBounds(pts).extend(A).extend(B), { padding: [30, 30] });
     } catch { L.polyline([A, B], { color: "#E8871E", weight: 3, dashArray: "4 6" }).addTo(lay); }
   }
 
   // ---- other tabs (Task 7) ----
   function tab(id) {
-    ["Excess", "Sid", "Gap", "Les"].forEach(k => { const on = "t" + k === id; $("#t" + k).setAttribute("aria-selected", on); $("#p" + k).hidden = !on; });
+    ["Excess", "Sid", "Gap", "Les", "Drv"].forEach(k => { const on = "t" + k === id; $("#t" + k).setAttribute("aria-selected", on); $("#p" + k).hidden = !on; });
     if (window.PVA_TABS && window.PVA_TABS[id]) window.PVA_TABS[id](DAYS, { esc, nf, hm, dlabel, TAG, place, kmOf });
   }
   document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => tab(b.id));
@@ -184,8 +195,8 @@
     say(n ? `נשמרו ${n} ימים` : "לא נמצאו ימים בנויים בתקופה"); if (n) load();
   }
 
-  $("#gDrv").onclick = () => { GROUP = "drv"; $("#gDrv").className = "on"; $("#gVeh").className = ""; $("#gDrv").setAttribute("aria-pressed", true); $("#gVeh").setAttribute("aria-pressed", false); SEL = null; OPENDAY = null; SELTRIP = null; rank(); };
-  $("#gVeh").onclick = () => { GROUP = "veh"; $("#gVeh").className = "on"; $("#gDrv").className = ""; $("#gVeh").setAttribute("aria-pressed", true); $("#gDrv").setAttribute("aria-pressed", false); SEL = null; OPENDAY = null; SELTRIP = null; rank(); };
+  const setGroup = g => { GROUP = g; [["gPlace", "place"], ["gVeh", "veh"], ["gSid", "sid"]].forEach(([id, v]) => { $("#" + id).className = v === g ? "on" : ""; $("#" + id).setAttribute("aria-pressed", v === g); }); SEL = null; OPENDAY = null; SELTRIP = null; rank(); };
+  $("#gPlace").onclick = () => setGroup("place"); $("#gVeh").onclick = () => setGroup("veh"); $("#gSid").onclick = () => setGroup("sid");
   $("#bLoad").onclick = load; $("#bLocal").onclick = loadLocal;
 
   (async () => {

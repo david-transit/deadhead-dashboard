@@ -60,6 +60,10 @@ class TestBuild(unittest.TestCase):
             self.assertIn(k, t)
         self.assertEqual(t['a']['code'], '4156')  # previous service of the same vehicle (other sidur) ended at 4156
 
+    def test_dispatcher_leg_labelled(self):
+        t = next(t for s in self.p['sidurim'] for t in s['trips'] if t.get('empty_kind') == 'dispatcher')
+        self.assertEqual(t['plaus'], 'explained')
+
     def test_sql_upsert(self):
         sql = build.upsert_sql('op-uuid', self.p)
         self.assertIn("insert into private.pva_day", sql); self.assertIn("on conflict (operator_id, day) do update", sql)
@@ -85,3 +89,22 @@ class TestSecondSidurOnSameVehicle(unittest.TestCase):
         p = build.build_day(build.Source(d), dt.date(2026, 11, 10), DEPOTS, [], 5, gtfs_zip(), road, {}, CFG)
         e = next(t for s in p['sidurim'] for t in s['trips'] if t['kind'] == 'empty')
         self.assertEqual((e['end_src'], e['a']['code'], e['b']['code']), ('gtfs', '4156', '1106'))
+
+
+class TestGeometry(unittest.TestCase):
+    def test_added_leg_carries_drawn_road_and_its_km(self):
+        def r(p, q, term=(True, True)):
+            return (5.0, 10.0, {})
+        r.geom = lambda p, q: [5.12, [[31.78861, 35.20259], [31.79, 35.21], [31.78651, 35.20556]]]
+        p = build.build_day(build.Source(src_dir()), dt.date(2026, 11, 10), DEPOTS, [], 5, gtfs_zip(), r, {}, CFG)
+        t = next(t for s in p['sidurim'] for t in s['trips'] if t.get('empty_kind') == 'dispatcher')
+        self.assertEqual((t['our_km'], len(t['geom'])), (5.12, 3))
+        planned = next(t for s in p['sidurim'] for t in s['trips'] if t['kind'] == 'empty' and t['status'] == 'planned')
+        self.assertIsNone(planned.get('geom'))
+
+
+class TestThin(unittest.TestCase):
+    def test_thin_keeps_ends_and_drops_dense_points(self):
+        pts = [[31.78, 35.20 + i * 0.00001] for i in range(101)]  # ~1 m apart, ~95 m long
+        out = build.thin(pts, 15)
+        self.assertEqual((out[0], out[-1]), (pts[0], pts[-1])); self.assertLess(len(out), 12)

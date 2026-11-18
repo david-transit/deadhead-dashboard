@@ -147,6 +147,7 @@ def osrm_router(cache_file):
         if stat: print("routes:", dict(stat))
 
     road.geom = geom; road.geomp = geomp
+    road.geom = geom  # pva (R53): the drawn road of a leg, same router as its km (R13)
     return road, save, miss
 
 

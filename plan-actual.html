@@ -27,22 +27,23 @@
   </div>
 </header>
 <nav class="tabs" role="tablist" aria-label="לשוניות">
-  <button role="tab" id="tExcess" aria-selected="true" aria-controls="pExcess">ק״מ מעבר לתכנון</button>
+  <button role="tab" id="tExcess" aria-selected="true" aria-controls="pExcess">תוספות ביום הביצוע</button>
   <button role="tab" id="tSid" aria-selected="false" aria-controls="pSid">סידורים</button>
   <button role="tab" id="tGap" aria-selected="false" aria-controls="pGap">פערי ק״מ מול המפעיל</button>
   <button role="tab" id="tLes" aria-selected="false" aria-controls="pLes">לקחים</button>
+  <button role="tab" id="tDrv" aria-selected="false" aria-controls="pDrv">ק״מ בלי הסבר</button>
 </nav>
 <div id="msg" class="msg" role="status" aria-live="polite"></div>
 <section class="cards" id="cards" aria-label="סיכום התקופה">
   <div class="card"><div class="k">ק״מ ריקים מתוכננים</div><div class="v" id="cPlan">–</div></div>
   <div class="card"><div class="k">ק״מ ריקים בפועל</div><div class="v" id="cAct">–</div></div>
-  <div class="card"><div class="k">ק״מ מעבר לתכנון</div><div class="v" id="cEx">–</div></div>
-  <div class="card"><div class="k">מתוכם תוספת סדרן</div><div class="v" id="cDis">–</div></div>
+  <div class="card"><div class="k">ק״מ ריקים שהוסיף הסדרן</div><div class="v" id="cEx">–</div></div>
+  <div class="card"><div class="k">מתוכם לבדיקה</div><div class="v" id="cDis">–</div></div>
 </section>
 <main>
   <section id="pExcess" role="tabpanel" aria-labelledby="tExcess" class="grid3">
     <div class="col list" aria-label="רשימה ממוינת">
-      <div class="seg" role="group" aria-label="קיבוץ"><button class="on" id="gDrv" aria-pressed="true">לפי נהג</button><button id="gVeh" aria-pressed="false">לפי רכב</button></div>
+      <div class="seg" role="group" aria-label="קיבוץ"><button class="on" id="gPlace" aria-pressed="true">לפי מקום</button><button id="gVeh" aria-pressed="false">לפי רכב</button><button id="gSid" aria-pressed="false">לפי סידור</button></div>
       <ol id="rank" class="rank"></ol>
     </div>
     <div class="col days" id="days" aria-live="polite"></div>
@@ -54,13 +55,13 @@
   <section id="pSid" role="tabpanel" aria-labelledby="tSid" hidden></section>
   <section id="pGap" role="tabpanel" aria-labelledby="tGap" hidden></section>
   <section id="pLes" role="tabpanel" aria-labelledby="tLes" hidden></section>
+  <section id="pDrv" role="tabpanel" aria-labelledby="tDrv" hidden><div class="col empty"><h2>ק״מ בלי הסבר, לפי נהג</h2><p>הלשונית תתמלא כשיגיע דוח המיקומים מהמפעיל: הק״מ שהרכב נסע בפועל לפי ה־GPS, פחות כל מה שרשום בדוח הביצוע (כולל התוספות של הסדרן). רק מה שנשאר בלי הסבר ייספר כאן.</p><p>נסיעה ריקה ארוכה יותר בק״מ אבל מהירה יותר (למשל לפי עומסים) לא תיחשב חריגה, ותסומן בנפרד.</p></div></section>
 </main>
 <footer class="legend" aria-label="מקרא">
   <b>מקרא:</b>
   <span><span class="tag plan">כמתוכנן</span> = נסיעה לפי התכנון</span>
   <span><span class="tag disp">תוספת סדרן</span> = נסיעה ריקה בסידור שאינו במפת הבסיס</span>
-  <span><span class="tag extra">נוספה</span> = נסיעה ריקה שנוספה לסידור</span>
-  <span><span class="tag forced">מוכרחת</span> = נסיעה ריקה מוכרחת (תפעולית)</span>
+  <span><span class="tag ok">מוסבר</span> / <span class="tag mid">דרך מוסך</span> / <span class="tag bad">לא מסתדר</span> = האם יום הרכב מסביר את התוספת</span>
   <span><i class="ln ours"></i> = הניתוב שלנו</span>
 </footer>
 <script src="assets/map.js?v=2026-11-18.48"></script>
