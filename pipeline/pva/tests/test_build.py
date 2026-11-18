@@ -17,9 +17,9 @@ def src_dir():
         dict(sidur=9, t=800, kind='שרות', mkt8=12154240, line=154, km=14.6, vtype='בין-עירוני')]),
         os.path.join(d, 'כותרות + נסיעות - מפת בסיס א-ה.xlsx'))
     shutil.copy(exec_xlsx([
-        dict(id=1, kind='ריקה', start=D(2026, 11, 10, 7, 0), end=D(2026, 11, 10, 7, 10), sidur=1, mkt8=66196844, veh=5, driver=18149),
-        dict(id=2, kind='שירות', start=D(2026, 11, 10, 7, 15), end=D(2026, 11, 10, 8, 0), sidur=1, mkt8=12154240, line=154, veh=5, driver=18149),
-        dict(id=3, kind='ריקה', start=D(2026, 11, 10, 8, 5), end=D(2026, 11, 10, 8, 30), sidur=85, mkt8=66708144, veh=5, driver=18149,
+        dict(id=1, kind='ריקה', start=D(2026, 11, 10, 7, 0), end=D(2026, 11, 10, 7, 10), sidur=1, mkt8=66196844, veh=5, driver=99001),
+        dict(id=2, kind='שירות', start=D(2026, 11, 10, 7, 15), end=D(2026, 11, 10, 8, 0), sidur=1, mkt8=12154240, line=154, veh=5, driver=99001),
+        dict(id=3, kind='ריקה', start=D(2026, 11, 10, 8, 5), end=D(2026, 11, 10, 8, 30), sidur=85, mkt8=66708144, veh=5, driver=99001,
              first='יוסי', last='כהן'),
         dict(id=4, kind='שירות', start=D(2026, 11, 10, 9, 15), end=D(2026, 11, 10, 10, 0), sidur=1, mkt8=12154240, line=154, veh=5, driver=None)]),
         os.path.join(d, 'דוח ביצוע.xlsx'))
@@ -41,7 +41,7 @@ class TestBuild(unittest.TestCase):
         self.assertNotIn('יוסי', s); self.assertNotIn('כהן', s)
 
     def test_driver_excess_sum(self):
-        d = self.p['drivers']['18149']
+        d = self.p['drivers']['99001']
         self.assertEqual((d['excess_km'], d['dispatcher_km']), (5.0, 5.0))  # sidur 85 is not in the plan; op km unknown -> ours
 
     def test_missing_driver_code_kept(self):
@@ -67,3 +67,21 @@ class TestBuild(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestSecondSidurOnSameVehicle(unittest.TestCase):
+    def test_vehicle_pass_ends_kept_for_executed_empty(self):
+        d = tempfile.mkdtemp()
+        shutil.copy(plan_xlsx([
+            dict(sidur=1, t=715, kind='שרות', mkt8=12154240, line=154, km=14.6, vtype='עירוני עליה חופשית'),
+            dict(sidur=2, t=900, kind='ריקה', mkt8=66292044, desc='ת.מ./רח.יפו-היכל המשפט', km=1.2),
+            dict(sidur=2, t=915, kind='שרות', mkt8=12154240, line=154, km=14.6, vtype='עירוני עליה חופשית')]),
+            os.path.join(d, 'כותרות + נסיעות - מפת בסיס א-ה.xlsx'))
+        shutil.copy(exec_xlsx([
+            dict(id=1, kind='שירות', start=D(2026, 11, 10, 7, 15), end=D(2026, 11, 10, 8, 0), sidur=1, mkt8=12154240, line=154, veh=5, driver=99001),
+            dict(id=2, kind='ריקה', start=D(2026, 11, 10, 9, 0), end=D(2026, 11, 10, 9, 10), sidur=2, mkt8=66292044, veh=5, driver=99002),
+            dict(id=3, kind='שירות', start=D(2026, 11, 10, 9, 15), end=D(2026, 11, 10, 10, 0), sidur=2, mkt8=12154240, line=154, veh=5, driver=99002)]),
+            os.path.join(d, 'דוח ביצוע.xlsx'))
+        p = build.build_day(build.Source(d), dt.date(2026, 11, 10), DEPOTS, [], 5, gtfs_zip(), road, {}, CFG)
+        e = next(t for s in p['sidurim'] for t in s['trips'] if t['kind'] == 'empty')
+        self.assertEqual((e['end_src'], e['a']['code'], e['b']['code']), ('gtfs', '4156', '1106'))

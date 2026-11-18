@@ -3,7 +3,7 @@
 (function () {
   "use strict";
   const SB = "https://xghfcdgettrcdciwwzbl.supabase.co", KEY = "sb_publishable_hCBsqYekz61JY6SFfT_sjw_-wj0QGXT", SKEY = "ys_session";
-  const $ = s => document.querySelector(s), esc = s => { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; };
+  const $ = s => document.querySelector(s), esc = s => { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;"); };
   const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } }, lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { } };
   const nf = x => x == null ? "–" : (+x).toLocaleString("he-IL", { maximumFractionDigits: 1, minimumFractionDigits: (+x) % 1 ? 1 : 0 });
   const hm = m => m == null ? "" : `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -137,8 +137,8 @@
     lay.clearLayers();
     if (!t.a || !t.b) { map.setView([31.78, 35.2], 12); return; }
     const A = [t.a.lat, t.a.lon], B = [t.b.lat, t.b.lon];
-    L.circleMarker(A, { radius: 8, color: "#2E9E4F", fillOpacity: 1 }).bindTooltip(place(t.a), { permanent: true, direction: "top" }).addTo(lay);
-    L.circleMarker(B, { radius: 8, color: "#C62828", fillOpacity: 1 }).bindTooltip(place(t.b), { permanent: true, direction: "top" }).addTo(lay);
+    L.circleMarker(A, { radius: 8, color: "#2E9E4F", fillOpacity: 1 }).bindTooltip(esc(place(t.a)), { permanent: true, direction: "top" }).addTo(lay);
+    L.circleMarker(B, { radius: 8, color: "#C62828", fillOpacity: 1 }).bindTooltip(esc(place(t.b)), { permanent: true, direction: "top" }).addTo(lay);
     map.fitBounds([A, B], { padding: [40, 40] });
     try {
       const pts = await YMAP.osrmLine(A, B); if (my !== drawn) return;

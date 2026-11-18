@@ -27,11 +27,11 @@ class TestRead(unittest.TestCase):
 
     def test_names_not_kept(self):
         p = exec_xlsx([dict(id=1, kind='ריקה', start=D(2026, 11, 10, 6), end=D(2026, 11, 10, 6, 10), sidur=85,
-                            mkt8=66708144, veh=23438002, driver=18149, first='יוסי', last='כהן')])
+                            mkt8=66708144, veh=90000001, driver=99001, first='יוסי', last='כהן')])
         r = read.read_exec(p)
         self.assertEqual(set(r[0]), {'id', 'kind', 'start', 'end', 'sidur', 'mkt8', 'line', 'veh', 'driver'})
         self.assertNotIn('יוסי', repr(r)); self.assertNotIn('כהן', repr(r))
-        self.assertEqual(r[0]['kind'], 'empty'); self.assertEqual(r[0]['driver'], '18149'); self.assertEqual(r[0]['sidur'], '85')
+        self.assertEqual(r[0]['kind'], 'empty'); self.assertEqual(r[0]['driver'], '99001'); self.assertEqual(r[0]['sidur'], '85')
 
     def test_missing_driver_code(self):
         p = exec_xlsx([dict(id=2, kind='שירות', start=D(2026, 11, 10, 7), end=D(2026, 11, 10, 8), sidur=52001,
