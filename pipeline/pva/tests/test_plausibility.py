@@ -61,6 +61,12 @@ class TestPlausibility(unittest.TestCase):
         label_vehicle(L)
         self.assertIn('מוסך עטרות', L[0]['plaus_why']); self.assertIn('17:30', L[0]['plaus_why']); self.assertIn('רחוק', L[0]['plaus_why'])
 
+    def test_estimated_end_is_not_explained(self):
+        # David 19.11 (sidur 115): an end the report does not give stays an estimate; a bus may leave from another place
+        L = [S(300, A, B), dict(E(400, B, ATA), inferred='b'), E(420, ATA, M), S(450, M, A)]
+        label_vehicle(L)
+        self.assertEqual(L[1]['plaus'], 'estimated'); self.assertIn('לא נכתב בדוח', L[1]['plaus_why'])
+
     def test_only_dispatcher_trips_labelled(self):
         L = [S(300, A, B), E(400, B, A, 'planned'), S(420, A, B)]
         label_vehicle(L); self.assertNotIn('plaus', L[1])

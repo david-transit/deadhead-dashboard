@@ -53,7 +53,7 @@ def _trip(t, sidur, day):
                 mkt8=(e or p)['mkt8'], line=(e['line'] if e else p.get('line')) or None, desc=t.get('desc', ''),
                 plan_t=p['dep_min'] if p else None, a=_stop(t.get('a') or t.get('first')), b=_stop(t.get('b') or t.get('last')),
                 op_km=t.get('op_km'), our_km=t.get('our_km'), g_km=t.get('g_km'), verdict=t.get('verdict'),
-                km_src=t.get('km_src'), end_src=t.get('end_src'), gtfs_match=t.get('gtfs_match'), plaus=t.get('plaus'), plaus_why=t.get('plaus_why'), geom=t.get('geom'))
+                km_src=t.get('km_src'), end_src=t.get('end_src'), inferred=t.get('inferred'), gtfs_match=t.get('gtfs_match'), plaus=t.get('plaus'), plaus_why=t.get('plaus_why'), geom=t.get('geom'))
 
 
 def thin(pts, min_m=15):

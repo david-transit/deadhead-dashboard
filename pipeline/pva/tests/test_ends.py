@@ -77,6 +77,7 @@ class TestEnds(unittest.TestCase):
         t = [svc(S1106, S4156), emp(), emp('מוסך גבעת שאול-היכל המשפט'), svc(S1106, S4156)]
         ends.resolve(t, DEPOTS)
         self.assertEqual((t[1]['b']['depot'], t[1]['end_src']), ('gs7mosk', 'inferred'))
+        self.assertEqual(t[1]['inferred'], 'b')
 
     def test_unknown_start_taken_from_previous_empty_end(self):
         t = [emp('היכל המשפט-מוסך גבעת שאול'), emp(), svc(S1106, S4156)]

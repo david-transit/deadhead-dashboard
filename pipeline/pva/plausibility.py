@@ -70,3 +70,9 @@ def label_vehicle(trips):
         for t in chain:
             if t.get('empty_kind') == 'dispatcher':
                 t['plaus'], t['plaus_why'] = lab, why
+                if t.get('inferred') and lab != 'unknown':  # David 19.11: a bus may arrive at one place and leave from another
+                    side = 'היעד' if 'b' in t['inferred'] else 'המוצא'
+                    p = t.get('b') if 'b' in t['inferred'] else t.get('a')
+                    t['plaus'] = 'estimated'
+                    t['plaus_why'] = (f"{side} לא נכתב בדוח הביצוע. לפי הנסיעה הריקה הצמודה זה כנראה {_nm(p)}, אבל זה חישוב ולא נתון: "
+                                      'ראינו שרכב יכול להגיע למקום אחד ולצאת אחר כך ממקום אחר')

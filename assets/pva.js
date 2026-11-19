@@ -75,7 +75,7 @@
   const gname = k => GROUP === "place" ? k : GROUP === "veh" ? "רכב " + k : "סידור " + k;
   const REVIEW = new Set(["round_trip", "via_depot", "inconsistent", "end_of_day_review", "unknown"]);
   const PL = { explained: ["ok", "מוסבר"], end_of_day: ["ok", "סוף יום למוסך"], end_of_day_review: ["mid", "סוף יום, לבדיקה"], round_trip: ["bad", "הלוך ושוב"],
-    via_depot: ["mid", "דרך מוסך"], inconsistent: ["bad", "לא מסתדר"], unknown: ["nd", "קצה לא ידוע"] };
+    via_depot: ["mid", "דרך מוסך"], inconsistent: ["bad", "לא מסתדר"], unknown: ["nd", "קצה לא ידוע"], estimated: ["mid", "קצה משוער"] };
   const PTAG = t => t.plaus && PL[t.plaus] ? `<span class="tag ${PL[t.plaus][0]}">${PL[t.plaus][1]}</span>` : "";
 
   function rank() {
@@ -92,6 +92,8 @@
   const TAG = t => t.status === "not_done" ? `<span class="tag nd">לא בוצעה</span>` : t.empty_kind === "dispatcher" ? `<span class="tag disp">תוספת סדרן</span>`
     : t.forced ? `<span class="tag forced">מוכרחת</span>` : t.status === "added" ? `<span class="tag extra">נוספה</span>` : `<span class="tag plan">כמתוכנן</span>`;
   const place = p => p ? (p.depot ? p.name : p.name) : "?";
+  // an end the report does not give, taken from the adjacent empty leg (David 19.11): shown as an estimate
+  const pl = (t, k) => place(t[k]) + (t.inferred && t.inferred.includes(k) ? " (משוער)" : "");
 
   function detail() {
     const box = $("#days");
@@ -107,7 +109,7 @@
       return `<div class="day"><button aria-expanded="${open}" data-d="${d}"><span>${dlabel(d)} · ${nf(dayKm(d))} ק״מ</span><span aria-hidden="true">${open ? "▴" : "▾"}</span></button>
         ${open ? L.map((t, i) => { const k = `${d}|${i}`, on = CTX === k;
           return `<button class="trip${t.status === "not_done" ? " nd" : ""}" data-i="${k}" aria-current="${SELTRIP && SELTRIP.day === d && SELTRIP.i === i}">
-          <span>${hm(t.t0)}</span><span>${esc(place(t.a))} ← ${esc(place(t.b))}</span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}</span></button>
+          <span>${hm(t.t0)}</span><span>${esc(pl(t, "a"))} ← ${esc(pl(t, "b"))}</span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}</span></button>
           <button class="ctxb" data-c="${k}" aria-expanded="${on}">${on ? "▴" : "▾"} מה הרכב עשה לפני ואחרי</button>${on ? ctx(t) : ""}`; }).join("") : ""}</div>`;
     }).join("");
     box.querySelectorAll(".day>button:not(.trip):not(.ctxb)").forEach(b => b.onclick = () => { OPENDAY = OPENDAY === b.dataset.d ? "" : b.dataset.d; SELTRIP = null; detail(); });
@@ -129,7 +131,7 @@
     let a = i; while (a > 0 && V[a - 1].kind === "empty") a--; while (a > 0 && V[a - 1].kind !== "empty") a--; if (a > 0) a--;
     let b = i; while (b + 1 < V.length && V[b + 1].kind === "empty") b++; while (b + 1 < V.length && V[b + 1].kind !== "empty") b++; if (b + 1 < V.length) b++;
     return `<ol class="ctx">${V.slice(a, b + 1).map(x => `<li${x === V[i] ? ' class="me"' : ""}><span>${hm(x.t0)}</span><span>${x.kind === "service" ? "קו " + esc(x.line || "") : "ריקה"} · סידור ${esc(x.sidur)}</span>
-      <span>${esc(place(x.a))} ← ${esc(place(x.b))}</span><span>${x.kind === "empty" ? TAG(x) : ""}</span></li>`).join("")}</ol>`;
+      <span>${esc(pl(x, "a"))} ← ${esc(pl(x, "b"))}</span><span>${x.kind === "empty" ? TAG(x) : ""}</span></li>`).join("")}</ol>`;
   }
 
   // ---- map card (Leaflet from assets/vendor, our route from the public OSRM, as in the dashboard) ----
@@ -148,8 +150,8 @@
     if (!t) { info.innerHTML = ""; $("#mapLeg").innerHTML = ""; if (lay) lay.clearLayers(); return; }
     const gap = t.op_km != null && t.our_km != null ? Math.abs(t.op_km - t.our_km) : null, v = VERD[t.verdict] || VERD["n/a"];
     info.innerHTML = (t.plaus_why ? `<p class="why">${PTAG(t)} ${esc(t.plaus_why)}</p>` : "") + `<table><tr><td>ק״מ לפי המפעיל</td><td>${nf(t.op_km)}</td></tr><tr><td>ק״מ לפי הניתוב שלנו</td><td>${nf(t.our_km)}</td></tr>${t.g_km != null ? `<tr><td>ק״מ לפי גוגל</td><td>${nf(t.g_km)}</td></tr>` : ""}</table>
-      <div class="foot"><span class="tag ${v[0]}">${v[1]}${gap != null ? ` (פער ${nf(Math.round(gap * 10) / 10)} ק״מ)` : ""}</span><span>סידור ${esc(t.sidur)} · רכב ${esc(t.veh)}${t.end_src === "unresolved" ? " · קצה לא ידוע" : t.end_src === "inferred" ? " · קצה משוער: לפי הנסיעה הריקה הצמודה" : ""}</span></div>`;
-    $("#mapLeg").innerHTML = `<span><i class="ln"></i> הניתוב שלנו</span><span>${esc(place(t.a))} ← ${esc(place(t.b))}</span>`;
+      <div class="foot"><span class="tag ${v[0]}">${v[1]}${gap != null ? ` (פער ${nf(Math.round(gap * 10) / 10)} ק״מ)` : ""}</span><span>סידור ${esc(t.sidur)} · רכב ${esc(t.veh)}${t.end_src === "unresolved" ? " · קצה לא ידוע" : t.end_src === "inferred" ? " · קצה משוער (לא כתוב בדוח)" : ""}</span></div>`;
+    $("#mapLeg").innerHTML = `<span><i class="ln"></i> הניתוב שלנו</span><span>${esc(pl(t, "a"))} ← ${esc(pl(t, "b"))}</span>`;
     try { await leaflet(); } catch { info.insertAdjacentHTML("beforeend", `<div class="msg err">המפה לא נטענה</div>`); return; }
     if (my !== drawn) return;
     if (!map) {
@@ -159,8 +161,8 @@
     lay.clearLayers();
     if (!t.a || !t.b) { map.setView([31.78, 35.2], 12); return; }
     const A = [t.a.lat, t.a.lon], B = [t.b.lat, t.b.lon];
-    L.circleMarker(A, { radius: 8, color: "#2E9E4F", fillOpacity: 1 }).bindTooltip(esc(place(t.a)), { permanent: true, direction: "top" }).addTo(lay);
-    L.circleMarker(B, { radius: 8, color: "#C62828", fillOpacity: 1 }).bindTooltip(esc(place(t.b)), { permanent: true, direction: "top" }).addTo(lay);
+    L.circleMarker(A, { radius: 8, color: "#2E9E4F", fillOpacity: 1 }).bindTooltip(esc(pl(t, "a")), { permanent: true, direction: "top" }).addTo(lay);
+    L.circleMarker(B, { radius: 8, color: "#C62828", fillOpacity: 1 }).bindTooltip(esc(pl(t, "b")), { permanent: true, direction: "top" }).addTo(lay);
     map.fitBounds([A, B], { padding: [40, 40] });
     if (t.geom && t.geom.length > 1) {  // the road our km was measured on (R13)
       L.polyline(t.geom, { color: "#E8871E", weight: 5 }).addTo(lay); map.fitBounds(L.latLngBounds(t.geom).extend(A).extend(B), { padding: [30, 30] });

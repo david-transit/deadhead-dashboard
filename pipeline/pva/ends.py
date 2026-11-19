@@ -123,6 +123,7 @@ def resolve(trips, depots, aliases=None, places=None):
         for t, k, v in ((x, 'b', y.get('a')), (y, 'a', x.get('b'))):
             if t.get(k) is None and v is not None:
                 t[k] = v
+                t['inferred'] = (t.get('inferred') or '') + k  # an estimate, not in the report (David 19.11)
                 if t.get('a') is not None and t.get('b') is not None:
                     t['end_src'] = 'inferred'
 
