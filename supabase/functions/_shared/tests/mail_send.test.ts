@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sendMail } from "../mail/send.ts";
+import { sendMail, sendAccountMail } from "../mail/send.ts";
 import { FROM } from "../mail/template.ts";
 import { fakeMailDb, resendFetch } from "./mail_fake.ts";
 
@@ -77,4 +77,21 @@ test("the send that reaches 80% raises one alert", async () => {
   const { d, alerts } = deps({ sentToday: 79 });
   await sendMail(d, { kind: "reply", conversationId: "v1", body: "x", agentId: "u1" });
   assert.deepEqual(alerts, ["שימוש של 80% ממכסת המייל היומית"]);
+});
+
+test("sendAccountMail: one Resend call, no db rows, idempotency key", async () => {
+  const { f, calls } = resendFetch();
+  const out = await sendAccountMail({ fetch: f, apiKey: "K", brand }, { to: "a@b.co", subject: "S", body: "B", key: "k1" });
+  assert.equal(out.ok, true); assert.equal(calls.length, 1);
+  assert.equal(calls[0].init.headers["Idempotency-Key"], "k1");
+  assert.deepEqual(calls[0].body.to, ["a@b.co"]); assert.equal(calls[0].body.from, FROM);
+  assert.equal(calls[0].body.subject, "S");
+});
+test("sendAccountMail: Resend 500 -> ok:false send_failed", async () => {
+  const { f } = resendFetch(500);
+  assert.deepEqual(await sendAccountMail({ fetch: f, apiKey: "K", brand }, { to: "a@b.co", subject: "S", body: "B", key: "k" }), { ok: false, error: "send_failed" });
+});
+test("sendAccountMail: network error -> ok:false send_failed", async () => {
+  const f = (async () => { throw new Error("down"); }) as unknown as typeof fetch;
+  assert.deepEqual(await sendAccountMail({ fetch: f, apiKey: "K", brand }, { to: "a@b.co", subject: "S", body: "B", key: "k" }), { ok: false, error: "send_failed" });
 });

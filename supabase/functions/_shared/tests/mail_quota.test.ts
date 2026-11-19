@@ -16,3 +16,7 @@ test("warn80 only on the send that reaches 80%", () => {
   assert.equal((quotaDecision("reply", 80, 100) as any).warn80, false);
   assert.equal((quotaDecision("alert", 79, 100) as any).warn80, true);
 });
+test("account: limited like alerts, never queued", () => {
+  assert.deepEqual(quotaDecision("account", 90, 100), { send: false, queue: false });
+  assert.equal(quotaDecision("account", 89, 100).send, true);
+});
