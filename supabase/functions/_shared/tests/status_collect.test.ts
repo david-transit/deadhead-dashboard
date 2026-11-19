@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { collect, CATALOG, type Deps, type Figures } from "../status/collect.ts";
+import { collect, CATALOG, DAYS_URL, type Deps, type Figures } from "../status/collect.ts";
 import type { Item } from "../status/levels.ts";
 
 const NOW = new Date("2026-11-19T10:00:00Z");
@@ -68,4 +68,8 @@ test("manual row not checked for 31 days is yellow", async () => {
 test("red keeps its red_since", async () => {
   const prev = (await collect(deps(), [], NOW)).map(i => i.key === "blockers" ? { ...i, red_since: "2026-11-18T00:00:00Z" } : i);
   assert.equal(by(await collect(deps(), prev, NOW)).blockers.red_since, "2026-11-18T00:00:00Z");
+});
+
+test("days.js is read from the address that answers (the deadhead subdomain gives 525)", () => {
+  assert.equal(DAYS_URL("derech-egged"), "https://yalla-sa.app/deadhead-dashboard/data/derech-egged/days.js");
 });

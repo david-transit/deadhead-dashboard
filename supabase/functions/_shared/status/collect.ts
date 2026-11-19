@@ -11,7 +11,8 @@ export interface Deps { figures(): Promise<Figures>; text(url: string): Promise<
 
 export const GH_REPO = "david-transit/deadhead-dashboard";
 export const NIGHTLY_SLUGS = ["derech-egged"];
-export const DAYS_URL = (s: string) => "https://deadhead.yalla-sa.app/data/" + s + "/days.js";
+// deadhead.yalla-sa.app answers 525 from the server side today; the Pages path under yalla-sa.app is the same file
+export const DAYS_URL = (s: string) => "https://yalla-sa.app/deadhead-dashboard/data/" + s + "/days.js";
 export const RDAP_URL = "https://rdap.org/domain/yalla-sa.app";
 export const WA_NOTE = "ממתין לאימות העסק";
 const GH = "https://api.github.com/repos/" + GH_REPO;
