@@ -110,3 +110,24 @@ main{flex:1;padding:0 16px 12px}
 .notes li{background:#fff8e6;border:1px solid #f1dfb0;border-radius:8px;padding:6px 10px;margin-top:6px;font-size:13px}
 .notes li button{all:unset;cursor:pointer;color:var(--warn);float:left;font-size:12px}
 .nb{display:flex;justify-content:flex-start;margin-top:8px}
+.bar1{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.sortl{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.sortl select{font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text)}
+.btn.tog[aria-pressed=true]{background:var(--svc);color:#fff;border-color:var(--svc)}
+.trip .sv{display:block;color:var(--muted);font-size:12px}
+.side{position:fixed;top:0;bottom:0;right:0;width:min(420px,100vw);z-index:1500;background:var(--card);border-inline-end:1px solid var(--line);box-shadow:0 0 24px rgba(0,0,0,.18);padding:0 12px;overflow:auto;display:flex;flex-direction:column}
+.sdh{display:flex;gap:6px;align-items:center;position:sticky;top:0;background:var(--card);padding:12px 0 6px;z-index:1}
+.sdh h3{flex:1;margin:0;font-size:16px;text-align:center}
+.sdh .btn:disabled{opacity:.4;cursor:default}
+.sdl{list-style:none;margin:8px 0;padding:0;flex:1}
+.sdl li button{all:unset;box-sizing:border-box;display:grid;grid-template-columns:44px 1fr auto;gap:2px 8px;width:100%;padding:6px 8px;border-bottom:1px solid var(--line);cursor:pointer}
+.sdl li button:disabled{cursor:default}
+.sdl li button:focus-visible{outline:2px solid var(--svc);outline-offset:-2px}
+.sdl li>button>span:first-child{color:var(--muted);font-variant-numeric:tabular-nums;grid-row:span 3}
+.sdl .km{font-weight:700;color:var(--empty)}
+.sdl .pl,.sdl .tg{grid-column:2/-1}
+.sdl li.me button{background:var(--sel);border-radius:6px}
+.sdl li.nd{color:var(--muted);text-decoration:line-through}
+.sdt{display:flex;flex-direction:column;gap:2px;border-top:2px solid var(--line);padding:8px 0 12px;position:sticky;bottom:0;background:var(--card)}
+.sdl li.sd button{background:#fff4d6}
+.sdl li{scroll-margin:70px 0 150px}

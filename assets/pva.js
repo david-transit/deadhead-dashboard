@@ -10,7 +10,7 @@
   const DOW = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
   const dlabel = d => { const x = new Date(d + "T12:00:00"); return `יום ${DOW[x.getDay()]} · ${x.getDate()}.${x.getMonth() + 1}`; };
   let SES = null; try { SES = JSON.parse(lsGet(SKEY) || "null"); } catch { }
-  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "place", SORT = "km", CTX = null, DAYF = "", Q = "", NOTES = [], CUR = null, SEL = null, OPENDAY = null, SELTRIP = null;
+  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "place", SORT = "km", GEO = false, CTX = null, DAYF = "", Q = "", NOTES = [], CUR = null, SEL = null, OPENDAY = null, SELTRIP = null;
 
   // ---- session (same storage and refresh as the dashboard) ----
   async function http(url, opt = {}) {
@@ -51,7 +51,8 @@
   const excess = t => t.kind === "empty" && t.status === "added" && !(t.forced && t.empty_kind !== "dispatcher") ? kmOf(t) : 0;
   const trips = () => DAYS.flatMap(d => d.sidurim.flatMap(s => s.trips.map(t => ({ ...t, day: d.day }))));
   // the list's day picker and search (sidur or vehicle number)
-  const shown = () => trips().filter(t => (!DAYF || t.day === DAYF) && (!Q || String(t.veh).includes(Q) || String(t.sidur).includes(Q)));
+  // "רציפות גיאוגרפית" (David 19.11): only the legs marked for review, in the list and in its totals
+  const shown = () => trips().filter(t => (!DAYF || t.day === DAYF) && (!Q || String(t.veh).includes(Q) || String(t.sidur).includes(Q)) && (!GEO || REVIEW.has(t.plaus)));
 
   function cards() {
     const T = trips().filter(t => t.kind === "empty" && (!DAYF || t.day === DAYF));
@@ -69,10 +70,13 @@
       const x = g.get(k) || { k, km: 0, n: 0, r: 0, rk: 0, days: new Set() }; g.set(k, x);
       x.km += e; x.n++; x.days.add(t.day); if (REVIEW.has(t.plaus)) { x.r++; x.rk += e; }
     }
-    return [...g.values()].filter(x => x.km > 0).sort((a, b) => SORT === "review" ? (b.rk - a.rk) || (b.r - a.r) || (b.km - a.km) : b.km - a.km);
+    const num = (a, b) => (+a.k - +b.k) || String(a.k).localeCompare(String(b.k), "he");
+    const by = { km: (a, b) => b.km - a.km, veh: num, sid: num, place: (a, b) => String(a.k).localeCompare(String(b.k), "he"), date: (a, b) => a.k < b.k ? -1 : a.k > b.k ? 1 : 0 }[SORT];
+    return [...g.values()].filter(x => x.km > 0).sort((a, b) => by(a, b) || b.km - a.km);
   }
-  const gkey = t => GROUP === "place" ? (t.desc || `${place(t.a)} ← ${place(t.b)} (מסלול שאינו במפה)`) : GROUP === "veh" ? t.veh : t.sidur;
-  const gname = k => GROUP === "place" ? k : GROUP === "veh" ? "רכב " + k : "סידור " + k;
+  // one "מיון" box (David 19.11): ק״מ (מהגבוה) groups by place, largest first; the others group by that key in its order
+  const gkey = t => GROUP === "place" ? (t.desc || `${place(t.a)} ← ${place(t.b)} (מסלול שאינו במפה)`) : GROUP === "veh" ? t.veh : GROUP === "date" ? t.day : t.sidur;
+  const gname = k => GROUP === "place" ? k : GROUP === "veh" ? "רכב " + k : GROUP === "date" ? dlabel(k) : "סידור " + k;
   const REVIEW = new Set(["round_trip", "via_depot", "inconsistent", "end_of_day_review", "unknown"]);
   const PL = { explained: ["ok", "מוסבר"], end_of_day: ["ok", "סוף יום למוסך"], end_of_day_review: ["mid", "סוף יום, לבדיקה"], round_trip: ["bad", "הלוך ושוב"],
     via_depot: ["mid", "דרך מוסך"], inconsistent: ["bad", "לא מסתדר"], unknown: ["nd", "קצה לא ידוע"], estimated: ["mid", "קצה משוער"] };
@@ -84,7 +88,7 @@
     $("#rank").innerHTML = G.length ? G.map(x => `<li><button data-k="${esc(x.k)}" aria-current="${x.k === SEL}">
       <span class="nm">${esc(gname(x.k))}</span><span class="km">${nf(x.km)} ק״מ</span>
       <span class="s">${x.days.size === 1 ? "ביום אחד" : `ב־${x.days.size} ימים`} · ${x.n === 1 ? "נסיעה אחת" : `${x.n} נסיעות`}${x.r ? ` · ${x.r} לבדיקה (${nf(Math.round(x.rk * 10) / 10)} ק״מ)` : ""}</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(4, x.km / top * 100)}%"></i></span></button></li>`).join("")
-      : `<li class="empty">${Q ? "לא נמצא סידור או רכב כזה עם תוספות" : "אין תוספות בתקופה"}</li>`;
+      : `<li class="empty">${Q ? "לא נמצא סידור או רכב כזה עם תוספות" : GEO ? "אין נסיעות לבדיקה בתקופה" : "אין תוספות בתקופה"}</li>`;
     $("#rank").querySelectorAll("button").forEach(b => b.onclick = () => { SEL = GROUP === "veh" ? +b.dataset.k : b.dataset.k; OPENDAY = null; SELTRIP = null; rank(); detail(); if (innerWidth < 900) $("#days").scrollIntoView({ behavior: "smooth" }); });
     detail();
   }
@@ -104,24 +108,55 @@
     const dayKm = d => byDay.get(d).reduce((a, t) => a + excess(t), 0);
     const ds = [...byDay.keys()].sort();
     if (OPENDAY == null) OPENDAY = ds.slice().sort((a, b) => dayKm(b) - dayKm(a))[0];
-    box.innerHTML = `<h2>${esc(gname(SEL))} · ${nf(tot)} ק״מ שהוסיף הסדרן</h2>` + ds.map(d => {
+    box.innerHTML = `<h2>${esc(gname(SEL))} · ${nf(tot)} ק״מ ${GEO ? "לבדיקה" : "שהוסיף הסדרן"}</h2>` + ds.map(d => {
       const open = d === OPENDAY, L = byDay.get(d).sort((a, b) => a.t0 - b.t0);
       return `<div class="day"><button aria-expanded="${open}" data-d="${d}"><span>${dlabel(d)} · ${nf(dayKm(d))} ק״מ</span><span aria-hidden="true">${open ? "▴" : "▾"}</span></button>
         ${open ? L.map((t, i) => { const k = `${d}|${i}`, on = CTX === k;
           return `<button class="trip${t.status === "not_done" ? " nd" : ""}" data-i="${k}" aria-current="${SELTRIP && SELTRIP.day === d && SELTRIP.i === i}">
-          <span>${hm(t.t0)}</span><span>${esc(pl(t, "a"))} ← ${esc(pl(t, "b"))}</span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}${nOf(t).length ? ` <span class="tag mid" title="יש הערה">✎ ${nOf(t).length}</span>` : ""}</span></button>
+          <span>${hm(t.t0)}</span><span>${esc(pl(t, "a"))} ← ${esc(pl(t, "b"))}<small class="sv">סידור ${esc(t.sidur)} · רכב ${esc(t.veh)}</small></span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}${nOf(t).length ? ` <span class="tag mid" title="יש הערה">✎ ${nOf(t).length}</span>` : ""}</span></button>
           <button class="ctxb" data-c="${k}" aria-expanded="${on}">${on ? "▴" : "▾"} מה הרכב עשה לפני ואחרי</button>${on ? ctx(t) : ""}`; }).join("") : ""}</div>`;
     }).join("");
     box.querySelectorAll(".day>button:not(.trip):not(.ctxb)").forEach(b => b.onclick = () => { OPENDAY = OPENDAY === b.dataset.d ? "" : b.dataset.d; SELTRIP = null; detail(); });
     box.querySelectorAll(".ctxb").forEach(b => b.onclick = () => { CTX = CTX === b.dataset.c ? null : b.dataset.c; detail(); });
     box.querySelectorAll(".trip").forEach(b => b.onclick = () => {
       const [d, i] = b.dataset.i.split("|"); SELTRIP = { day: d, i: +i }; detail();
-      if (innerWidth < 900) $("#map").scrollIntoView({ behavior: "smooth" });
+      if (GEO) side(); else if (innerWidth < 900) $("#map").scrollIntoView({ behavior: "smooth" });
     });
     const L = OPENDAY && byDay.get(OPENDAY) ? byDay.get(OPENDAY).sort((a, b) => a.t0 - b.t0) : [];
     if (!SELTRIP && L.length) { const i = Math.max(0, L.findIndex(t => excess(t) > 0)); SELTRIP = { day: OPENDAY, i }; box.querySelector(`[data-i="${OPENDAY}|${i}"]`)?.setAttribute("aria-current", "true"); }
     drawMap(SELTRIP && byDay.get(SELTRIP.day) ? byDay.get(SELTRIP.day)[SELTRIP.i] : null);
+    if (!$("#side").hidden) side();
   }
+
+  // ---- the side panel of "רציפות גיאוגרפית": the clicked leg's sidur within its vehicle's day, prev/next leg for review.
+  // A dispatcher's added leg is a sidur of its own (one leg, 10.11), so the vehicle's day is what shows the sidur's place.
+  function flagged() {  // every listed leg in the list's order, with its place in detail() (group, day, index)
+    return groups().flatMap(G => {
+      const mine = shown().filter(t => gkey(t) === G.k && excess(t) > 0), ds = [...new Set(mine.map(t => t.day))].sort();
+      return ds.flatMap(d => mine.filter(t => t.day === d).sort((a, b) => a.t0 - b.t0).map((t, i) => ({ k: G.k, day: d, i, t })));
+    });
+  }
+  function side() {
+    const F = flagged(), at = SELTRIP ? F.findIndex(x => x.k === SEL && x.day === SELTRIP.day && x.i === SELTRIP.i) : -1;
+    if (!GEO || at < 0) { $("#side").hidden = true; return; }
+    const t = F[at].t, S = trips().filter(x => x.day === t.day && (x.veh === t.veh || (x.veh == null && String(x.sidur) === String(t.sidur)))).sort((a, b) => a.t0 - b.t0);
+    $("#side").hidden = false;
+    $("#sdTitle").textContent = `סידור ${t.sidur} · רכב ${t.veh}`;
+    $("#sdPos").textContent = `${dlabel(t.day)} · נסיעה ${at + 1} מתוך ${F.length} לבדיקה · כל היום של הרכב, הסידור מודגש`;
+    $("#sdPrev").disabled = at === 0; $("#sdNext").disabled = at === F.length - 1;
+    const same = x => String(x.sidur) === String(t.sidur);
+    $("#sdList").innerHTML = S.map((x, j) => `<li class="${x.t0 === t.t0 && x.kind === t.kind && same(x) ? "me" : same(x) ? "sd" : ""}${x.status === "not_done" ? " nd" : ""}"><button data-j="${j}"${x.kind === "empty" ? "" : " disabled"}>
+      <span>${hm(x.t0)}</span><span>${x.kind === "service" ? "קו " + esc(x.line || "") : "ריקה"} · סידור ${esc(x.sidur)}</span><span class="km">${nf(kmOf(x))} ק״מ</span>
+      <span class="pl">${esc(pl(x, "a"))} ← ${esc(pl(x, "b"))}</span><span class="tg">${x.kind === "empty" ? TAG(x) + " " + PTAG(x) : ""}</span></button></li>`).join("");
+    $("#sdList").querySelectorAll("button[data-j]").forEach(b => b.onclick = () => drawMap(S[+b.dataset.j]));
+    const r1 = x => nf(Math.round(x * 10) / 10), tot = L => { const D = L.filter(x => x.status !== "not_done"), sum = f => D.reduce((a, x) => a + f(x), 0);
+      return `ק״מ בשירות ${r1(sum(x => x.kind === "service" ? (x.op_km || 0) : 0))} · ק״מ ריקים ${r1(sum(x => x.kind === "empty" ? kmOf(x) : 0))} · מתוכם הוסיף הסדרן ${r1(sum(excess))}`; };
+    $("#sdTot").innerHTML = `<b>סה״כ סידור ${esc(t.sidur)}</b><span>${tot(S.filter(same))}</span><b>סה״כ יום הרכב</b><span>${tot(S)}</span>`;
+    $("#sdList .me")?.scrollIntoView({ block: "nearest" });
+    const go = d => { const n = F[at + d]; if (!n) return; SEL = n.k; OPENDAY = n.day; SELTRIP = { day: n.day, i: n.i }; CTX = null; rank(); };
+    $("#sdPrev").onclick = () => go(-1); $("#sdNext").onclick = () => go(1);
+  }
+  $("#sdClose").onclick = () => { $("#side").hidden = true; };
 
   // the vehicle's day around a leg: from the empty leg before the service block that precedes it to the empty leg after
   // the service block that follows it, so the dispatcher's reasoning can be followed
@@ -237,7 +272,7 @@
     say(DAYS.length ? "" : "אין נתונים לתקופה הזו");
     const df = $("#fDay"); df.innerHTML = `<option value="">כל הימים</option>` + DAYS.map(d => `<option value="${esc(d.day)}">${dlabel(d.day)}</option>`).join("");
     DAYF = DAYS.length === 1 ? "" : (DAYS.some(d => d.day === DAYF) ? DAYF : ""); df.value = DAYF;
-    SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; cards(); rank();
+    reset(); cards(); rank();
     const cur = document.querySelector(".tabs [aria-selected=true]").id; if (cur !== "tExcess") tab(cur);
   }
 
@@ -255,15 +290,14 @@
     if (last) { if ($("#dFrom").value > last || !$("#dFrom").value) $("#dFrom").value = last; if ($("#dTo").value < last || !$("#dTo").value) $("#dTo").value = last; load(); }
   }
 
-  const setGroup = g => { GROUP = g; [["gPlace", "place"], ["gVeh", "veh"], ["gSid", "sid"]].forEach(([id, v]) => { $("#" + id).className = v === g ? "on" : ""; $("#" + id).setAttribute("aria-pressed", v === g); }); SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; rank(); };
-  $("#gPlace").onclick = () => setGroup("place"); $("#gVeh").onclick = () => setGroup("veh"); $("#gSid").onclick = () => setGroup("sid");
-  const setSort = v => { SORT = v; $("#sKm").className = v === "km" ? "on" : ""; $("#sRev").className = v === "review" ? "on" : ""; $("#sKm").setAttribute("aria-pressed", v === "km"); $("#sRev").setAttribute("aria-pressed", v === "review"); SEL = null; OPENDAY = null; SELTRIP = null; rank(); };
-  $("#fDay").onchange = e => { DAYF = e.target.value; SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; cards(); rank(); };
-  $("#fQ").oninput = e => { Q = e.target.value.trim(); SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; rank(); };
-  $("#sKm").onclick = () => setSort("km"); $("#sRev").onclick = () => setSort("review");
+  const reset = () => { SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; $("#side").hidden = true; };
+  $("#fSort").onchange = e => { SORT = e.target.value; GROUP = SORT === "km" ? "place" : SORT; reset(); rank(); };
+  $("#bGeo").onclick = () => { GEO = !GEO; $("#bGeo").setAttribute("aria-pressed", GEO); reset(); rank(); };
+  $("#fDay").onchange = e => { DAYF = e.target.value; reset(); cards(); rank(); };
+  $("#fQ").oninput = e => { Q = e.target.value.trim(); reset(); rank(); };
   const full = on => { const c = $(".mapcard"); c.classList.toggle("full", on); $("#bFull").textContent = on ? "✕ סגירה" : "⛶ מסך מלא"; $("#bFull").setAttribute("aria-pressed", on); if (map) setTimeout(() => { map.invalidateSize(); const b = L.featureGroup(lay.getLayers()).getBounds(); if (b.isValid()) map.fitBounds(b, { padding: [40, 40] }); }, 80); };
   $("#bFull").onclick = () => full(!$(".mapcard").classList.contains("full"));
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && $(".mapcard").classList.contains("full")) full(false); });
+  document.addEventListener("keydown", e => { if (e.key !== "Escape") return; if ($(".mapcard").classList.contains("full")) full(false); else if (!$("#side").hidden) $("#side").hidden = true; });
   $("#bLoad").onclick = load; $("#bFile").onclick = () => $("#fFile").click(); $("#fFile").onchange = e => { const F = [...e.target.files]; e.target.value = ""; if (F.length) loadFiles(F); };
 
   (async () => {

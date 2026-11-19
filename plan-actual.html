@@ -11,7 +11,7 @@
 <title>יאללה־סע · תכנון מול ביצוע</title>
 <link rel="icon" href="mobile/icon.svg">
 <link rel="stylesheet" href="assets/fonts/fonts.css">
-<link rel="stylesheet" href="assets/pva.css?v=2026-11-19.8">
+<link rel="stylesheet" href="assets/pva.css?v=2026-11-19.9">
 </head>
 <body>
 <header>
@@ -43,8 +43,8 @@
 <main>
   <section id="pExcess" role="tabpanel" aria-labelledby="tExcess" class="grid3">
     <div class="col list" aria-label="רשימה ממוינת">
-      <div class="seg" role="group" aria-label="קיבוץ"><button class="on" id="gPlace" aria-pressed="true">לפי מקום</button><button id="gVeh" aria-pressed="false">לפי רכב</button><button id="gSid" aria-pressed="false">לפי סידור</button></div>
-      <div class="seg" role="group" aria-label="מיון"><button class="on" id="sKm" aria-pressed="true">הכי הרבה ק״מ</button><button id="sRev" aria-pressed="false">לבדיקה קודם</button></div>
+      <div class="bar1"><label class="sortl">מיון<select id="fSort"><option value="km">ק״מ (מהגבוה)</option><option value="veh">לפי רכב</option><option value="sid">לפי סידור</option><option value="place">לפי מקום</option><option value="date">לפי תאריך</option></select></label>
+        <button class="btn tog" id="bGeo" aria-pressed="false" title="רק נסיעות שמסומנות לבדיקה: הלוך ושוב, דרך מוסך, לא מסתדר, סוף יום לבדיקה, קצה לא ידוע">רציפות גיאוגרפית</button></div>
       <div class="filt"><label><span class="sr">יום</span><select id="fDay"></select></label><label class="q"><span class="sr">חיפוש</span><input id="fQ" type="search" inputmode="numeric" placeholder="חיפוש סידור או רכב" autocomplete="off"></label></div>
       <ol id="rank" class="rank"></ol>
     </div>
@@ -59,6 +59,12 @@
   <section id="pLes" role="tabpanel" aria-labelledby="tLes" hidden></section>
   <section id="pDrv" role="tabpanel" aria-labelledby="tDrv" hidden><div class="col empty"><h2>ק״מ בלי הסבר, לפי נהג</h2><p>הלשונית תתמלא כשיגיע דוח המיקומים מהמפעיל: הק״מ שהרכב נסע בפועל לפי ה־GPS, פחות כל מה שרשום בדוח הביצוע (כולל התוספות של הסדרן). רק מה שנשאר בלי הסבר ייספר כאן.</p><p>נסיעה ריקה ארוכה יותר בק״מ אבל מהירה יותר (למשל לפי עומסים) לא תיחשב חריגה, ותסומן בנפרד.</p></div></section>
 </main>
+<aside id="side" class="side" hidden aria-labelledby="sdTitle">
+  <div class="sdh"><button class="btn" id="sdPrev" aria-label="הנסיעה הקודמת לבדיקה">› הקודמת</button><h3 id="sdTitle"></h3><button class="btn" id="sdNext" aria-label="הנסיעה הבאה לבדיקה">הבאה ‹</button><button class="btn" id="sdClose" aria-label="סגירת הסידור">✕</button></div>
+  <p class="sub" id="sdPos"></p>
+  <ol id="sdList" class="sdl"></ol>
+  <div id="sdTot" class="sdt"></div>
+</aside>
 <dialog id="dlgNote" aria-labelledby="nTitle">
   <div class="dh"><h3 id="nTitle">תיקון או הסבר</h3><button class="btn" id="nClose">סגירה</button></div>
   <p class="sub" id="nHead"></p>
@@ -74,8 +80,8 @@
   <span><span class="tag ok">מוסבר</span> / <span class="tag mid">דרך מוסך</span> / <span class="tag bad">לא מסתדר</span> / <span class="tag mid">קצה משוער</span> = האם יום הרכב מסביר את התוספת</span>
   <span><i class="ln ours"></i> = הניתוב שלנו</span>
 </footer>
-<script src="assets/map.js?v=2026-11-19.8"></script>
-<script src="assets/pva-tabs.js?v=2026-11-19.8"></script>
-<script src="assets/pva.js?v=2026-11-19.8"></script>
+<script src="assets/map.js?v=2026-11-19.9"></script>
+<script src="assets/pva-tabs.js?v=2026-11-19.9"></script>
+<script src="assets/pva.js?v=2026-11-19.9"></script>
 </body>
 </html>
