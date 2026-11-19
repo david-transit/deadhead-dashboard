@@ -10,7 +10,7 @@
   const DOW = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
   const dlabel = d => { const x = new Date(d + "T12:00:00"); return `יום ${DOW[x.getDay()]} · ${x.getDate()}.${x.getMonth() + 1}`; };
   let SES = null; try { SES = JSON.parse(lsGet(SKEY) || "null"); } catch { }
-  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "place", SORT = "km", CTX = null, DAYF = "", Q = "", SEL = null, OPENDAY = null, SELTRIP = null;
+  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "place", SORT = "km", CTX = null, DAYF = "", Q = "", NOTES = [], CUR = null, SEL = null, OPENDAY = null, SELTRIP = null;
 
   // ---- session (same storage and refresh as the dashboard) ----
   async function http(url, opt = {}) {
@@ -109,7 +109,7 @@
       return `<div class="day"><button aria-expanded="${open}" data-d="${d}"><span>${dlabel(d)} · ${nf(dayKm(d))} ק״מ</span><span aria-hidden="true">${open ? "▴" : "▾"}</span></button>
         ${open ? L.map((t, i) => { const k = `${d}|${i}`, on = CTX === k;
           return `<button class="trip${t.status === "not_done" ? " nd" : ""}" data-i="${k}" aria-current="${SELTRIP && SELTRIP.day === d && SELTRIP.i === i}">
-          <span>${hm(t.t0)}</span><span>${esc(pl(t, "a"))} ← ${esc(pl(t, "b"))}</span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}</span></button>
+          <span>${hm(t.t0)}</span><span>${esc(pl(t, "a"))} ← ${esc(pl(t, "b"))}</span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}${nOf(t).length ? ` <span class="tag mid" title="יש הערה">✎ ${nOf(t).length}</span>` : ""}</span></button>
           <button class="ctxb" data-c="${k}" aria-expanded="${on}">${on ? "▴" : "▾"} מה הרכב עשה לפני ואחרי</button>${on ? ctx(t) : ""}`; }).join("") : ""}</div>`;
     }).join("");
     box.querySelectorAll(".day>button:not(.trip):not(.ctxb)").forEach(b => b.onclick = () => { OPENDAY = OPENDAY === b.dataset.d ? "" : b.dataset.d; SELTRIP = null; detail(); });
@@ -134,6 +134,42 @@
       <span>${esc(pl(x, "a"))} ← ${esc(pl(x, "b"))}</span><span>${x.kind === "empty" ? TAG(x) : ""}</span></li>`).join("")}</ol>`;
   }
 
+  // ---- notes: a correction or explanation on one trip (David 19.11). Server: add_pva_note / pva_notes (editor and above);
+  // the local preview keeps them in this browser only (pulled from here for review).
+  const NTOP = { place: "המקום", km: "הק״מ", mark: "הסימון", other: "אחר" }, LKEY = "pva_notes_local";
+  const nOf = t => NOTES.filter(n => n.day === t.day && String(n.sidur) === String(t.sidur) && +n.t0 === +t.t0);
+  async function loadNotes(f, t) {
+    if (LOCAL) { try { NOTES = JSON.parse(lsGet(LKEY) || "[]"); } catch { NOTES = []; } return; }
+    try { NOTES = (await rpc("pva_notes", { p_operator: OP.id, p_from: f, p_to: t })) || []; } catch { NOTES = []; }
+  }
+  function notesHtml(t) {
+    const L = nOf(t);
+    return (L.length ? `<ul class="notes">${L.map(n => `<li>${n.mine || LOCAL ? `<button data-del="${esc(n.id)}" aria-label="מחיקת ההערה">מחיקה</button>` : ""}<b>${NTOP[n.topic] || ""}</b>${n.fix ? ` · הערך הנכון: ${esc(n.fix)}` : ""}<br>${esc(n.body)}</li>`).join("")}</ul>` : "")
+      + `<div class="nb"><button class="btn" id="bNote">✎ תיקון או הסבר</button></div>`;
+  }
+  function wireNotes(t) {
+    $("#bNote").onclick = () => { CUR = t; $("#nHead").textContent = `סידור ${t.sidur} · רכב ${t.veh} · ${dlabel(t.day)} · ${hm(t.t0)} · ${pl(t, "a")} ← ${pl(t, "b")}`;
+      $("#nTopic").value = t.plaus ? "mark" : "km"; $("#nFix").value = ""; $("#nBody").value = ""; $("#nMsg").textContent = ""; $("#dlgNote").showModal(); $("#nBody").focus(); };
+    document.querySelectorAll("#mapInfo [data-del]").forEach(b => b.onclick = async () => {
+      if (!confirm("למחוק את ההערה?")) return;
+      try { if (LOCAL) { NOTES = NOTES.filter(n => n.id !== b.dataset.del); lsSet(LKEY, JSON.stringify(NOTES)); } else { await rpc("delete_pva_note", { p_id: b.dataset.del }); NOTES = NOTES.filter(n => n.id !== b.dataset.del); } }
+      catch (e) { say("המחיקה נכשלה: " + e.message, true); return; }
+      detail();
+    });
+  }
+  $("#nClose").onclick = () => $("#dlgNote").close();
+  $("#nSave").onclick = async () => {
+    const body = $("#nBody").value.trim(), t = CUR, m = $("#nMsg");
+    if (!body) { m.className = "msg err"; m.textContent = "צריך לכתוב הסבר"; return; }
+    const n = { day: t.day, sidur: String(t.sidur), veh: t.veh, t0: t.t0, topic: $("#nTopic").value, fix: $("#nFix").value.trim(), body, mine: true };
+    $("#nSave").disabled = true; m.className = "msg"; m.textContent = "שומר…";
+    try {
+      if (LOCAL) { n.id = crypto.randomUUID(); n.at = new Date().toISOString(); NOTES.push(n); lsSet(LKEY, JSON.stringify(NOTES)); }
+      else { n.id = await rpc("add_pva_note", { p_operator: OP.id, p_day: n.day, p_sidur: n.sidur, p_veh: n.veh, p_t0: n.t0, p_topic: n.topic, p_fix: n.fix, p_body: n.body }); NOTES.push(n); }
+    } catch (e) { m.className = "msg err"; m.textContent = "השמירה נכשלה: " + e.message; $("#nSave").disabled = false; return; }
+    $("#nSave").disabled = false; $("#dlgNote").close(); detail();
+  };
+
   // ---- map card (Leaflet from assets/vendor, our route from the public OSRM, as in the dashboard) ----
   let map = null, lay = null, drawn = 0;
   function leaflet() {
@@ -151,6 +187,7 @@
     const gap = t.op_km != null && t.our_km != null ? Math.abs(t.op_km - t.our_km) : null, v = VERD[t.verdict] || VERD["n/a"];
     info.innerHTML = (t.plaus_why ? `<p class="why">${PTAG(t)} ${esc(t.plaus_why)}</p>` : "") + `<table><tr><td>ק״מ לפי המפעיל</td><td>${nf(t.op_km)}</td></tr><tr><td>ק״מ לפי הניתוב שלנו</td><td>${nf(t.our_km)}</td></tr>${t.g_km != null ? `<tr><td>ק״מ לפי גוגל</td><td>${nf(t.g_km)}</td></tr>` : ""}</table>
       <div class="foot"><span class="tag ${v[0]}">${v[1]}${gap != null ? ` (פער ${nf(Math.round(gap * 10) / 10)} ק״מ)` : ""}</span><span>סידור ${esc(t.sidur)} · רכב ${esc(t.veh)}${t.end_src === "unresolved" ? " · קצה לא ידוע" : t.end_src === "inferred" ? " · קצה משוער (לא כתוב בדוח)" : ""}</span></div>`;
+    info.insertAdjacentHTML("beforeend", notesHtml(t)); wireNotes(t);
     $("#mapLeg").innerHTML = `<span><i class="ln"></i> הניתוב שלנו</span><span>${esc(pl(t, "a"))} ← ${esc(pl(t, "b"))}</span>`;
     try { await leaflet(); } catch { info.insertAdjacentHTML("beforeend", `<div class="msg err">המפה לא נטענה</div>`); return; }
     if (my !== drawn) return;
@@ -196,6 +233,7 @@
     say("טוען…");
     try { DAYS = LOCAL ? await localDays(f, t) : (await rpc("get_pva", { p_operator: OP.id, p_from: f, p_to: t })) || []; }
     catch (e) { say("הטעינה נכשלה: " + e.message, true); return; }
+    await loadNotes(f, t);
     say(DAYS.length ? "" : "אין נתונים לתקופה הזו");
     const df = $("#fDay"); df.innerHTML = `<option value="">כל הימים</option>` + DAYS.map(d => `<option value="${esc(d.day)}">${dlabel(d.day)}</option>`).join("");
     DAYF = DAYS.length === 1 ? "" : (DAYS.some(d => d.day === DAYF) ? DAYF : ""); df.value = DAYF;

@@ -98,3 +98,15 @@ main{flex:1;padding:0 16px 12px}
 .filt select,.filt input{font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);width:100%}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .why{margin:6px 0;padding:8px 10px;background:var(--bg);border-radius:8px;font-size:14px}
+#dlgNote{border:1px solid var(--line);border-radius:12px;padding:16px;width:min(480px,calc(100vw - 32px));color:var(--text)}
+#dlgNote::backdrop{background:rgba(0,0,0,.35)}
+#dlgNote .dh{display:flex;justify-content:space-between;align-items:center}
+#dlgNote h3{margin:0}
+.fl{display:flex;flex-direction:column;gap:4px;margin:10px 0}
+.fl select,.fl input,.fl textarea{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+.df{display:flex;gap:12px;align-items:center}
+.btn.pri{background:var(--svc);color:#fff;border-color:var(--svc)}
+.notes{margin:8px 0 0;padding:0;list-style:none}
+.notes li{background:#fff8e6;border:1px solid #f1dfb0;border-radius:8px;padding:6px 10px;margin-top:6px;font-size:13px}
+.notes li button{all:unset;cursor:pointer;color:var(--warn);float:left;font-size:12px}
+.nb{display:flex;justify-content:flex-start;margin-top:8px}
