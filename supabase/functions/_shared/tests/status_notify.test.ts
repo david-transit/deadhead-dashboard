@@ -48,6 +48,5 @@ test("digest lists red before yellow", () => {
 });
 test("no emails or phone numbers in the text", () => {
   const n = [blk("bad"), it("mail_day", "מיילים היום", "warn", "82 מתוך 100")];
-  const r = decide([], n, AM0810, null);
-  for (const t of [r.immediate!, r.digest!]) { assert.ok(!t.includes("@")); assert.ok(!/\d{9,}/.test(t)) }
+  for (const t of [decide([], n, AM10, null).immediate!, decide([], n, AM0810, null).digest!]) { assert.ok(!t.includes("@")); assert.ok(!/\d{9,}/.test(t)) }
 });
