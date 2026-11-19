@@ -41,3 +41,29 @@ test("over 12MB: forwarded, and a JSON notice posted", async () => {
   assert.equal(f.calls[0].init.headers["content-type"], "application/json");
   assert.deepEqual(JSON.parse(f.calls[0].init.body), { oversize: true, from: "moshe@gmail.com", subject: "שאלה", size: 13 * 1024 * 1024 });
 });
+
+// COPY_TO (David, 19.11): until the /support/ screen is live, every mail is also copied to the technical Gmail and to Nadav
+const envCopy = { ...env, COPY_TO: "backup@gmail.com, nadav@x.com" };
+test("COPY_TO: copies always, mail still posted", async () => {
+  const f = withFetch(() => new Response("{}", { status: 200 }));
+  const m = msg(); await worker.email(m, envCopy, {}); f.restore();
+  assert.equal(f.calls.length, 1);
+  assert.deepEqual(m.forwards, ["backup@gmail.com", "nadav@x.com"]);
+});
+test("COPY_TO + 500: the backup is not forwarded twice", async () => {
+  const f = withFetch(() => new Response("", { status: 500 }));
+  const m = msg(); await worker.email(m, envCopy, {}); f.restore();
+  assert.deepEqual(m.forwards, ["backup@gmail.com", "nadav@x.com"]);
+});
+test("COPY_TO: a failed copy does not stop the post", async () => {
+  const f = withFetch(() => new Response("{}", { status: 200 }));
+  const m = msg(); m.forward = async (to) => { if (to === "nadav@x.com") throw new Error("unverified"); m.forwards.push(to); };
+  await worker.email(m, envCopy, {}); f.restore();
+  assert.equal(f.calls.length, 1);
+  assert.deepEqual(m.forwards, ["backup@gmail.com"]);
+});
+test("COPY_TO + over 12MB: copies, backup not twice", async () => {
+  const f = withFetch(() => new Response("{}", { status: 200 }));
+  const m = msg(13 * 1024 * 1024); await worker.email(m, envCopy, {}); f.restore();
+  assert.deepEqual(m.forwards, ["backup@gmail.com", "nadav@x.com"]);
+});
