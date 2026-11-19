@@ -11,7 +11,8 @@ const text = (items: Item[]) => [HEAD, ...items.map(line), `ללוח: ${PANEL_LI
 
 export function decide(prev: Item[], next: Item[], now: Date, lastDigestOn: string | null):
   { immediate: string | null; digest: string | null; markDigest: boolean } {
-  const wasBad = new Set(prev.filter(i => i.level === "bad").map(i => i.key));
+  // red_since survives a grey spell (source down), so red -> grey -> red is not "new"
+  const wasBad = new Set(prev.filter(i => i.level === "bad" || i.red_since).map(i => i.key));
   const fresh = next.filter(i => i.level === "bad" && !wasBad.has(i.key));
   const markDigest = ilHour(now) === 8 && lastDigestOn !== ilDate(now);
   const attn = [...next.filter(i => i.level === "bad"), ...next.filter(i => i.level === "warn")];

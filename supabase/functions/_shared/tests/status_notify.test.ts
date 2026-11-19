@@ -50,3 +50,7 @@ test("no emails or phone numbers in the text", () => {
   const n = [blk("bad"), it("mail_day", "מיילים היום", "warn", "82 מתוך 100")];
   for (const t of [decide([], n, AM10, null).immediate!, decide([], n, AM0810, null).digest!]) { assert.ok(!t.includes("@")); assert.ok(!/\d{9,}/.test(t)) }
 });
+test("red -> grey (source down) -> red again does not send twice", () => {
+  const grey = { ...blk("unknown"), red_since: "2026-11-19T07:00:00Z" };
+  assert.equal(decide([grey], [blk("bad")], AM10, "2026-11-19").immediate, null);
+});
