@@ -4,7 +4,8 @@
 // Supabase user id (Access login method "yalla-sa" = this project's OAuth server; docs: unified-gate-access-oidc.md).
 //
 // Contract (agreed with the yalla-sa architect, 2026-11-18; the body may change, the contract may not):
-//   POST {"user_id": "<uuid>", "module": "transit-studio"}   header x-internal-key: <TOOL_ACCESS_KEY>
+//   POST {"user_id": "<uuid>", "module": "transit-studio" | "notice-check" | "notice-create"}   header x-internal-key: <TOOL_ACCESS_KEY>
+//        (notices, 2026-11-19: one call per module; the tool maps notice-check any role -> view, notice-create editor+ -> edit)
 //   200  {"active": bool, "username", "display_name", "platform_admin": bool,
 //         "roles": [{"operator_id", "operator_name", "role": "viewer"|"editor"|"admin"}]}
 //        unknown, deleted or disabled user -> {"active": false, ...empty}: never a 404 that tells the user exists.

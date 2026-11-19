@@ -4,9 +4,12 @@
 
 export const ROLES = ["viewer", "editor", "admin"];
 // tools whose role lives in tool_roles (the portal's tiles.json "module"); deadhead stays in memberships
-export const TOOL_MODULES = ["studio"];
-// tool_access callers (allow-list) -> the module whose role they read
-export const CALLER_MODULE: Record<string, string> = { "transit-studio": "studio" };
+// notice-check / notice-create (2026-11-19): the passenger-notices module inside transit-studio, a separate role each
+export const TOOL_MODULES = ["studio", "notice-check", "notice-create"];
+// tool_access callers (allow-list) -> the module whose role they read. transit-studio calls once per module.
+export const CALLER_MODULE: Record<string, string> = {
+  "transit-studio": "studio", "notice-check": "notice-check", "notice-create": "notice-create",
+};
 
 export type Grant = { operator_id: string; role: string };
 export type ToolGrant = Grant & { module: string };
