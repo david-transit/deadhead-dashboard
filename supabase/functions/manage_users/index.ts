@@ -23,7 +23,7 @@
 // own recovery settings always need aal2; change_password / remove_my_mfa need aal2 when the user has a verified factor.
 // Passwords: only this function can set one (DB trigger on auth.users needs a one-shot permit, allow_pw_change).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { writeAllowed, tempExpiry, tempExpired, cleanContactEmail, createGrants } from "../_shared/account/policy.ts";
+import { writeAllowed, tempExpiry, tempExpired, cleanContactEmail, createGrants, moveInputOk } from "../_shared/account/policy.ts";
 import { sendDetails } from "../_shared/account/details.ts";
 import { supabaseDetailsDeps } from "../_shared/account/details_db.ts";
 import { brandFor } from "../_shared/mail/http.ts";
@@ -418,6 +418,7 @@ Deno.serve(async (req) => {
             memberships: visible.map((m) => ({ operator_id: m.operator_id, role: m.role })),
             tools: visibleT.map((m) => ({ module: m.module, operator_id: m.operator_id, role: m.role })),
             other_access: all.length + allT.length > visible.length + visibleT.length, platform: platformIds.has(p.user_id),
+            created_at: p.created_at,
             me: p.user_id === uid, manageable: await manageable(p.user_id), mfa: mfa.has(p.user_id),
             ...(isPlatform ? { has_email: withEmail.has(p.user_id) } : {}),
           });
@@ -480,6 +481,16 @@ Deno.serve(async (req) => {
         if (!canOp(op)) throw new Fail("not_allowed", 403);
         await admin.from("tool_roles").delete().eq("user_id", t).eq("operator_id", op).eq("module", mod).throwOnError();
         return out({ ok: true });
+      }
+
+      case "move_operator": { // user card: all of one user's access moves to another operator, atomically (higher role kept)
+        const t = await needTarget(), from = String(b.from || ""), to = String(b.to || "");
+        if (!moveInputOk(from, to)) throw new Fail("bad_input");
+        if (!canOp(from) || !canOp(to)) throw new Fail("not_allowed", 403);
+        const { data: moved, error } = await admin.rpc("move_operator", { p_user: t, p_from: from, p_to: to });
+        if (error) throw new Fail(/bad_input/.test(error.message) ? "bad_input" : "server_error", /bad_input/.test(error.message) ? 400 : 500);
+        await logEvent(uid, myProf.username, "operator_moved", { user: t, from, to, moved });
+        return out({ ok: true, moved });
       }
 
       case "set_platform": {

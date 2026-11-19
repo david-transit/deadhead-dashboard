@@ -4,7 +4,12 @@ import { TEMP_DAYS } from "./welcome.ts";
 import { ROLES, TOOL_MODULES } from "../access.ts";
 
 export const PLATFORM_ONLY: readonly string[] = ["create", "set_membership", "remove_membership", "set_tool_role", "remove_tool_role", "set_platform", "reset_password",
-  "reset_mfa", "set_disabled", "delete", "get_contact_email", "set_contact_email", "send_details"];
+  "reset_mfa", "set_disabled", "delete", "get_contact_email", "set_contact_email", "send_details", "move_operator"];
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// move_operator: both operator ids are uuids and differ
+export const moveInputOk = (from: unknown, to: unknown): boolean =>
+  typeof from === "string" && typeof to === "string" && UUID.test(from) && UUID.test(to) && from.toLowerCase() !== to.toLowerCase();
 
 export function writeAllowed(action: string, isPlatform: boolean, self: boolean): boolean {
   if (action === "set_name") return self || isPlatform;

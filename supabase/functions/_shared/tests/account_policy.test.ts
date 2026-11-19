@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PLATFORM_ONLY, writeAllowed, tempExpiry, tempExpired, cleanContactEmail } from "../account/policy.ts";
+import { PLATFORM_ONLY, writeAllowed, tempExpiry, tempExpired, cleanContactEmail, moveInputOk } from "../account/policy.ts";
 
 test("platform-only action list", () => {
-  assert.deepEqual([...PLATFORM_ONLY].sort(), ["create", "delete", "get_contact_email", "remove_membership", "remove_tool_role", "reset_mfa", "reset_password",
+  assert.deepEqual([...PLATFORM_ONLY].sort(), ["create", "delete", "get_contact_email", "move_operator", "remove_membership", "remove_tool_role", "reset_mfa", "reset_password",
     "send_details", "set_contact_email", "set_disabled", "set_membership", "set_platform", "set_tool_role"]);
 });
 test("operator admin: every write is refused", () => {
@@ -54,4 +54,17 @@ test("createGrants: unknown module or role -> bad_input", () => {
   for (const b of [{ role: "boss" }, { role: "none", tools: [{ module: "deadhead", role: "viewer" }] }, { role: "none", tools: [{ module: "x", role: "viewer" }] },
     { role: "none", tools: [{ module: "studio", role: "owner" }] }, { role: "none", tools: "studio" }])
     assert.throws(() => createGrants(b as Record<string, unknown>), /bad_input/, JSON.stringify(b));
+});
+
+test("move_operator: platform admin only", () => {
+  assert.equal(writeAllowed("move_operator", false, false), false);
+  assert.equal(writeAllowed("move_operator", false, true), false);
+  assert.equal(writeAllowed("move_operator", true, false), true);
+});
+test("move_operator input: two different uuids", () => {
+  const a = "11111111-1111-4111-8111-111111111111", b = "22222222-2222-4222-8222-222222222222";
+  assert.equal(moveInputOk(a, b), true);
+  assert.equal(moveInputOk(a, a), false);
+  assert.equal(moveInputOk(a, "op2"), false);
+  assert.equal(moveInputOk(undefined, b), false);
 });
