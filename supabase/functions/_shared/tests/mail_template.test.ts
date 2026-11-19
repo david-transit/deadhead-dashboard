@@ -40,3 +40,19 @@ test("replySubject", () => {
 });
 
 test("FROM", () => assert.equal(FROM, "יאללה־סע – שירות לקוחות <support@yalla-sa.app>"));
+
+test("links show a short address (a mail gateway may rewrite the href into a very long one)", () => {
+  const { html, text } = renderMail("כניסה לאתר: https://yalla-sa.app/\nאו https://yalla-sa.app/support/?a=1&b=2", brand);
+  assert.ok(html.includes('<a href="https://yalla-sa.app/" style="color:#0b6bcb">yalla-sa.app</a>'), html);
+  assert.ok(html.includes('<a href="https://yalla-sa.app/support/?a=1&amp;b=2" style="color:#0b6bcb">yalla-sa.app/support/?a=1&amp;b=2</a>'), html);
+  assert.ok(text.includes("כניסה לאתר: https://yalla-sa.app/"));
+});
+test("phone-friendly: viewport meta, long words wrap", () => {
+  const { html } = renderMail("x", brand);
+  assert.ok(html.includes('<meta name="viewport" content="width=device-width, initial-scale=1">'));
+  assert.ok(html.includes("word-break:break-word"));
+});
+test("no link markup injected from text", () => {
+  const { html } = renderMail('https://evil.example/"><script>x</script>', brand);
+  assert.ok(!html.includes("<script>"));
+});
