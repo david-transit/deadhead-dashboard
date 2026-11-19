@@ -50,6 +50,11 @@ class TestPlausibility(unittest.TestCase):
         L = [E(300, None, None), S(320, M, A)]
         label_vehicle(L); self.assertEqual(L[0]['plaus'], 'unknown')
 
+    def test_unknown_end_before_dispatcher_leg_ignored(self):
+        # 10.11 vehicle ...302: a planned leg to an unknown parking, then the dispatcher moves the bus Atarot -> Givat Shaul
+        L = [S(300, A, B), E(389, B, None, 'planned'), E(793, ATA, DEP), S(810, DEP, A)]
+        label_vehicle(L); self.assertEqual(L[2]['plaus'], 'explained')
+
     def test_only_dispatcher_trips_labelled(self):
         L = [S(300, A, B), E(400, B, A, 'planned'), S(420, A, B)]
         label_vehicle(L); self.assertNotIn('plaus', L[1])

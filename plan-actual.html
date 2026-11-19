@@ -11,7 +11,7 @@
 <title>יאללה־סע · תכנון מול ביצוע</title>
 <link rel="icon" href="mobile/icon.svg">
 <link rel="stylesheet" href="assets/fonts/fonts.css">
-<link rel="stylesheet" href="assets/pva.css?v=2026-11-18.48">
+<link rel="stylesheet" href="assets/pva.css?v=2026-11-19.1">
 </head>
 <body>
 <header>
@@ -44,11 +44,12 @@
   <section id="pExcess" role="tabpanel" aria-labelledby="tExcess" class="grid3">
     <div class="col list" aria-label="רשימה ממוינת">
       <div class="seg" role="group" aria-label="קיבוץ"><button class="on" id="gPlace" aria-pressed="true">לפי מקום</button><button id="gVeh" aria-pressed="false">לפי רכב</button><button id="gSid" aria-pressed="false">לפי סידור</button></div>
+      <div class="seg" role="group" aria-label="מיון"><button class="on" id="sKm" aria-pressed="true">הכי הרבה ק״מ</button><button id="sRev" aria-pressed="false">לבדיקה קודם</button></div>
       <ol id="rank" class="rank"></ol>
     </div>
     <div class="col days" id="days" aria-live="polite"></div>
     <div class="col mapcol">
-      <div class="mapcard"><div id="map" class="map" aria-label="מפה"></div>
+      <div class="mapcard"><button class="btn mapfull" id="bFull" aria-pressed="false">⛶ מסך מלא</button><div id="map" class="map" aria-label="מפה"></div>
         <div id="mapLeg" class="mapleg"></div><div id="mapInfo" class="mapinfo"></div></div>
     </div>
   </section>
@@ -64,8 +65,8 @@
   <span><span class="tag ok">מוסבר</span> / <span class="tag mid">דרך מוסך</span> / <span class="tag bad">לא מסתדר</span> = האם יום הרכב מסביר את התוספת</span>
   <span><i class="ln ours"></i> = הניתוב שלנו</span>
 </footer>
-<script src="assets/map.js?v=2026-11-18.48"></script>
-<script src="assets/pva-tabs.js?v=2026-11-18.48"></script>
-<script src="assets/pva.js?v=2026-11-18.48"></script>
+<script src="assets/map.js?v=2026-11-19.1"></script>
+<script src="assets/pva-tabs.js?v=2026-11-19.1"></script>
+<script src="assets/pva.js?v=2026-11-19.1"></script>
 </body>
 </html>

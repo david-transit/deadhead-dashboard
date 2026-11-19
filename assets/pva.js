@@ -10,7 +10,7 @@
   const DOW = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
   const dlabel = d => { const x = new Date(d + "T12:00:00"); return `יום ${DOW[x.getDay()]} · ${x.getDate()}.${x.getMonth() + 1}`; };
   let SES = null; try { SES = JSON.parse(lsGet(SKEY) || "null"); } catch { }
-  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "place", SEL = null, OPENDAY = null, SELTRIP = null;
+  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "place", SORT = "km", CTX = null, SEL = null, OPENDAY = null, SELTRIP = null;
 
   // ---- session (same storage and refresh as the dashboard) ----
   async function http(url, opt = {}) {
@@ -64,10 +64,10 @@
     for (const t of trips()) {
       const k = gkey(t); if (k == null) continue;
       const e = excess(t); if (!e) continue;
-      const x = g.get(k) || { k, km: 0, n: 0, r: 0, days: new Set() }; g.set(k, x);
-      x.km += e; x.n++; x.days.add(t.day); if (REVIEW.has(t.plaus)) x.r++;
+      const x = g.get(k) || { k, km: 0, n: 0, r: 0, rk: 0, days: new Set() }; g.set(k, x);
+      x.km += e; x.n++; x.days.add(t.day); if (REVIEW.has(t.plaus)) { x.r++; x.rk += e; }
     }
-    return [...g.values()].filter(x => x.km > 0).sort((a, b) => b.km - a.km);
+    return [...g.values()].filter(x => x.km > 0).sort((a, b) => SORT === "review" ? (b.rk - a.rk) || (b.r - a.r) || (b.km - a.km) : b.km - a.km);
   }
   const gkey = t => GROUP === "place" ? (t.desc || `${place(t.a)} ← ${place(t.b)} (מסלול שאינו במפה)`) : GROUP === "veh" ? t.veh : t.sidur;
   const gname = k => GROUP === "place" ? k : GROUP === "veh" ? "רכב " + k : "סידור " + k;
@@ -81,7 +81,7 @@
     if (SEL == null || !G.some(x => x.k === SEL)) SEL = G.length ? G[0].k : null;
     $("#rank").innerHTML = G.length ? G.map(x => `<li><button data-k="${esc(x.k)}" aria-current="${x.k === SEL}">
       <span class="nm">${esc(gname(x.k))}</span><span class="km">${nf(x.km)} ק״מ</span>
-      <span class="s">${x.days.size === 1 ? "ביום אחד" : `ב־${x.days.size} ימים`} · ${x.n === 1 ? "נסיעה אחת" : `${x.n} נסיעות`}${x.r ? ` · ${x.r} לבדיקה` : ""}</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(4, x.km / top * 100)}%"></i></span></button></li>`).join("")
+      <span class="s">${x.days.size === 1 ? "ביום אחד" : `ב־${x.days.size} ימים`} · ${x.n === 1 ? "נסיעה אחת" : `${x.n} נסיעות`}${x.r ? ` · ${x.r} לבדיקה (${nf(Math.round(x.rk * 10) / 10)} ק״מ)` : ""}</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(4, x.km / top * 100)}%"></i></span></button></li>`).join("")
       : `<li class="empty">אין תוספות בתקופה</li>`;
     $("#rank").querySelectorAll("button").forEach(b => b.onclick = () => { SEL = GROUP === "veh" ? +b.dataset.k : b.dataset.k; OPENDAY = null; SELTRIP = null; rank(); detail(); if (innerWidth < 900) $("#days").scrollIntoView({ behavior: "smooth" }); });
     detail();
@@ -103,10 +103,13 @@
     box.innerHTML = `<h2>${esc(gname(SEL))} · ${nf(tot)} ק״מ שהוסיף הסדרן</h2>` + ds.map(d => {
       const open = d === OPENDAY, L = byDay.get(d).sort((a, b) => a.t0 - b.t0);
       return `<div class="day"><button aria-expanded="${open}" data-d="${d}"><span>${dlabel(d)} · ${nf(dayKm(d))} ק״מ</span><span aria-hidden="true">${open ? "▴" : "▾"}</span></button>
-        ${open ? L.map((t, i) => `<button class="trip${t.status === "not_done" ? " nd" : ""}" data-i="${d}|${i}" aria-current="${SELTRIP && SELTRIP.day === d && SELTRIP.i === i}">
-          <span>${hm(t.t0)}</span><span>${esc(place(t.a))} ← ${esc(place(t.b))}</span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}</span></button>`).join("") : ""}</div>`;
+        ${open ? L.map((t, i) => { const k = `${d}|${i}`, on = CTX === k;
+          return `<button class="trip${t.status === "not_done" ? " nd" : ""}" data-i="${k}" aria-current="${SELTRIP && SELTRIP.day === d && SELTRIP.i === i}">
+          <span>${hm(t.t0)}</span><span>${esc(place(t.a))} ← ${esc(place(t.b))}</span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}</span></button>
+          <button class="ctxb" data-c="${k}" aria-expanded="${on}">${on ? "▴" : "▾"} מה הרכב עשה לפני ואחרי</button>${on ? ctx(t) : ""}`; }).join("") : ""}</div>`;
     }).join("");
-    box.querySelectorAll(".day>button").forEach(b => b.onclick = () => { OPENDAY = OPENDAY === b.dataset.d ? "" : b.dataset.d; SELTRIP = null; detail(); });
+    box.querySelectorAll(".day>button:not(.trip):not(.ctxb)").forEach(b => b.onclick = () => { OPENDAY = OPENDAY === b.dataset.d ? "" : b.dataset.d; SELTRIP = null; detail(); });
+    box.querySelectorAll(".ctxb").forEach(b => b.onclick = () => { CTX = CTX === b.dataset.c ? null : b.dataset.c; detail(); });
     box.querySelectorAll(".trip").forEach(b => b.onclick = () => {
       const [d, i] = b.dataset.i.split("|"); SELTRIP = { day: d, i: +i }; detail();
       if (innerWidth < 900) $("#map").scrollIntoView({ behavior: "smooth" });
@@ -114,6 +117,17 @@
     const L = OPENDAY && byDay.get(OPENDAY) ? byDay.get(OPENDAY).sort((a, b) => a.t0 - b.t0) : [];
     if (!SELTRIP && L.length) { const i = Math.max(0, L.findIndex(t => excess(t) > 0)); SELTRIP = { day: OPENDAY, i }; box.querySelector(`[data-i="${OPENDAY}|${i}"]`)?.setAttribute("aria-current", "true"); }
     drawMap(SELTRIP && byDay.get(SELTRIP.day) ? byDay.get(SELTRIP.day)[SELTRIP.i] : null);
+  }
+
+  // the vehicle's day around a leg: from the empty leg before the service block that precedes it to the empty leg after
+  // the service block that follows it, so the dispatcher's reasoning can be followed
+  function ctx(t) {
+    const V = trips().filter(x => x.day === t.day && x.veh === t.veh && x.status !== "not_done").sort((a, b) => a.t0 - b.t0);
+    let i = V.findIndex(x => x.t0 === t.t0 && x.sidur === t.sidur && x.kind === t.kind); if (i < 0) return "";
+    let a = i; while (a > 0 && V[a - 1].kind === "empty") a--; while (a > 0 && V[a - 1].kind !== "empty") a--; if (a > 0) a--;
+    let b = i; while (b + 1 < V.length && V[b + 1].kind === "empty") b++; while (b + 1 < V.length && V[b + 1].kind !== "empty") b++; if (b + 1 < V.length) b++;
+    return `<ol class="ctx">${V.slice(a, b + 1).map(x => `<li${x === V[i] ? ' class="me"' : ""}><span>${hm(x.t0)}</span><span>${x.kind === "service" ? "קו " + esc(x.line || "") : "ריקה"} · סידור ${esc(x.sidur)}</span>
+      <span>${esc(place(x.a))} ← ${esc(place(x.b))}</span><span>${x.kind === "empty" ? TAG(x) : ""}</span></li>`).join("")}</ol>`;
   }
 
   // ---- map card (Leaflet from assets/vendor, our route from the public OSRM, as in the dashboard) ----
@@ -195,8 +209,13 @@
     say(n ? `נשמרו ${n} ימים` : "לא נמצאו ימים בנויים בתקופה"); if (n) load();
   }
 
-  const setGroup = g => { GROUP = g; [["gPlace", "place"], ["gVeh", "veh"], ["gSid", "sid"]].forEach(([id, v]) => { $("#" + id).className = v === g ? "on" : ""; $("#" + id).setAttribute("aria-pressed", v === g); }); SEL = null; OPENDAY = null; SELTRIP = null; rank(); };
+  const setGroup = g => { GROUP = g; [["gPlace", "place"], ["gVeh", "veh"], ["gSid", "sid"]].forEach(([id, v]) => { $("#" + id).className = v === g ? "on" : ""; $("#" + id).setAttribute("aria-pressed", v === g); }); SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; rank(); };
   $("#gPlace").onclick = () => setGroup("place"); $("#gVeh").onclick = () => setGroup("veh"); $("#gSid").onclick = () => setGroup("sid");
+  const setSort = v => { SORT = v; $("#sKm").className = v === "km" ? "on" : ""; $("#sRev").className = v === "review" ? "on" : ""; $("#sKm").setAttribute("aria-pressed", v === "km"); $("#sRev").setAttribute("aria-pressed", v === "review"); SEL = null; OPENDAY = null; SELTRIP = null; rank(); };
+  $("#sKm").onclick = () => setSort("km"); $("#sRev").onclick = () => setSort("review");
+  const full = on => { const c = $(".mapcard"); c.classList.toggle("full", on); $("#bFull").textContent = on ? "✕ סגירה" : "⛶ מסך מלא"; $("#bFull").setAttribute("aria-pressed", on); if (map) setTimeout(() => { map.invalidateSize(); const b = L.featureGroup(lay.getLayers()).getBounds(); if (b.isValid()) map.fitBounds(b, { padding: [40, 40] }); }, 80); };
+  $("#bFull").onclick = () => full(!$(".mapcard").classList.contains("full"));
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && $(".mapcard").classList.contains("full")) full(false); });
   $("#bLoad").onclick = load; $("#bLocal").onclick = loadLocal;
 
   (async () => {

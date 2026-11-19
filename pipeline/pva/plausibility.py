@@ -36,6 +36,10 @@ def label_vehicle(trips):
         i = j + 1
         if not any(t.get('empty_kind') == 'dispatcher' for t in chain):
             continue
+        # an operator leg to an unknown place before the first dispatcher leg says nothing about the dispatcher's move
+        first_d = next(k for k, t in enumerate(chain) if t.get('empty_kind') == 'dispatcher')
+        cut = max((k + 1 for k in range(first_d) if chain[k].get('b') is None), default=0)
+        chain = chain[cut:]
         start, end = chain[0].get('a'), chain[-1].get('b')
         mids = [t.get('b') for t in chain[:-1]]
         if start is None or end is None or any(m is None for m in mids):
