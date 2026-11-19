@@ -3,7 +3,16 @@
    Every rule here is scoped under .sv and is specific enough to beat the app's generic input/table rules
    (e.g. "table.ed input{width:100%}"). No absolute positioning outside the timeline track. */
 .sv{container-type:inline-size;display:flex;flex-direction:column;gap:12px;padding:14px 20px;min-width:0;max-width:100%}
+/* The panel root can be the dialog body itself (max-height + overflow:auto). Sections must keep their
+   natural height and let that body scroll; flex-shrink would squeeze them and their content would spill
+   over the next section (the rules box drawn under the run strip / "why not" row). */
+.sv>*{flex:0 0 auto;min-height:auto}
+.sv>.panel{min-height:auto}
 .sv *,.sv *::before,.sv *::after{box-sizing:border-box}
+/* never wider than the window, whatever the page around it does */
+dialog:has(>.sv){max-width:min(1320px,calc(100vw - 24px));overflow:hidden}
+dialog:has(>.sv)>.sv{max-height:min(78vh,calc(100dvh - 90px));overflow:auto;overflow-x:hidden}
+#dlgSav>.sv{padding:14px 20px} /* the app's "#savBody{padding:0}" is an id rule; without this the text touches the edge */
 .sv h2{margin:0;font-size:20px}
 .sv h3{margin:0;font-size:16px}
 .sv h4{margin:16px 0 6px;font-size:14px}

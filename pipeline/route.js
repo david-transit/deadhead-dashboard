@@ -45,5 +45,15 @@ if (!LOCAL) {
 const rl = readline.createInterface({ input: process.stdin });
 let chain = Promise.resolve();
 rl.on("line", line => { chain = chain.then(async () => {
-  let r = null; try { const q = JSON.parse(line); r = await R.smart(q.a, q.b, { terminal: q.t }); } catch (e) { r = null; }
+  let r = null; try { const q = JSON.parse(line);
+    if (q.g) { // geometry of the road between two stops, or through points p (of a licensed shape, each with its direction h
+      // within 45 degrees and snapped within rad m): our server, else the public one
+      const ll = p => `${(+p[1]).toFixed(6)},${(+p[0]).toFixed(6)}`, pp = q.p || [q.a, q.b];
+      const u = `/route/v1/driving/${pp.map(ll).join(";")}?overview=full&geometries=geojson&continue_straight=true` + (q.h ?
+        `&bearings=${q.h.map(x => x == null ? "" : `${Math.round(x)},45`).join(";")}&radiuses=${q.h.map(() => q.rad || 25).join(";")}` : "");
+      let j = null; for (const base of LOCAL ? [LOCAL, PUBLIC] : [PUBLIC]) { for (let t = 0; t < 3 && !j; t++) { try { j = await fetchJ(base + u, 20000); } catch (e) { await new Promise(z => setTimeout(z, 1500)); } } if (j && j.code === "Ok") break; }
+      r = j && j.code === "Ok" ? { km: Math.round(j.routes[0].distance) / 1000, g: j.routes[0].geometry.coordinates.map(c => [+c[1].toFixed(6), +c[0].toFixed(6)]) } : null;
+      await new Promise(z => setTimeout(z, 120));
+      process.stdout.write(JSON.stringify(r) + "\n"); return; }
+    r = await R.smart(q.a, q.b, { terminal: q.t, ...(q.h ? { h: q.h, tol: q.tol, rad: q.rad } : {}) }); } catch (e) { r = null; }
   process.stdout.write(JSON.stringify(r) + "\n"); }); });

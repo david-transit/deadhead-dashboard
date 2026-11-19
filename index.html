@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="יאללה־סע">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link href="assets/fonts/fonts.css?v=2026-11-18.40" rel="stylesheet">
+<link href="assets/fonts/fonts.css?v=2026-11-19.13" rel="stylesheet">
 <style>
 :root{--gold:#B8860B;--char:#4A5059;--blue:#1F6FEB;--dim:#D9DDE2;--bg:#F5F6F8;--card:#fff;--line:#E3E6EB;--text:#1d2330;--muted:#6b7280;--svc:#1F4E9A;--empty:#E8871E;--depot:#5B3A8C;--rein:#2E8B57;--sel:#E8F0FC;--warn:#C62828;--ok:#2E9E4F}
 *{box-sizing:border-box}
@@ -170,6 +170,12 @@ body.dense .row .lab .fuelb{display:none}
 .vehnav .pos{font-size:12px;color:var(--muted);min-width:70px;text-align:center}
 .vehnav select{max-width:190px}
 .vehnav .sp{flex:1}
+.rpnav{padding:0 0 8px;margin-bottom:8px;background:none}
+.rpnav .rphd{font-size:14px}
+.badge.forced{background:var(--bg);color:var(--muted);border:1px solid var(--line);font-weight:500}
+.forcedx{color:var(--muted)}
+.badge.forcedq{background:#FFF7E6;color:#8A5A00;border:1px solid #F0D49A;font-weight:500}
+.forcedw{color:#8A5A00}
 .vehdlg #side{flex:1;min-height:0;border:0;border-radius:0;overflow:auto}
 .vehdlg #side>h2{display:none}
 .rwg.rwback{outline:3px solid var(--blue);outline-offset:2px;border-radius:8px;transition:outline-color .4s}
@@ -186,6 +192,11 @@ body.dense .row .lab .fuelb{display:none}
 .it.dep{color:var(--depot);background:#F6F2FB}
 .it.wait{color:var(--muted)}
 .it .sub{display:block;color:var(--muted);font-size:12px}
+.asmb{border:0;background:none;color:var(--blue);font-weight:700;font-size:15px;line-height:1;font-family:inherit;padding:0 4px;margin:0 1px;cursor:help;vertical-align:super;min-width:22px;min-height:22px}
+.asmb:focus-visible{outline:2px solid var(--blue);border-radius:4px}
+.it .asmx{display:none}
+.it .asmx.open,.it:has(.asmb:hover) .asmx,.it:has(.asmb:focus-visible) .asmx{display:block}
+.asmx{color:var(--text)!important;background:var(--card);border-inline-start:3px solid var(--blue);padding:4px 8px;margin:4px 0}
 .it label{display:inline-flex;gap:4px;align-items:center;font-size:12px;color:var(--text);margin-top:2px;cursor:pointer}
 .tot{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;padding:10px 6px;border-bottom:1px solid var(--line)}
 .tot b{display:block;font-size:18px}
@@ -265,7 +276,7 @@ body.locked>.legend{visibility:hidden}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 @media (max-width:900px){body{height:auto}.legend{position:sticky;bottom:0}.cards{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 16px 0}main{grid-template-columns:minmax(0,1fr);padding:12px 16px}#gantt{height:60vh}#gantt .track{min-width:720px}.axis,.row{grid-template-columns:120px 1fr}header{padding:10px 16px}.controls{margin:0}input[type=search]{width:100%}.card .v{font-size:22px}}
 </style>
-<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-18.40">
+<link rel="stylesheet" href="mobile/mobile.css?v=2026-11-19.13">
 </head>
 <body class="locked">
 <div id="gate" class="intro">
@@ -329,6 +340,7 @@ body.locked>.legend{visibility:hidden}
     <button class="btn keep" id="bFind" aria-haspopup="dialog" aria-controls="dlgFind" title="מי ביצע נסיעה: קו, כיוון ושעה">חיפוש נסיעה</button>
     <button class="btn small keep linef" id="bLineF" hidden title="הסרת הסינון לפי קו"></button>
     <select id="opSel" aria-label="מפעיל" hidden></select>
+    <a class="btn" id="bPva" href="plan-actual.html" hidden title="השוואה לקבצי המפעיל (עורכים ומעלה)">תכנון מול ביצוע</a>
     <button class="btn iconbtn" id="bSav" title="הצעות חיסכון" aria-label="הצעות חיסכון"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l-4 4 4 4"/><path d="M3 8h13"/><path d="M17 20l4-4-4-4"/><path d="M21 16H8"/></svg></button>
     <button class="btn iconbtn" id="bSettings" title="הגדרות" aria-label="הגדרות"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <div class="savebar keep" id="saveBar" hidden><button class="btn primary" id="bSave" disabled>שמירה <span id="nDraft"></span></button><button class="btn" id="bUndo" disabled title="ביטול כל השינויים שלא נשמרו">ביטול</button></div>
@@ -448,6 +460,7 @@ body.locked>.legend{visibility:hidden}
     <button data-tab="fuel_stations" role="tab">תחנות דלק וגז</button>
     <button data-tab="driver_change_points" role="tab">נקודות החלפת נהגים</button>
     <button data-tab="stop_anchors" role="tab">נקודות עיגון לתחנות</button>
+    <button data-tab="forced_legs" role="tab">נסיעות ריקות מוכרחות</button>
     <button data-tab="via_links" role="tab" hidden>נקודות מעבר מאושרות</button>
     <button data-tab="defaults" role="tab">ברירות מחדל</button>
     <button data-tab="vehicles" role="tab">רכבים</button>
@@ -458,11 +471,11 @@ body.locked>.legend{visibility:hidden}
 
 <!-- sign-in durations: one shared file at the site root (yalla-sa.app portal); app.js falls back to the same defaults -->
 <script src="/assets/auth-settings.js"></script>
-<script src="assets/logo.js?v=2026-11-18.40"></script>
-<script src="assets/core.js?v=2026-11-18.40"></script>
-<script src="assets/route.js?v=2026-11-18.40"></script>
-<script src="assets/map.js?v=2026-11-18.40"></script>
-<script src="assets/app.js?v=2026-11-18.40"></script>
-<script src="mobile/mobile.js?v=2026-11-18.40"></script>
+<script src="assets/logo.js?v=2026-11-19.13"></script>
+<script src="assets/core.js?v=2026-11-19.13"></script>
+<script src="assets/route.js?v=2026-11-19.13"></script>
+<script src="assets/map.js?v=2026-11-19.13"></script>
+<script src="assets/app.js?v=2026-11-19.13"></script>
+<script src="mobile/mobile.js?v=2026-11-19.13"></script>
 </body>
 </html>

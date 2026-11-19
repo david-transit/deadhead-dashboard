@@ -107,6 +107,27 @@ jobs:
           echo "days=$list" >> "$GITHUB_OUTPUT"
           echo "to build:$list"
 
+      # Licensed route shapes of the operator from the MOT GTFS of each day built (pipeline/gtfs_shapes.py, README "קווי
+      # הרישוי"): the day's file from the Open Bus archive of the MOT GTFS (routes change from day to day), else today's MOT
+      # file; ~140 MB each, to the runner's temp folder (outside the checkout), only the operator's shapes kept.
+      - name: Line shapes from the MOT GTFS of each day
+        if: steps.days.outputs.days != ''
+        env:
+          SLUG: ${{ matrix.op.slug }}
+          DAYS: ${{ steps.days.outputs.days }}
+        run: |
+          set -eu
+          t="$RUNNER_TEMP/gtfs-mot"; mkdir -p "$t" pipeline/cache
+          for d in $DAYS; do
+            y=${d:0:4}; m=${d:5:2}; dd=${d:8:2}
+            if curl -sSf -m 900 --retry 3 -o "$t/gtfs.zip" "https://openbus-stride-public.s3.eu-west-1.amazonaws.com/gtfs_archive/$y/$m/$dd/israel-public-transportation.zip"                || curl -sSf -m 900 --retry 3 -A "Mozilla/5.0" -o "$t/gtfs.zip" https://gtfs.mot.gov.il/gtfsfiles/israel-public-transportation.zip; then
+              python -I pipeline/gtfs_shapes.py "$t/gtfs.zip" --op "$SLUG" --out "pipeline/cache/gtfs_shapes_${SLUG}_$d.json" || echo "::warning::GTFS shapes failed for $d"
+            else
+              echo "::warning::no GTFS for $d: empty legs from a GPS point use OSRM between stops, no route-deviation check"
+            fi
+            rm -f "$t/gtfs.zip"
+          done
+
       # Our own OSRM with the bus profile from transit-studio (pipeline/osrm/README.md): graph cached per extract week +
       # profile hash, rebuilt weekly; osrm-routed on 127.0.0.1:5000 for this job only.
       # OFF until David approves the bus-vs-car review: repository variable DEADHEAD_ROUTING=bus switches it on.
@@ -156,7 +177,29 @@ jobs:
             echo "== $d"
             timeout 110m python pipeline/build_day.py "$d" --op "$SLUG"  # first run after the route check (v3) re-routes the whole cache
           done
-          rm -f "$DATA_KEY_FILE" data/*/day_*.json data/*/ends_*.json
+          rm -f "$DATA_KEY_FILE"
+
+      # Road warnings of the days built, checked against Google Routes (PRD R51, tools/google_route_check.py): only pairs
+      # without an answer in route_google; calls counted in the shared counter (google_take: 300 a day, 4,500 a month).
+      # A missing secret or a failure skips it quietly: never fails the build.
+      - name: Route warnings vs Google
+        if: steps.days.outputs.days != ''
+        continue-on-error: true
+        env:
+          GOOGLE_ROUTES_API_KEY: ${{ secrets.GOOGLE_ROUTES_API_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLUG: ${{ matrix.op.slug }}
+          DAYS: ${{ steps.days.outputs.days }}
+        run: |
+          set -u
+          if [ -z "${GOOGLE_ROUTES_API_KEY:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then echo "Google check skipped: secret missing"; exit 0; fi
+          f=""; for d in $DAYS; do [ -f "data/$SLUG/day_$d.json" ] && f="$f data/$SLUG/day_$d.json"; done
+          [ -n "$f" ] || { echo "no day file"; exit 0; }
+          timeout 10m python -I tools/google_route_check.py --op "$SLUG" --days $f || echo "::warning::Google check failed (skipped)"
+
+      - name: Remove plaintext day files
+        if: always()
+        run: rm -f data/*/day_*.json data/*/ends_*.json
 
       - name: Save caches
         if: always() && steps.days.outputs.days != ''

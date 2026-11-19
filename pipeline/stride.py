@@ -66,7 +66,7 @@ def update_route_ends(rides, cache_file):
     need = {}
     for x in rides:
         k = str(x["gtfs_ride__gtfs_route_id"])
-        if x["gtfs_ride_id"] and k not in ends:
+        if x["gtfs_ride_id"] and (k not in ends or "st" not in ends[k]):  # v2: + stop sequence
             need.setdefault(k, x["gtfs_ride_id"])
     ids = list(need.values())
     print("route ends needed:", len(ids), file=sys.stderr)
@@ -86,7 +86,8 @@ def update_route_ends(rides, cache_file):
             a, b = ss[0], ss[-1]
             ends[str(rid)] = {"o": [a["gtfs_stop__lat"], a["gtfs_stop__lon"], a["gtfs_stop__name"], a["gtfs_stop__city"]],
                               "d": [b["gtfs_stop__lat"], b["gtfs_stop__lon"], b["gtfs_stop__name"], b["gtfs_stop__city"]],
-                              "km": (b["shape_dist_traveled"] or 0) / 1000}
+                              "km": (b["shape_dist_traveled"] or 0) / 1000,
+                              "st": [[s["gtfs_stop__lat"], s["gtfs_stop__lon"], s["shape_dist_traveled"] or 0] for s in ss]}
         print("route ends:", i + 15, "/", len(ids), file=sys.stderr)
         json.dump(ends, open(cache_file, "w", encoding="utf-8"), ensure_ascii=False)
     return ends
@@ -94,16 +95,17 @@ def update_route_ends(rides, cache_file):
 
 def fetch_locations(rides, cache_file):
     """First + last SIRI vehicle location of every ride (actual GPS start/end), batched by id and cached per day.
-    Returns {location_id: [recorded_at_iso, lat, lon, distance_from_journey_start_m]}."""
+    Returns {location_id: [recorded_at_iso, lat, lon, distance_from_journey_start_m, bearing_deg, velocity]}."""
     cache = json.load(open(cache_file, encoding="utf-8")) if os.path.exists(cache_file) else {}
     ids = sorted({str(i) for x in rides for i in (x.get("first_vehicle_location_id"), x.get("last_vehicle_location_id")) if i})
-    need = [i for i in ids if i not in cache]
+    need = [i for i in ids if i not in cache or (cache[i] is not None and len(cache[i]) < 6)]  # v2: + bearing, velocity
     print("vehicle locations:", len(ids), "to fetch:", len(need), file=sys.stderr)
     for k in range(0, len(need), 100):
         part = need[k:k + 100]
         for x in get("/siri_vehicle_locations/list", {"limit": 500, "siri_vehicle_location_ids": ",".join(part)}):
-            cache[str(x["id"])] = [x["recorded_at_time"], x["lat"], x["lon"], x["distance_from_journey_start"]]
+            cache[str(x["id"])] = [x["recorded_at_time"], x["lat"], x["lon"], x["distance_from_journey_start"], x.get("bearing"), x.get("velocity")]
         for i in part:
+            if cache.get(i) is not None and len(cache[i]) < 6: cache[i] = cache[i] + [None, None]  # not returned again
             cache.setdefault(i, None)  # not returned: remember, do not ask again
         if k // 100 % 10 == 9:
             print("locations:", k + 100, "/", len(need), file=sys.stderr)
@@ -111,3 +113,46 @@ def fetch_locations(rides, cache_file):
     json.dump(cache, open(tmp, "w", encoding="utf-8"))
     os.replace(tmp, cache_file)
     return cache
+
+
+def fetch_traces(rides, cache_file):
+    """Every SIRI vehicle location of every ride (about one a minute), 100 rides per call, cached per day:
+    {ride_id: [[recorded_at_iso, lat, lon, distance_from_journey_start_m], ...] sorted by time}. Used to tell which road
+    a bus was on just before its GPS end (start) and for the route-deviation check (~2 min, ~17 calls a day)."""
+    if os.path.exists(cache_file):
+        return json.load(open(cache_file, encoding="utf-8"))
+    ids = [str(x["id"]) for x in rides if x.get("vehicle_ref")]
+    out = {i: [] for i in ids}
+    for k in range(0, len(ids), 100):
+        part = ids[k:k + 100]
+        for x in get("/siri_vehicle_locations/list", {"limit": 15000, "siri_rides__ids": ",".join(part)}):
+            if x["lat"] and 29 < x["lat"] < 34:
+                out.setdefault(str(x["siri_ride__id"]), []).append([x["recorded_at_time"], x["lat"], x["lon"], x["distance_from_journey_start"]])
+        print("traces:", min(k + 100, len(ids)), "/", len(ids), file=sys.stderr)
+    for v in out.values():
+        v.sort()
+    tmp = cache_file + ".tmp"
+    json.dump(out, open(tmp, "w", encoding="utf-8"))
+    os.replace(tmp, cache_file)
+    return out
+
+
+def fetch_gtfs_rides(day, operator_ref, cache_file):
+    """Every licensed trip of the operator on that date, as Stride imported it from that day's MOT GTFS (gtfs_rides +
+    gtfs_route): [{id, journey_ref (= trip_id), start_time, end_time, line_ref (= route_id), mkt, dir, alt, short}], cached."""
+    if os.path.exists(cache_file):
+        return json.load(open(cache_file, encoding="utf-8"))
+    out, off = [], 0
+    while True:
+        rows = get("/gtfs_rides/list", {"limit": 5000, "offset": off, "gtfs_route__operator_refs": operator_ref,
+                                        "gtfs_route__date_from": day, "gtfs_route__date_to": day})
+        out += [dict(id=r["id"], journey_ref=r["journey_ref"], start_time=r["start_time"], end_time=r["end_time"],
+                     line_ref=r["gtfs_route__line_ref"], route_id=r["gtfs_route_id"], mkt=r["gtfs_route__route_mkt"],
+                     dir=r["gtfs_route__route_direction"], alt=r["gtfs_route__route_alternative"], short=r["gtfs_route__route_short_name"])
+                for r in rows]
+        if len(rows) < 5000: break
+        off += 5000
+    tmp = cache_file + ".tmp"
+    json.dump(out, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
+    os.replace(tmp, cache_file)
+    return out

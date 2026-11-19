@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<!-- R53 "תכנון מול ביצוע". Same policy as index.html: every script is a file, no inline script or handler. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self' https://xghfcdgettrcdciwwzbl.supabase.co https://router.project-osrm.org; worker-src 'self'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<script src="assets/frame.js"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>יאללה־סע · תכנון מול ביצוע</title>
+<link rel="icon" href="mobile/icon.svg">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<link rel="stylesheet" href="assets/pva.css?v=2026-11-19.13">
+</head>
+<body>
+<header>
+  <a class="brand" href="index.html" title="חזרה לדשבורד הנסיעות הריקות"><img src="mobile/icon.svg" alt="יאללה־סע" class="ys"></a>
+  <span class="oplogo" id="opLogo" hidden></span>
+  <div class="title"><h1>תכנון מול ביצוע</h1><div id="sub" class="sub"></div></div>
+  <div class="controls">
+    <label class="per">מ־<input type="date" id="dFrom" aria-label="מתאריך"></label>
+    <label class="per">עד <input type="date" id="dTo" aria-label="עד תאריך"></label>
+    <button class="btn" id="bLoad">הצגה</button>
+    <button class="btn" id="bFile" hidden title="מנהל פלטפורמה בלבד: קובצי pva_יום.json שנבנו במחשב">טעינת ימים מקובץ</button><input type="file" id="fFile" accept=".json,application/json" multiple hidden>
+    <a class="back" href="index.html">‹ חזרה לדשבורד</a>
+  </div>
+</header>
+<nav class="tabs" role="tablist" aria-label="לשוניות">
+  <button role="tab" id="tExcess" aria-selected="true" aria-controls="pExcess">תוספות ביום הביצוע</button>
+  <button role="tab" id="tSid" aria-selected="false" aria-controls="pSid">סידורים</button>
+  <button role="tab" id="tGap" aria-selected="false" aria-controls="pGap">פערי ק״מ מול המפעיל</button>
+  <button role="tab" id="tLes" aria-selected="false" aria-controls="pLes">לקחים</button>
+  <button role="tab" id="tDrv" aria-selected="false" aria-controls="pDrv">ק״מ בלי הסבר</button>
+</nav>
+<div id="msg" class="msg" role="status" aria-live="polite"></div>
+<section class="cards" id="cards" aria-label="סיכום התקופה">
+  <div class="card"><div class="k">ק״מ ריקים מתוכננים</div><div class="v" id="cPlan">–</div></div>
+  <div class="card"><div class="k">ק״מ ריקים בפועל</div><div class="v" id="cAct">–</div></div>
+  <div class="card"><div class="k">ק״מ ריקים שהוסיף הסדרן</div><div class="v" id="cEx">–</div></div>
+  <div class="card"><div class="k">מתוכם לבדיקה</div><div class="v" id="cDis">–</div></div>
+</section>
+<main>
+  <section id="pExcess" role="tabpanel" aria-labelledby="tExcess" class="grid3">
+    <div class="col list" aria-label="רשימה ממוינת">
+      <div class="seg" role="group" aria-label="קיבוץ"><button class="on" id="gPlace" aria-pressed="true">לפי מקום</button><button id="gVeh" aria-pressed="false">לפי רכב</button><button id="gSid" aria-pressed="false">לפי סידור</button></div>
+      <div class="seg" role="group" aria-label="מיון"><button class="on" id="sKm" aria-pressed="true">הכי הרבה ק״מ</button><button id="sRev" aria-pressed="false">לבדיקה קודם</button></div>
+      <div class="filt"><label><span class="sr">יום</span><select id="fDay"></select></label><label class="q"><span class="sr">חיפוש</span><input id="fQ" type="search" inputmode="numeric" placeholder="חיפוש סידור או רכב" autocomplete="off"></label></div>
+      <ol id="rank" class="rank"></ol>
+    </div>
+    <div class="col days" id="days" aria-live="polite"></div>
+    <div class="col mapcol">
+      <div class="mapcard"><button class="btn mapfull" id="bFull" aria-pressed="false">⛶ מסך מלא</button><div id="map" class="map" aria-label="מפה"></div>
+        <div id="mapLeg" class="mapleg"></div><div id="mapInfo" class="mapinfo"></div></div>
+    </div>
+  </section>
+  <section id="pSid" role="tabpanel" aria-labelledby="tSid" hidden></section>
+  <section id="pGap" role="tabpanel" aria-labelledby="tGap" hidden></section>
+  <section id="pLes" role="tabpanel" aria-labelledby="tLes" hidden></section>
+  <section id="pDrv" role="tabpanel" aria-labelledby="tDrv" hidden><div class="col empty"><h2>ק״מ בלי הסבר, לפי נהג</h2><p>הלשונית תתמלא כשיגיע דוח המיקומים מהמפעיל: הק״מ שהרכב נסע בפועל לפי ה־GPS, פחות כל מה שרשום בדוח הביצוע (כולל התוספות של הסדרן). רק מה שנשאר בלי הסבר ייספר כאן.</p><p>נסיעה ריקה ארוכה יותר בק״מ אבל מהירה יותר (למשל לפי עומסים) לא תיחשב חריגה, ותסומן בנפרד.</p></div></section>
+</main>
+<dialog id="dlgNote" aria-labelledby="nTitle">
+  <div class="dh"><h3 id="nTitle">תיקון או הסבר</h3><button class="btn" id="nClose">סגירה</button></div>
+  <p class="sub" id="nHead"></p>
+  <label class="fl">על מה ההערה<select id="nTopic"><option value="place">המקום (מוצא או יעד)</option><option value="km">הק״מ</option><option value="mark">הסימון (מוסבר, לא מסתדר וכו׳)</option><option value="other">אחר</option></select></label>
+  <label class="fl">הערך הנכון (לא חובה)<input id="nFix" maxlength="200" placeholder="למשל: מוסך עטרות, או 9.5"></label>
+  <label class="fl">ההסבר<textarea id="nBody" rows="4" maxlength="2000" placeholder="בלי שמות של נהגים או נוסעים"></textarea></label>
+  <div class="df"><button class="btn pri" id="nSave">שמירה</button><span class="msg" id="nMsg"></span></div>
+</dialog>
+<footer class="legend" aria-label="מקרא">
+  <b>מקרא:</b>
+  <span><span class="tag plan">כמתוכנן</span> = נסיעה לפי התכנון</span>
+  <span><span class="tag disp">תוספת סדרן</span> = נסיעה ריקה בסידור שאינו במפת הבסיס</span>
+  <span><span class="tag ok">מוסבר</span> / <span class="tag mid">דרך מוסך</span> / <span class="tag bad">לא מסתדר</span> / <span class="tag mid">קצה משוער</span> = האם יום הרכב מסביר את התוספת</span>
+  <span><i class="ln ours"></i> = הניתוב שלנו</span>
+</footer>
+<script src="assets/map.js?v=2026-11-19.13"></script>
+<script src="assets/pva-tabs.js?v=2026-11-19.13"></script>
+<script src="assets/pva.js?v=2026-11-19.13"></script>
+</body>
+</html>
