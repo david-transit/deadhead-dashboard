@@ -10,7 +10,7 @@
   const DOW = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
   const dlabel = d => { const x = new Date(d + "T12:00:00"); return `יום ${DOW[x.getDay()]} · ${x.getDate()}.${x.getMonth() + 1}`; };
   let SES = null; try { SES = JSON.parse(lsGet(SKEY) || "null"); } catch { }
-  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "place", SORT = "km", CTX = null, SEL = null, OPENDAY = null, SELTRIP = null;
+  let OP = null, PLATFORM = false, ROLE = null, DAYS = [], GROUP = "place", SORT = "km", CTX = null, DAYF = "", Q = "", SEL = null, OPENDAY = null, SELTRIP = null;
 
   // ---- session (same storage and refresh as the dashboard) ----
   async function http(url, opt = {}) {
@@ -50,9 +50,11 @@
   const kmOf = t => t.op_km != null ? t.op_km : (t.our_km || 0);
   const excess = t => t.kind === "empty" && t.status === "added" && !(t.forced && t.empty_kind !== "dispatcher") ? kmOf(t) : 0;
   const trips = () => DAYS.flatMap(d => d.sidurim.flatMap(s => s.trips.map(t => ({ ...t, day: d.day }))));
+  // the list's day picker and search (sidur or vehicle number)
+  const shown = () => trips().filter(t => (!DAYF || t.day === DAYF) && (!Q || String(t.veh).includes(Q) || String(t.sidur).includes(Q)));
 
   function cards() {
-    const T = trips().filter(t => t.kind === "empty");
+    const T = trips().filter(t => t.kind === "empty" && (!DAYF || t.day === DAYF));
     const plan = T.filter(t => t.status !== "added").reduce((a, t) => a + (t.op_km || 0), 0);
     const act = T.filter(t => t.status !== "not_done").reduce((a, t) => a + kmOf(t), 0);
     const ex = T.reduce((a, t) => a + excess(t), 0), dis = T.filter(t => REVIEW.has(t.plaus)).reduce((a, t) => a + excess(t), 0);
@@ -61,7 +63,7 @@
 
   function groups() {
     const g = new Map();
-    for (const t of trips()) {
+    for (const t of shown()) {
       const k = gkey(t); if (k == null) continue;
       const e = excess(t); if (!e) continue;
       const x = g.get(k) || { k, km: 0, n: 0, r: 0, rk: 0, days: new Set() }; g.set(k, x);
@@ -82,7 +84,7 @@
     $("#rank").innerHTML = G.length ? G.map(x => `<li><button data-k="${esc(x.k)}" aria-current="${x.k === SEL}">
       <span class="nm">${esc(gname(x.k))}</span><span class="km">${nf(x.km)} ק״מ</span>
       <span class="s">${x.days.size === 1 ? "ביום אחד" : `ב־${x.days.size} ימים`} · ${x.n === 1 ? "נסיעה אחת" : `${x.n} נסיעות`}${x.r ? ` · ${x.r} לבדיקה (${nf(Math.round(x.rk * 10) / 10)} ק״מ)` : ""}</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(4, x.km / top * 100)}%"></i></span></button></li>`).join("")
-      : `<li class="empty">אין תוספות בתקופה</li>`;
+      : `<li class="empty">${Q ? "לא נמצא סידור או רכב כזה עם תוספות" : "אין תוספות בתקופה"}</li>`;
     $("#rank").querySelectorAll("button").forEach(b => b.onclick = () => { SEL = GROUP === "veh" ? +b.dataset.k : b.dataset.k; OPENDAY = null; SELTRIP = null; rank(); detail(); if (innerWidth < 900) $("#days").scrollIntoView({ behavior: "smooth" }); });
     detail();
   }
@@ -94,7 +96,7 @@
   function detail() {
     const box = $("#days");
     if (SEL == null) { box.innerHTML = `<div class="empty">בחר שורה מהרשימה</div>`; drawMap(null); return; }
-    const mine = trips().filter(t => gkey(t) === SEL && excess(t) > 0);
+    const mine = shown().filter(t => gkey(t) === SEL && excess(t) > 0);
     const tot = mine.reduce((a, t) => a + excess(t), 0);
     const byDay = new Map(); mine.forEach(t => (byDay.get(t.day) || byDay.set(t.day, []).get(t.day)).push(t));
     const dayKm = d => byDay.get(d).reduce((a, t) => a + excess(t), 0);
@@ -145,8 +147,8 @@
     const info = $("#mapInfo"), my = ++drawn;
     if (!t) { info.innerHTML = ""; $("#mapLeg").innerHTML = ""; if (lay) lay.clearLayers(); return; }
     const gap = t.op_km != null && t.our_km != null ? Math.abs(t.op_km - t.our_km) : null, v = VERD[t.verdict] || VERD["n/a"];
-    info.innerHTML = `<table><tr><td>ק״מ לפי המפעיל</td><td>${nf(t.op_km)}</td></tr><tr><td>ק״מ לפי הניתוב שלנו</td><td>${nf(t.our_km)}</td></tr>${t.g_km != null ? `<tr><td>ק״מ לפי גוגל</td><td>${nf(t.g_km)}</td></tr>` : ""}</table>
-      <div class="foot"><span class="tag ${v[0]}">${v[1]}${gap != null ? ` (פער ${nf(Math.round(gap * 10) / 10)} ק״מ)` : ""}</span><span>סידור ${esc(t.sidur)} · רכב ${esc(t.veh)}${t.end_src === "unresolved" ? " · קצה לא ידוע" : ""}</span></div>`;
+    info.innerHTML = (t.plaus_why ? `<p class="why">${PTAG(t)} ${esc(t.plaus_why)}</p>` : "") + `<table><tr><td>ק״מ לפי המפעיל</td><td>${nf(t.op_km)}</td></tr><tr><td>ק״מ לפי הניתוב שלנו</td><td>${nf(t.our_km)}</td></tr>${t.g_km != null ? `<tr><td>ק״מ לפי גוגל</td><td>${nf(t.g_km)}</td></tr>` : ""}</table>
+      <div class="foot"><span class="tag ${v[0]}">${v[1]}${gap != null ? ` (פער ${nf(Math.round(gap * 10) / 10)} ק״מ)` : ""}</span><span>סידור ${esc(t.sidur)} · רכב ${esc(t.veh)}${t.end_src === "unresolved" ? " · קצה לא ידוע" : t.end_src === "inferred" ? " · קצה משוער: לפי הנסיעה הריקה הצמודה" : ""}</span></div>`;
     $("#mapLeg").innerHTML = `<span><i class="ln"></i> הניתוב שלנו</span><span>${esc(place(t.a))} ← ${esc(place(t.b))}</span>`;
     try { await leaflet(); } catch { info.insertAdjacentHTML("beforeend", `<div class="msg err">המפה לא נטענה</div>`); return; }
     if (my !== drawn) return;
@@ -193,7 +195,9 @@
     try { DAYS = LOCAL ? await localDays(f, t) : (await rpc("get_pva", { p_operator: OP.id, p_from: f, p_to: t })) || []; }
     catch (e) { say("הטעינה נכשלה: " + e.message, true); return; }
     say(DAYS.length ? "" : "אין נתונים לתקופה הזו");
-    SEL = null; OPENDAY = null; SELTRIP = null; cards(); rank();
+    const df = $("#fDay"); df.innerHTML = `<option value="">כל הימים</option>` + DAYS.map(d => `<option value="${esc(d.day)}">${dlabel(d.day)}</option>`).join("");
+    DAYF = DAYS.length === 1 ? "" : (DAYS.some(d => d.day === DAYF) ? DAYF : ""); df.value = DAYF;
+    SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; cards(); rank();
     const cur = document.querySelector(".tabs [aria-selected=true]").id; if (cur !== "tExcess") tab(cur);
   }
 
@@ -212,6 +216,8 @@
   const setGroup = g => { GROUP = g; [["gPlace", "place"], ["gVeh", "veh"], ["gSid", "sid"]].forEach(([id, v]) => { $("#" + id).className = v === g ? "on" : ""; $("#" + id).setAttribute("aria-pressed", v === g); }); SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; rank(); };
   $("#gPlace").onclick = () => setGroup("place"); $("#gVeh").onclick = () => setGroup("veh"); $("#gSid").onclick = () => setGroup("sid");
   const setSort = v => { SORT = v; $("#sKm").className = v === "km" ? "on" : ""; $("#sRev").className = v === "review" ? "on" : ""; $("#sKm").setAttribute("aria-pressed", v === "km"); $("#sRev").setAttribute("aria-pressed", v === "review"); SEL = null; OPENDAY = null; SELTRIP = null; rank(); };
+  $("#fDay").onchange = e => { DAYF = e.target.value; SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; cards(); rank(); };
+  $("#fQ").oninput = e => { Q = e.target.value.trim(); SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; rank(); };
   $("#sKm").onclick = () => setSort("km"); $("#sRev").onclick = () => setSort("review");
   const full = on => { const c = $(".mapcard"); c.classList.toggle("full", on); $("#bFull").textContent = on ? "✕ סגירה" : "⛶ מסך מלא"; $("#bFull").setAttribute("aria-pressed", on); if (map) setTimeout(() => { map.invalidateSize(); const b = L.featureGroup(lay.getLayers()).getBounds(); if (b.isValid()) map.fitBounds(b, { padding: [40, 40] }); }, 80); };
   $("#bFull").onclick = () => full(!$(".mapcard").classList.contains("full"));

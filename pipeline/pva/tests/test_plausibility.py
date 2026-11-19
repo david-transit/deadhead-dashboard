@@ -55,6 +55,12 @@ class TestPlausibility(unittest.TestCase):
         L = [S(300, A, B), E(389, B, None, 'planned'), E(793, ATA, DEP), S(810, DEP, A)]
         label_vehicle(L); self.assertEqual(L[2]['plaus'], 'explained')
 
+    def test_inconsistent_says_why(self):
+        # David 19.11 (sidur 28): the leg ends at Atarot, the next service leaves from elsewhere, nothing recorded between
+        L = [E(880, M, ATA), S(1050, FAR, A)]
+        label_vehicle(L)
+        self.assertIn('מוסך עטרות', L[0]['plaus_why']); self.assertIn('17:30', L[0]['plaus_why']); self.assertIn('רחוק', L[0]['plaus_why'])
+
     def test_only_dispatcher_trips_labelled(self):
         L = [S(300, A, B), E(400, B, A, 'planned'), S(420, A, B)]
         label_vehicle(L); self.assertNotIn('plaus', L[1])

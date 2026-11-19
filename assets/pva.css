@@ -92,3 +92,9 @@ main{flex:1;padding:0 16px 12px}
   .trip{grid-template-columns:48px 1fr auto}
   .trip .tag{grid-column:2;justify-self:start}
 }
+.filt{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.filt label{display:flex}
+.filt .q{flex:1;min-width:150px}
+.filt select,.filt input{font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);width:100%}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.why{margin:6px 0;padding:8px 10px;background:var(--bg);border-radius:8px;font-size:14px}

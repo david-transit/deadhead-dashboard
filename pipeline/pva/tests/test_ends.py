@@ -72,9 +72,20 @@ class TestEnds(unittest.TestCase):
         day = [dict(svc(S1106, S4156), desc='מקום א-ב'), dict(svc(S1106, S4156), desc='מקום ב-ג'), dict(svc(FAR, S4156), desc='מקום ב-ד')]
         self.assertEqual(ends.learn_places(day), {})
 
+    def test_unknown_end_taken_from_next_empty_start(self):
+        # David 19.11 (vehicle ...8102): police/Harel -> ?, then the next leg leaves Atarot, so the first went to Atarot
+        t = [svc(S1106, S4156), emp(), emp('מוסך גבעת שאול-היכל המשפט'), svc(S1106, S4156)]
+        ends.resolve(t, DEPOTS)
+        self.assertEqual((t[1]['b']['depot'], t[1]['end_src']), ('gs7mosk', 'inferred'))
+
+    def test_unknown_start_taken_from_previous_empty_end(self):
+        t = [emp('היכל המשפט-מוסך גבעת שאול'), emp(), svc(S1106, S4156)]
+        ends.resolve(t, DEPOTS)
+        self.assertEqual((t[1]['a']['depot'], t[1]['b']['code'], t[1]['end_src']), ('gs7mosk', '1106', 'inferred'))
+
     def test_empty_after_empty_unresolved(self):
         t = [svc(S1106, S4156), emp(), emp('א-ב'), svc(S1106, S4156)]
-        ends.resolve(t, DEPOTS)
+        ends.resolve(t, DEPOTS)  # neither leg knows the place between them
         self.assertEqual(t[1]['end_src'], 'unresolved'); self.assertEqual(t[2]['end_src'], 'unresolved')
 
     def test_not_done_trips_are_skipped_as_neighbours(self):

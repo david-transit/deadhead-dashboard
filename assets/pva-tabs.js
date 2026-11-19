@@ -31,7 +31,16 @@
     $("#pGap").innerHTML = `<div class="col"><h2>פערי ק״מ (${G.length} צמדים)</h2><table class="tbl"><thead><tr><th>תיאור המפעיל</th><th>מ־</th><th>אל</th><th>המפעיל</th><th>שלנו</th><th>גוגל</th><th>הכרעה</th><th>נסיעות</th></tr></thead><tbody>` +
       G.map(x => `<tr><td>${h.esc(x.t.desc)}</td><td>${h.esc(h.place(x.t.a))}</td><td>${h.esc(h.place(x.t.b))}</td><td>${h.nf(x.t.op_km)}</td><td>${h.nf(x.t.our_km)}</td><td>${h.nf(x.t.g_km)}</td><td>${VERD[x.t.verdict]}</td><td>${x.n}</td></tr>`).join("") +
       `</tbody></table><h2>לבדיקה: נסיעות ריקות בלי מוצא או יעד ידוע (${U.length})</h2><table class="tbl"><thead><tr><th>יום</th><th>שעה</th><th>סידור</th><th>רכב</th><th>תיאור המפעיל</th></tr></thead><tbody>` +
-      U.map(t => `<tr><td>${h.dlabel(t.day)}</td><td>${h.hm(t.t0)}</td><td>${h.esc(t.sidur)}</td><td>${h.esc(t.veh)}</td><td>${h.esc(t.desc)}</td></tr>`).join("") + `</tbody></table></div>`;
+      U.map(t => `<tr><td>${h.dlabel(t.day)}</td><td>${h.hm(t.t0)}</td><td>${h.esc(t.sidur)}</td><td>${h.esc(t.veh)}</td><td>${h.esc(t.desc)}</td></tr>`).join("") + `</tbody></table>` + places(days, h) + `</div>`;
+  }
+
+  // end points that are not the operator's depots (David 19.11: needed later for forced empty legs)
+  function places(days, h) {
+    const m = new Map(); for (const d of days) for (const p of d.places || []) if (!m.has(p.name)) m.set(p.name, p);
+    const P = [...m.values()].sort((a, b) => a.name.localeCompare(b.name, "he"));
+    return `<h2>נקודות קצה שאינן חניונים (${P.length})</h2><p class="sub">השם במפת הבסיס, והתחנה שממנה יוצאות הנסיעות שלו. "נלמד" = זוהה מנסיעות השירות של היום; "קבוע" = אושר ונשמר.</p>
+      <table class="tbl"><thead><tr><th>שם אצל המפעיל</th><th>תחנה</th><th>קוד</th><th>מקור</th></tr></thead><tbody>` +
+      P.map(p => `<tr><td>${h.esc(p.name)}</td><td>${h.esc(p.stop)}</td><td>${h.esc(p.code)}</td><td>${p.src === "fixed" ? "קבוע" : "נלמד"}</td></tr>`).join("") + `</tbody></table>`;
   }
 
   function les(days, h) {

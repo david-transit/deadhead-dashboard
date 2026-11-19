@@ -23,6 +23,14 @@ def _near(a, b):
     return a is not None and b is not None and _km(a, b) <= NEAR_KM
 
 
+def _hm(m):
+    return f'{m // 60 % 24:02d}:{m % 60:02d}'
+
+
+def _nm(p):
+    return p.get('name', '?') if p else '?'
+
+
 def label_vehicle(trips):
     """trips: one vehicle's executed trips of the day, in time order. Sets t['plaus'] on dispatcher legs."""
     i = 0
@@ -42,16 +50,23 @@ def label_vehicle(trips):
         chain = chain[cut:]
         start, end = chain[0].get('a'), chain[-1].get('b')
         mids = [t.get('b') for t in chain[:-1]]
+        t0 = (nxt.get('t0', nxt.get('t')) if nxt else None)
+        nx = f"הנסיעה הבאה של הרכב ({_hm(t0)}) יוצאת מ{_nm(nxt.get('a'))}" if nxt and t0 is not None else ''
         if start is None or end is None or any(m is None for m in mids):
-            lab = 'unknown'
+            lab, why = 'unknown', 'לא ידוע מאיפה או לאן נסעה אחת הנסיעות הריקות ברצף הזה, ואין נסיעה צמודה שממנה אפשר להסיק'
         elif len(chain) > 1 and _near(start, end):
             lab = 'via_depot' if any('depot' in m for m in mids) else 'round_trip'
+            why = f"הרכב יצא מ{_nm(start)} וחזר אליו" + (f" דרך {' ← '.join(_nm(m) for m in mids)}" if mids else '') + '. אולי הוחלף רכב או נהג; צריך לברר'
         elif nxt is None:
             lab = 'end_of_day' if 'depot' in end else 'end_of_day_review'
+            why = f"זו הנסיעה האחרונה של הרכב ביום, והוא נשאר ב{_nm(end)}" + ('' if 'depot' in end else ', שאינו מוסך')
         elif _near(end, nxt.get('a')):
-            lab = 'explained'
+            lab, why = 'explained', f"{nx}, בדיוק במקום שאליו הגיע"
         else:
+            gap = _km(end, nxt['a']) if nxt.get('a') else None
             lab = 'inconsistent'
+            why = (f"הנסיעה הריקה הסתיימה ב{_nm(end)}, אבל {nx}" + (f", כ־{gap:.0f} ק״מ משם בקו אווירי" if gap else '') +
+                   '. אין נסיעה רשומה ביניהן: אולי נסיעה ריקה שלא נרשמה בדוח הביצוע, או רישום שגוי של מספר הרכב')
         for t in chain:
             if t.get('empty_kind') == 'dispatcher':
-                t['plaus'] = lab
+                t['plaus'], t['plaus_why'] = lab, why

@@ -53,7 +53,7 @@ def _trip(t, sidur, day):
                 mkt8=(e or p)['mkt8'], line=(e['line'] if e else p.get('line')) or None, desc=t.get('desc', ''),
                 plan_t=p['dep_min'] if p else None, a=_stop(t.get('a') or t.get('first')), b=_stop(t.get('b') or t.get('last')),
                 op_km=t.get('op_km'), our_km=t.get('our_km'), g_km=t.get('g_km'), verdict=t.get('verdict'),
-                km_src=t.get('km_src'), end_src=t.get('end_src'), gtfs_match=t.get('gtfs_match'), plaus=t.get('plaus'), geom=t.get('geom'))
+                km_src=t.get('km_src'), end_src=t.get('end_src'), gtfs_match=t.get('gtfs_match'), plaus=t.get('plaus'), plaus_why=t.get('plaus_why'), geom=t.get('geom'))
 
 
 def thin(pts, min_m=15):
@@ -87,7 +87,9 @@ def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, goog
         t['desc'] = ((t.get('plan') or {}).get('desc') or rdict.get((t['exec'] or t['plan'])['mkt8'], (None, ''))[1] or '')
     svc = {(t['exec'] or t['plan'])['mkt8']: (t['exec'] or t['plan'])['line'] for t in trips if t['kind'] == 'service'}
     ends.annotate_service(trips, ends.route_ends(gtfs_zip, set(svc), lines=svc, agency=cfg.get('gtfs_agency')))
-    places = ends.learn_places(trips)
+    learned = ends.learn_places(trips)
+    fixed = {n: v for n, v in cfg.get('places', {}).items() if not n.startswith('_')}
+    places = {**learned, **fixed}
     by_veh = collections.defaultdict(list)
     for t in trips:
         if t['exec']:
@@ -140,6 +142,7 @@ def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, goog
     return dict(day=day.isoformat(), day_type=dtype, drivers=drivers, sidurim=out_sid,
                 unresolved=[t for t in all_t if t['kind'] == 'empty' and t['end_src'] == 'unresolved' and t['status'] != 'not_done'],
                 gaps=[t for t in all_t if t.get('verdict') in ('op', 'ours', 'third', 'pending')], lessons=[],
+                places=sorted([dict(name=n, stop=v.get('name'), code=v.get('code'), lat=v['lat'], lon=v['lon'], src='fixed' if n in fixed else 'learned') for n, v in places.items()], key=lambda x: x['name']),
                 pending_google=km.pending_pairs([t for t in trips if t['kind'] == 'empty']))
 
 

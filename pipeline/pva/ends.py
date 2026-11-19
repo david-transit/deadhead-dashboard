@@ -114,6 +114,17 @@ def resolve(trips, depots, aliases=None, places=None):
             t['end_src'] = 'unresolved'
         else:
             t['end_src'] = 'depot' if ('depot' in a or 'depot' in b) else 'gtfs'
+    # David 19.11: back-to-back empty legs meet. An unknown end is where the next empty leg starts (and an unknown start
+    # is where the previous one ended): the bus had no other way to get there.
+    E = [t for t in trips if t['kind'] == 'empty']
+    for x, y in zip(E, E[1:]):
+        if trips.index(y) != trips.index(x) + 1 or (x['status'] != 'not_done') != (y['status'] != 'not_done'):
+            continue
+        for t, k, v in ((x, 'b', y.get('a')), (y, 'a', x.get('b'))):
+            if t.get(k) is None and v is not None:
+                t[k] = v
+                if t.get('a') is not None and t.get('b') is not None:
+                    t['end_src'] = 'inferred'
 
 
 def stop_is(name, want):

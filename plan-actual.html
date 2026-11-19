@@ -11,7 +11,7 @@
 <title>יאללה־סע · תכנון מול ביצוע</title>
 <link rel="icon" href="mobile/icon.svg">
 <link rel="stylesheet" href="assets/fonts/fonts.css">
-<link rel="stylesheet" href="assets/pva.css?v=2026-11-19.1">
+<link rel="stylesheet" href="assets/pva.css?v=2026-11-19.4">
 </head>
 <body>
 <header>
@@ -45,6 +45,7 @@
     <div class="col list" aria-label="רשימה ממוינת">
       <div class="seg" role="group" aria-label="קיבוץ"><button class="on" id="gPlace" aria-pressed="true">לפי מקום</button><button id="gVeh" aria-pressed="false">לפי רכב</button><button id="gSid" aria-pressed="false">לפי סידור</button></div>
       <div class="seg" role="group" aria-label="מיון"><button class="on" id="sKm" aria-pressed="true">הכי הרבה ק״מ</button><button id="sRev" aria-pressed="false">לבדיקה קודם</button></div>
+      <div class="filt"><label><span class="sr">יום</span><select id="fDay"></select></label><label class="q"><span class="sr">חיפוש</span><input id="fQ" type="search" inputmode="numeric" placeholder="חיפוש סידור או רכב" autocomplete="off"></label></div>
       <ol id="rank" class="rank"></ol>
     </div>
     <div class="col days" id="days" aria-live="polite"></div>
@@ -65,8 +66,8 @@
   <span><span class="tag ok">מוסבר</span> / <span class="tag mid">דרך מוסך</span> / <span class="tag bad">לא מסתדר</span> = האם יום הרכב מסביר את התוספת</span>
   <span><i class="ln ours"></i> = הניתוב שלנו</span>
 </footer>
-<script src="assets/map.js?v=2026-11-19.1"></script>
-<script src="assets/pva-tabs.js?v=2026-11-19.1"></script>
-<script src="assets/pva.js?v=2026-11-19.1"></script>
+<script src="assets/map.js?v=2026-11-19.4"></script>
+<script src="assets/pva-tabs.js?v=2026-11-19.4"></script>
+<script src="assets/pva.js?v=2026-11-19.4"></script>
 </body>
 </html>
