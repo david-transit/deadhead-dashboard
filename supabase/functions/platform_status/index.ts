@@ -5,10 +5,11 @@
 // Flow: previous snapshot -> collect 15 items -> save (red_since first) -> mark the digest day -> send the messages.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { collect, type Figures } from "../_shared/status/collect.ts";
-import { decide, oneLine } from "../_shared/status/notify.ts";
+import { decide, recipients, STATUS_SUBJECT } from "../_shared/status/notify.ts";
 import { ilDate, type Item } from "../_shared/status/levels.ts";
-import { alerter } from "../_shared/mail/alert.ts";
-import { safeEq } from "../_shared/mail/http.ts";
+import { sendMail } from "../_shared/mail/send.ts";
+import { supabaseMailDb } from "../_shared/mail/db.ts";
+import { brandFor, safeEq } from "../_shared/mail/http.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const admin = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -35,7 +36,7 @@ Deno.serve(async (req) => {
   catch (e) { console.error("platform_status", String(e).slice(0, 300)); return json({ error: "internal" }, 500) }
   try {
     const now = new Date();
-    const snap = await rpc<{ items: Item[]; last_digest_on: string | null }>("status_snapshot_get");
+    const snap = await rpc<{ items: Item[]; last_digest_on: string | null; alert_emails: string[] | null }>("status_snapshot_get");
     const items = await collect({
       figures: () => rpc<Figures>("status_figures"),
       text: async (u) => (await get(u)).text(),
@@ -44,14 +45,19 @@ Deno.serve(async (req) => {
     const d = decide(snap.items, items, now, snap.last_digest_on);
     // saved before sending: a second run right after (cron + "בדיקה עכשיו") sees red_since / the digest day and stays quiet
     await rpc("status_snapshot_put", { p_items: items, p_digest_on: d.markDigest ? ilDate(now) : null });
-    const { data: s } = await admin.from("support_settings").select("alert_channel").eq("id", 1).single();
-    const alert = alerter(admin, SUPABASE_URL, false);
-    // each message on its own: a failed send is logged and does not stop the other one
+    // by email to the status list (private.status_meta.alert_emails), one mail per address; a failed send is logged
+    // and does not stop the others. Counted in the mail quota like every alert (support_messages).
+    const to = recipients(snap.alert_emails), apiKey = Deno.env.get("RESEND_API_KEY");
+    const { data: s } = await admin.from("support_settings").select("mail_daily_cap").eq("id", 1).single();
     const send = async (kind: string, t: string) => {
-      try {
-        const r = await alert(s?.alert_channel === "whatsapp" ? oneLine(t) : t) as { ok?: boolean; error?: string } | undefined;
-        if (r && r.ok === false) console.error("platform_status send", kind, r.error || "failed");
-      } catch (e) { console.error("platform_status send", kind, String(e).slice(0, 200)) }
+      if (!to.length || !apiKey) { console.error("platform_status send", kind, !to.length ? "no_recipients" : "not_configured"); return }
+      for (const addr of to) {
+        try {
+          const r = await sendMail({ db: supabaseMailDb(admin), fetch, apiKey, brand: brandFor(SUPABASE_URL), cap: s?.mail_daily_cap ?? 100 },
+            { kind: "alert", to: addr, subject: STATUS_SUBJECT, body: t });
+          if (!r.ok) console.error("platform_status send", kind, r.error || "failed");
+        } catch (e) { console.error("platform_status send", kind, String(e).slice(0, 200)) }
+      }
     };
     if (d.immediate) await send("immediate", d.immediate);
     if (d.digest) await send("digest", d.digest);

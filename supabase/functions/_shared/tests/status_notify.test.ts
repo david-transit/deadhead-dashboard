@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decide, oneLine } from "../status/notify.ts";
+import { decide, oneLine, recipients, STATUS_SUBJECT } from "../status/notify.ts";
 import type { Item, Level } from "../status/levels.ts";
 
 const it = (key: string, title: string, level: Level, reading = "x"): Item => ({ key, ord: 0, grp: "runs", title, explain: "", value: null, cap: null,
@@ -64,3 +64,8 @@ test("oneLine joins the lines for WhatsApp templates (no newlines)", () => {
   assert.equal(oneLine(t).includes(String.fromCharCode(10)), false);
   assert.ok(oneLine(t).startsWith("יאללה־סע – מצב הפלטפורמה · אדום:"));
 });
+test("recipients: trims, lowercases, drops invalid and duplicate addresses", () => {
+  assert.deepEqual(recipients([" A@Example.com", "a@example.com", "bad", null, "b@x.co"]), ["a@example.com", "b@x.co"]);
+  assert.deepEqual(recipients(null), []);
+});
+test("status mails have their own subject", () => { assert.equal(STATUS_SUBJECT, "יאללה־סע: לוח מדדים") });

@@ -10,6 +10,13 @@ const HEAD = "יאללה־סע – מצב הפלטפורמה";
 const line = (i: Item) => `${i.level === "bad" ? "אדום" : "צהוב"}: ${i.title} – ${i.reading}${i.unknown_since && i.note ? ` (${i.note})` : ""}`;
 const text = (items: Item[]) => [HEAD, ...items.map(line), `ללוח: ${PANEL_LINK}`].join("\n");
 
+// status messages go by email to their own list (David, 19.11: his private address and Nadav's),
+// not through the support tool's single alert channel
+export const STATUS_SUBJECT = "יאללה־סע: לוח מדדים";
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+export const recipients = (xs: unknown): string[] =>
+  [...new Set((Array.isArray(xs) ? xs : []).filter(x => typeof x === "string").map(x => x.trim().toLowerCase()).filter(x => EMAIL.test(x)))];
+
 // WhatsApp template parameters may not contain newlines (Meta error 132018)
 export const oneLine = (t: string) => t.split("\n").join(" · ");
 
