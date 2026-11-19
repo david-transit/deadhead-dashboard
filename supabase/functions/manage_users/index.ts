@@ -12,7 +12,8 @@
 //                      another user's: platform admin + aal2), all_devices (platform admin + aal2)
 // Platform admin:      my_security, set_recovery_email, gen_recovery_codes (both need the current password)
 // Control room:        list, create (role "platform" = platform admin, platform admins only), set_membership,
-//                      remove_membership, set_platform, set_name (display name; own or a manageable user),
+//                      remove_membership, set_tool_role / remove_tool_role (role in one tool other than deadhead,
+//                      tool_roles; separate per tool since 2026-11-19), set_platform, set_name (display name; own or a manageable user),
 //                      reset_password, reset_mfa, set_disabled, delete
 //   platform admin = every user except himself (own password: change_password); operator admin = viewers and editors
 //   whose access is only in operators he administers (never another admin). At least one active platform admin remains.
@@ -20,6 +21,7 @@
 // own recovery settings always need aal2; change_password / remove_my_mfa need aal2 when the user has a verified factor.
 // Passwords: only this function can set one (DB trigger on auth.users needs a one-shot permit, allow_pw_change).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { canManageUser, TOOL_MODULES, visibleOf } from "../_shared/access.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -353,16 +355,14 @@ Deno.serve(async (req) => {
     // every admin (platform or operator admin) must use two-step verification: no control room from a password-only session
     if (claims.aal !== "aal2") throw new Fail("mfa_enroll_required", 403);
     const canOp = (op: string) => isPlatform || adminOps.has(op);
-    const membershipsOf = async (user: string) =>
-      (await admin.from("memberships").select("operator_id, role").eq("user_id", user)).data || [];
-    // may the caller reset / disable / delete / re-assign this user?
+    // may the caller reset / disable / delete / re-assign this user? (rule: _shared/access.ts canManageUser)
     const manageable = async (target: string) => {
       if (!UUID.test(target) || target === uid) return false;
       if (isPlatform) return true;
-      if (platformIds.has(target)) return false;
-      const ms = await membershipsOf(target);
-      // an operator admin manages viewers and editors only: another admin is managed by a platform admin (L2)
-      return ms.length > 0 && ms.every((m) => adminOps.has(m.operator_id) && m.role !== "admin");
+      const [ms, tr] = await Promise.all([
+        admin.from("memberships").select("operator_id, role").eq("user_id", target).throwOnError(),
+        admin.from("tool_roles").select("operator_id, module, role").eq("user_id", target).throwOnError()]);
+      return canManageUser({ caller: uid, target, isPlatform, adminOps, platformIds, memberships: ms.data || [], tools: tr.data || [] });
     };
     const needTarget = async () => {
       const t = String(b.user_id || "");
@@ -388,6 +388,7 @@ Deno.serve(async (req) => {
       case "list": {
         const { data: profs } = await admin.from("profiles").select("user_id, username, display_name, must_change_password, disabled, created_at");
         const { data: ms } = await admin.from("memberships").select("user_id, operator_id, role");
+        const { data: tr } = await admin.from("tool_roles").select("user_id, operator_id, module, role").throwOnError();
         const seen = new Map<string, string>();
         const mfa = new Set<string>((((await admin.rpc("mfa_users")).data || []) as unknown[]).map((x) => typeof x === "string" ? x : String((x as Record<string, unknown>).mfa_users)));
         for (let page = 1; page < 20; page++) {
@@ -398,13 +399,15 @@ Deno.serve(async (req) => {
         const users = [];
         for (const p of profs || []) {
           const all = (ms || []).filter((m) => m.user_id === p.user_id);
-          const visible = isPlatform ? all : all.filter((m) => adminOps.has(m.operator_id));
-          if (!isPlatform && !visible.length && p.user_id !== uid) continue;
+          const allT = (tr || []).filter((m) => m.user_id === p.user_id);
+          const visible = visibleOf(isPlatform, adminOps, all), visibleT = visibleOf(isPlatform, adminOps, allT);
+          if (!isPlatform && !visible.length && !visibleT.length && p.user_id !== uid) continue;
           users.push({
             user_id: p.user_id, username: p.username, display_name: p.display_name, disabled: p.disabled,
             must_change: p.must_change_password, last_sign_in: seen.get(p.user_id) || null,
             memberships: visible.map((m) => ({ operator_id: m.operator_id, role: m.role })),
-            other_access: all.length > visible.length, platform: platformIds.has(p.user_id),
+            tools: visibleT.map((m) => ({ module: m.module, operator_id: m.operator_id, role: m.role })),
+            other_access: all.length + allT.length > visible.length + visibleT.length, platform: platformIds.has(p.user_id),
             me: p.user_id === uid, manageable: await manageable(p.user_id), mfa: mfa.has(p.user_id),
           });
         }
@@ -439,6 +442,22 @@ Deno.serve(async (req) => {
         const t = await needTarget(), op = String(b.operator_id || "");
         if (!UUID.test(op) || !canOp(op)) throw new Fail("not_allowed", 403);
         await admin.from("memberships").delete().eq("user_id", t).eq("operator_id", op).throwOnError();
+        return out({ ok: true });
+      }
+
+      case "set_tool_role": { // the role in one tool (not deadhead): separate from memberships.role and from other tools
+        const t = await needTarget(), { op, role } = needOpRole(), mod = String(b.module || "");
+        if (!TOOL_MODULES.includes(mod)) throw new Fail("bad_input");
+        await admin.from("tool_roles").upsert({ user_id: t, operator_id: op, module: mod, role, updated_at: new Date().toISOString(), updated_by: uid },
+          { onConflict: "user_id,operator_id,module" }).throwOnError();
+        return out({ ok: true });
+      }
+
+      case "remove_tool_role": {
+        const t = await needTarget(), op = String(b.operator_id || ""), mod = String(b.module || "");
+        if (!UUID.test(op) || !TOOL_MODULES.includes(mod)) throw new Fail("bad_input");
+        if (!canOp(op)) throw new Fail("not_allowed", 403);
+        await admin.from("tool_roles").delete().eq("user_id", t).eq("operator_id", op).eq("module", mod).throwOnError();
         return out({ ok: true });
       }
 

@@ -10,15 +10,15 @@
 //        unknown, deleted or disabled user -> {"active": false, ...empty}: never a 404 that tells the user exists.
 //   Tool rule: platform_admin = full access; otherwise no roles = no entry. The tool fails closed (503) if this is down.
 //   401 bad/missing key · 400 bad request · 405 not POST · 503 key not configured on the server (fails closed).
-// Source of roles today: memberships + platform_admins (as the deadhead tool). When membership_modules is approved
-// (docs/identity-migration.sql) only the body changes: roles come from membership_modules for the module.
+// Source of roles: tool_roles for the caller's module (transit-studio -> 'studio') + platform_admins. Since 2026-11-19 the
+// role in each tool is separate (migration 20261119120000_tool_roles.sql); memberships.role is the deadhead tool's only.
+// When membership_modules is approved (docs/identity-migration.sql) only the body changes again.
 // The key is a Supabase secret (TOOL_ACCESS_KEY), set by David; it is never logged, echoed or stored in the repo.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { CALLER_MODULE, rolesForModule } from "../_shared/access.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const MODULES = ["transit-studio"]; // tools allowed to ask (allow-list)
-const ROLES = ["viewer", "editor", "admin"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const admin = createClient(SB_URL, SRK, { auth: { persistSession: false, autoRefreshToken: false } });
 
@@ -46,13 +46,14 @@ Deno.serve(async (req) => {
   let b: { user_id?: unknown; module?: unknown };
   try { b = await req.json() } catch { return J({ error: "bad_request" }, 400) }
   const uid = String(b?.user_id ?? ""), mod = String(b?.module ?? "");
-  if (!UUID.test(uid) || !MODULES.includes(mod)) return J({ error: "bad_request" }, 400);
+  if (!UUID.test(uid) || !Object.hasOwn(CALLER_MODULE, mod)) return J({ error: "bad_request" }, 400);
 
   try {
-    const [pr, pa, ms] = await Promise.all([
+    const [pr, pa, tr, ops] = await Promise.all([
       admin.from("profiles").select("username, display_name, disabled").eq("user_id", uid).maybeSingle().throwOnError(),
       admin.from("platform_admins").select("user_id").eq("user_id", uid).maybeSingle().throwOnError(),
-      admin.from("memberships").select("operator_id, role, operators(name)").eq("user_id", uid).throwOnError(),
+      admin.from("tool_roles").select("operator_id, module, role").eq("user_id", uid).eq("module", CALLER_MODULE[mod]).throwOnError(),
+      admin.from("operators").select("id, name").throwOnError(),
     ]);
     const p = pr.data;
     if (!p || p.disabled) return J(NONE);
@@ -61,10 +62,9 @@ Deno.serve(async (req) => {
     if (ae || !au?.user) return J(NONE);
     const bu = (au.user as { banned_until?: string | null }).banned_until;
     if (bu && Date.parse(bu) > Date.now()) return J(NONE);
-    const roles = (ms.data || [])
-      .filter((m: { role: string }) => ROLES.includes(m.role))
-      .map((m: { operator_id: string; role: string; operators: { name: string } | null }) =>
-        ({ operator_id: m.operator_id, operator_name: m.operators?.name ?? null, role: m.role }));
+    const opName = new Map((ops.data || []).map((o: { id: string; name: string }) => [o.id, o.name]));
+    const roles = rolesForModule(tr.data || [], CALLER_MODULE[mod])
+      .map((g) => ({ operator_id: g.operator_id, operator_name: opName.get(g.operator_id) ?? null, role: g.role }));
     return J({ active: true, username: p.username, display_name: p.display_name || p.username, platform_admin: !!pa.data, roles });
   } catch (e) {
     console.error("tool_access lookup failed", (e as Error)?.message); // no key, no user data
