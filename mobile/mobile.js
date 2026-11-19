@@ -55,12 +55,13 @@
   const menu = $("#meMenu");
   menu.insertAdjacentHTML("afterbegin", '<div class="m-only m-who" id="mWho"></div>');
   // control room (#bCtl) and sign-out (#bEdit) are already items of this menu; the phone adds savings + operator choice
-  $("#bCtl").insertAdjacentHTML("beforebegin", '<button class="m-only" role="menuitem" data-mm="bSav">הצעות חיסכון</button><select class="m-only" id="mOp" aria-label="מפעיל" hidden></select>');
+  $("#bCtl").insertAdjacentHTML("beforebegin", '<button class="m-only" role="menuitem" data-mm="bSav">הצעות חיסכון</button><button class="m-only" role="menuitem" data-mm="bPva" id="mPva" hidden>תכנון מול ביצוע</button><select class="m-only" id="mOp" aria-label="מפעיל" hidden></select>');
   menu.addEventListener("click", e => { const b = e.target.closest("[data-mm]"); if (!b) return; menu.hidden = true; $("#" + b.dataset.mm).click(); });
   $("#mOp").onchange = e => { const o = $("#opSel"); o.value = e.target.value; o.dispatchEvent(new Event("change")); };
   $("#who").addEventListener("click", () => {
     if (!on()) return;
     const w = $("#who").innerHTML.split("<br>"); $("#mWho").innerHTML = `<b>${w[0].replace(" ▾", "")}</b><span>${w[1] || ""}</span>`;
+    $("#mPva").hidden = $("#bPva").hidden; // R53: editors and above, as on the desktop toolbar
     const os = $("#opSel"); $("#mOp").hidden = os.hidden; $("#mOp").innerHTML = os.innerHTML; $("#mOp").value = os.value;
   }, true);
 
