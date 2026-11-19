@@ -33,7 +33,7 @@ export const CATALOG: { key: string; grp: Grp; title: string; explain: string; l
   { key: "m_supabase", grp: "manual", title: "תעבורת Supabase", explain: "תעבורה והפעלות של פונקציות", link: "https://supabase.com/dashboard/project/xghfcdgettrcdciwwzbl/usage" },
   { key: "m_meta", grp: "manual", title: "חשבון Meta", explain: "מצב חשבון הוואטסאפ", link: "https://business.facebook.com/wa/manage/" },
   { key: "m_google_billing", grp: "manual", title: "חיוב Google Cloud", explain: "חיוב בפועל ותקציב", link: "https://console.cloud.google.com/billing" },
-  { key: "m_planner", grp: "manual", title: "שרת התכנון (נדב)", explain: "לא נבדק אוטומטית", link: "https://app.yalla-sa.app" },
+  { key: "m_planner", grp: "manual", title: "שרת התכנון", explain: "לא נבדק אוטומטית", link: "https://app.yalla-sa.app" },
 ];
 
 const n = (x: number) => Math.round(x).toLocaleString("en-US");
@@ -59,7 +59,7 @@ export async function collect(d: Deps, prev: Item[], now: Date): Promise<Item[]>
         wa_spend: { level: pctLevel(f.wa_spend, f.wa_cap), value: f.wa_spend, cap: f.wa_cap,
           reading: of(`${Math.round(f.wa_spend * 10) / 10} ₪`, `${n(f.wa_cap)} ₪`), note: WA_NOTE },
         google_routes: { level: worst(pctLevel(f.g_month, G_MONTH), pctLevel(f.g_day, G_DAY)), value: f.g_month, cap: G_MONTH,
-          reading: of(n(f.g_month), n(G_MONTH)), note: "מחקר זמני הנסיעה נספר בנפרד, במחשב." },
+          reading: `${of(n(f.g_month), n(G_MONTH))} · היום ${of(n(f.g_day), n(G_DAY))}`, note: "מחקר זמני הנסיעה נספר בנפרד, במחשב." },
         mail_day: { level: pctLevel(f.mail_day, f.mail_cap), value: f.mail_day, cap: f.mail_cap, reading: of(n(f.mail_day), n(f.mail_cap)) },
         mail_month: { level: pctLevel(f.mail_month, MAIL_MONTH), value: f.mail_month, cap: MAIL_MONTH, reading: of(n(f.mail_month), n(MAIL_MONTH)) },
         db_size: { level: pctLevel(f.db_bytes, DB_CAP), value: f.db_bytes, cap: DB_CAP, reading: of(`${n(f.db_bytes / MB)}MB`, "500MB") },
@@ -71,7 +71,7 @@ export async function collect(d: Deps, prev: Item[], now: Date): Promise<Item[]>
       return r;
     }),
     attempt(["gh_cache"], async () => {
-      const b = Number((await ghJson("/actions/caches/usage") as { active_caches_size_in_bytes?: number }).active_caches_size_in_bytes);
+      const b = Number((await ghJson("/actions/cache/usage") as { active_caches_size_in_bytes?: number }).active_caches_size_in_bytes);
       if (!Number.isFinite(b)) throw new Error("gh_cache");
       return { gh_cache: { level: pctLevel(b, GH_CACHE_CAP), value: b, cap: GH_CACHE_CAP, reading: of(`${Math.round(b / GB * 10) / 10}GB`, "10GB") } };
     }),

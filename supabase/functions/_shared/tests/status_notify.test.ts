@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decide } from "../status/notify.ts";
+import { decide, oneLine } from "../status/notify.ts";
 import type { Item, Level } from "../status/levels.ts";
 
 const it = (key: string, title: string, level: Level, reading = "x"): Item => ({ key, ord: 0, grp: "runs", title, explain: "", value: null, cap: null,
@@ -53,4 +53,14 @@ test("no emails or phone numbers in the text", () => {
 test("red -> grey (source down) -> red again does not send twice", () => {
   const grey = { ...blk("unknown"), red_since: "2026-11-19T07:00:00Z" };
   assert.equal(decide([grey], [blk("bad")], AM10, "2026-11-19").immediate, null);
+});
+
+test("a grey-turned-yellow line says it was not checked", () => {
+  const stale = { ...blk("warn"), unknown_since: "2026-11-18T05:00:00Z", note: "לא נבדק – 08:07" };
+  assert.ok(decide([stale], [stale], AM0810, null).digest!.includes("צהוב: בדיקת חוסמים שבועית – הריצה האחרונה נכשלה · 17.11 (לא נבדק – 08:07)"));
+});
+test("oneLine joins the lines for WhatsApp templates (no newlines)", () => {
+  const t = decide([blk("ok")], [blk("bad")], AM10, null).immediate!;
+  assert.equal(oneLine(t).includes(String.fromCharCode(10)), false);
+  assert.ok(oneLine(t).startsWith("יאללה־סע – מצב הפלטפורמה · אדום:"));
 });

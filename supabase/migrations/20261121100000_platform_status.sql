@@ -1,5 +1,6 @@
 -- Platform status (yalla-sa control panel tab "מצב הפלטפורמה").
--- Spec: yalla-sa-support/docs/superpowers/specs/2026-11-19-platform-status-design.md §4. No cron here (see ..091000).
+-- Spec: yalla-sa-support/docs/superpowers/specs/2026-11-19-platform-status-design.md §4. No cron here (see ..101000).
+-- Needs, before: 20261121090000_account_contact_email.sql (private.account_mail_log, counted by support_mail_sent_month).
 -- Needs: the Vault secret 'support_internal_key' (already there) and the Edge Function platform_status (verify_jwt off).
 -- Holds numbers and fixed text only: no names, phones or addresses.
 
@@ -32,7 +33,8 @@ insert into private.status_manual(key, checked_on) values
 create table private.status_meta (
   id int primary key default 1 check (id = 1),
   last_digest_on date,
-  last_refresh_at timestamptz
+  last_refresh_at timestamptz,
+  running_until timestamptz   -- one check at a time (cron + "בדיקה עכשיו" must not both send the same red message)
 );
 insert into private.status_meta(id) values (1);
 
@@ -58,6 +60,18 @@ create or replace function public.status_figures() returns jsonb
     'db_bytes', pg_database_size(current_database()),
     'alert_channel', coalesce((select alert_channel from public.support_settings where id = 1), 'off'),
     'manual', coalesce((select jsonb_agg(jsonb_build_object('key', key, 'checked_on', checked_on)) from private.status_manual), '[]'::jsonb)) $$;
+
+-- run lease: true for the one caller that may run now; the lease ends by itself after 90 seconds
+create or replace function public.status_run_begin() returns boolean
+  language plpgsql security definer set search_path = '' as $$
+begin
+  update private.status_meta set running_until = now() + interval '90 seconds'
+    where id = 1 and (running_until is null or running_until < now());
+  return found;
+end $$;
+create or replace function public.status_run_end() returns void
+  language sql security definer set search_path = '' as $$
+  update private.status_meta set running_until = null where id = 1 $$;
 
 -- the hourly check reads and writes the snapshot through these two (the private schema is not exposed to the API)
 create or replace function public.status_snapshot_get() returns jsonb
@@ -124,12 +138,12 @@ end $$;
 
 create or replace function public.platform_status_refresh() returns text
   language plpgsql security definer set search_path = '' as $$
-declare last timestamptz;
+declare v_last timestamptz;
 begin
   perform private.status_guard();
   if not pg_try_advisory_xact_lock(hashtext('platform_status')) then return 'too_soon'; end if;
-  select last_refresh_at into last from private.status_meta where id = 1 for update;
-  if last is not null and now() - last < interval '120 seconds' then return 'too_soon'; end if;
+  select last_refresh_at into v_last from private.status_meta where id = 1 for update;
+  if v_last is not null and now() - v_last < interval '120 seconds' then return 'too_soon'; end if;
   update private.status_meta set last_refresh_at = now() where id = 1;
   perform private.status_call();
   return 'started';
@@ -137,8 +151,10 @@ end $$;
 
 revoke all on table private.status_items, private.status_manual, private.status_meta from public, anon, authenticated;
 revoke all on function public.support_mail_sent_month(), public.status_figures(), public.status_snapshot_get(),
+  public.status_run_begin(), public.status_run_end(),
   public.status_snapshot_put(jsonb, date), private.status_call(), private.status_guard(),
   public.platform_status(), public.platform_status_mark(text), public.platform_status_refresh() from public, anon, authenticated;
 grant execute on function public.support_mail_sent_month(), public.status_figures(), public.status_snapshot_get(),
+  public.status_run_begin(), public.status_run_end(),
   public.status_snapshot_put(jsonb, date) to service_role;
 grant execute on function public.platform_status(), public.platform_status_mark(text), public.platform_status_refresh() to authenticated;

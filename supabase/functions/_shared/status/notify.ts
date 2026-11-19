@@ -6,8 +6,12 @@ import { type Item, ilDate, ilHour } from "./levels.ts";
 export const PANEL_LINK = "https://yalla-sa.app/?panel=status";
 const HEAD = "יאללה־סע – מצב הפלטפורמה";
 
-const line = (i: Item) => `${i.level === "bad" ? "אדום" : "צהוב"}: ${i.title} – ${i.reading}`;
+// a row that has been grey for 24 hours (now yellow) says so, or its old reading would look current
+const line = (i: Item) => `${i.level === "bad" ? "אדום" : "צהוב"}: ${i.title} – ${i.reading}${i.unknown_since && i.note ? ` (${i.note})` : ""}`;
 const text = (items: Item[]) => [HEAD, ...items.map(line), `ללוח: ${PANEL_LINK}`].join("\n");
+
+// WhatsApp template parameters may not contain newlines (Meta error 132018)
+export const oneLine = (t: string) => t.split("\n").join(" · ");
 
 export function decide(prev: Item[], next: Item[], now: Date, lastDigestOn: string | null):
   { immediate: string | null; digest: string | null; markDigest: boolean } {

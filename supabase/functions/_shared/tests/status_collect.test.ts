@@ -13,7 +13,7 @@ function deps(over: Partial<Deps> = {}): Deps {
     figures: async () => FIG,
     text: async () => '(window.OPDAYS=window.OPDAYS||{})["derech-egged"]={"days": ["2026-11-17"]}',
     json: async (u: string) => {
-      if (u.includes("/caches/usage")) return { active_caches_size_in_bytes: 1.44 * 1073741824 };
+      if (u === "https://api.github.com/repos/david-transit/deadhead-dashboard/actions/cache/usage") return { active_caches_size_in_bytes: 1.44 * 1073741824 };
       if (u.includes("backup-weekly")) return { workflow_runs: [run("success", "2026-11-17T08:00:00Z")] };
       if (u.includes("bus-blockers-weekly")) return { workflow_runs: [run("failure", "2026-11-17T08:00:00Z")] };
       if (u.includes("rdap")) return { events: [{ eventAction: "expiration", eventDate: "2027-11-15T00:00:00Z" }] };
@@ -30,7 +30,8 @@ test("all fine: 15 items in catalog order, readings", async () => {
   assert.deepEqual(items.map(i => i.ord), [...Array(15).keys()]);
   const b = by(items);
   assert.equal(b.mail_day.level, "ok"); assert.equal(b.mail_day.reading, "12 מתוך 100");
-  assert.equal(b.google_routes.reading, "350 מתוך 4,500");
+  assert.equal(b.google_routes.reading, "350 מתוך 4,500 · היום 50 מתוך 300");
+  assert.equal(b.m_planner.title, "שרת התכנון"); // no personal names in messages (spec §3)
   assert.equal(b.gh_cache.reading, "1.4GB מתוך 10GB");
   assert.equal(b.db_size.reading, "16MB מתוך 500MB");
   assert.equal(b.wa_spend.reading, "0 ₪ מתוך 20 ₪"); assert.equal(b.wa_spend.note, "ממתין לאימות העסק");
