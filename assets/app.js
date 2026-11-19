@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-19.9";
+const APP_VER="2026-11-19.14";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -49,7 +49,7 @@ const DOMAIN="users.yalla-sa.app"; // internal sign-in address <username>@DOMAIN
 const ERR={invalid_credentials:"שם משתמש או סיסמה שגויים","Invalid login credentials":"שם משתמש או סיסמה שגויים",user_banned:"החשבון הושבת. פנה למנהל המערכת",disabled:"החשבון הושבת. פנה למנהל המערכת",
   "row-level security":"אין לך הרשאה לשנות את זה",not_allowed:"אין לך הרשאה לפעולה הזו","42501":"אין לך הרשאה לשנות את זה",not_signed_in:"צריך להיכנס מחדש",
   weak_password:"הסיסמה צריכה להיות לפחות 8 תווים, עם אותיות ומספרים","Password should be":"הסיסמה צריכה להיות לפחות 8 תווים, עם אותיות ומספרים",same_password:"הסיסמה החדשה זהה לישנה",
-  wrong_password:"הסיסמה הנוכחית שגויה",not_recovery:"הקישור מהמייל לא תקף או שפג תוקפו (10 דקות). בקש קישור חדש.",bad_username:"שם משתמש: 3–32 תווים, אותיות באנגלית, ספרות, נקודה, מקף או קו תחתון",username_taken:"שם המשתמש הזה כבר תפוס",
+  wrong_password:"הסיסמה הנוכחית שגויה",temp_expired:"הסיסמה הזמנית פגה. לקבלת סיסמה חדשה כתבו לנו: support@yalla-sa.app",bad_email:"כתובת המייל לא תקינה.",not_recovery:"הקישור מהמייל לא תקף או שפג תוקפו (10 דקות). בקש קישור חדש.",bad_username:"שם משתמש: 3–32 תווים, אותיות באנגלית, ספרות, נקודה, מקף או קו תחתון",username_taken:"שם המשתמש הזה כבר תפוס",
   bootstrap_done:"חשבון מנהל ראשי כבר נוצר. היכנס עם שם משתמש וסיסמה","rate limit":"יותר מדי ניסיונות. נסה שוב בעוד כמה דקות",over_request_rate_limit:"יותר מדי ניסיונות. נסה שוב בעוד כמה דקות",
   signup_disabled:"אין הרשמה עצמית. מנהל המערכת יוצר את המשתמשים",bad_input:"הנתונים לא תקינים",server_error:"שגיאה בשרת. נסה שוב",
   no_key:"אין גישה לנתוני המפעיל",mfa_required:"צריך להיכנס מחדש עם קוד האימות הדו־שלבי",mfa_enroll_required:"מנהל חייב אימות דו־שלבי: צא והיכנס שוב כדי להפעיל אותו",
@@ -1578,6 +1578,8 @@ $("#gateForm").addEventListener("submit",async e=>{
       if(weakPw(pw)) throw new Error("Password should be"); if(pw!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
       await fnCall({action:"change_password",current_password:cur,new_password:pw});
       await signIn(lsGet("ys_user")||PROFILE?.username||"",pw); LASTPW=null; // a password change ends the old sessions
+      // came from the portal's "finish your account" step: back to the portal home, signed in (shared ys_session)
+      if(new URLSearchParams(location.search).get("then")==="portal"){location.replace(PORTAL);return}
       if(!(await unlock())) return}
     else if(GMODE==="noaccess"){await signOut();toPortal()}
     else if(GMODE==="error"){location.reload()}
