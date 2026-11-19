@@ -1,4 +1,5 @@
-// manage_users (yalla-sa · נסיעות ריקות): username + password accounts, no email ever sent.
+// manage_users (yalla-sa · נסיעות ריקות): username + password accounts. The only mail it sends is "send details" (welcome
+// mail with a fresh 7-day temporary password to the contact email a platform admin saved; welcome-mail spec 2026-11-19).
 // Supabase Auth holds each user under an internal address <username>@users.yalla-sa.app (never shown).
 // Runs with the service role key (Edge Function env only; never in the browser or the repo).
 //
@@ -11,17 +12,23 @@
 // Personal devices:    trust_device / untrust_device (this session), my_devices, revoke_device (own: any session;
 //                      another user's: platform admin + aal2), all_devices (platform admin + aal2)
 // Platform admin:      my_security, set_recovery_email, gen_recovery_codes (both need the current password)
-// Control room:        list, create (role "platform" = platform admin, platform admins only), set_membership,
-//                      remove_membership, set_tool_role / remove_tool_role (role in one tool other than deadhead,
-//                      tool_roles; separate per tool since 2026-11-19), set_platform, set_name (display name; own or a manageable user),
-//                      reset_password, reset_mfa, set_disabled, delete
-//   platform admin = every user except himself (own password: change_password); operator admin = viewers and editors
-//   whose access is only in operators he administers (never another admin). At least one active platform admin remains.
+// Control room:        list, create (+ optional contact email, a role per tool), set_membership, remove_membership,
+//                      set_tool_role / remove_tool_role (role in one tool other than deadhead, tool_roles; separate
+//                      per tool since 2026-11-19), set_platform, set_name (display name; own, or any user for a platform
+//                      admin), reset_password, reset_mfa, set_disabled, delete, get_contact_email, set_contact_email, send_details
+//   platform admin = every user except himself (own password: change_password); operator admin = VIEW ONLY (list of
+//   the users in his operators; David 2026-11-19). At least one active platform admin remains.
+// Temporary passwords (create, reset_password, send_details) expire after 7 days: change_password then refuses (temp_expired).
 // MFA (step-up, 2026-11-18): sign-in is password-only and data RLS no longer asks for aal2. Here: the control room and
 // own recovery settings always need aal2; change_password / remove_my_mfa need aal2 when the user has a verified factor.
 // Passwords: only this function can set one (DB trigger on auth.users needs a one-shot permit, allow_pw_change).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { canManageUser, TOOL_MODULES, visibleOf } from "../_shared/access.ts";
+import { writeAllowed, tempExpiry, tempExpired, cleanContactEmail, createGrants } from "../_shared/account/policy.ts";
+import { sendDetails } from "../_shared/account/details.ts";
+import { supabaseDetailsDeps } from "../_shared/account/details_db.ts";
+import { brandFor } from "../_shared/mail/http.ts";
+import { alerter } from "../_shared/mail/alert.ts";
+import { TOOL_MODULES, visibleOf } from "../_shared/access.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -108,6 +115,7 @@ async function dropFactors(id: string) { // the DB guard on auth.mfa_factors nee
   return (data?.factors || []).length;
 }
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const contactEmail = (x: unknown) => { try { return cleanContactEmail(x); } catch { throw new Fail("bad_email"); } };
 
 class Fail extends Error { constructor(public code: string, public status = 400) { super(code); } }
 
@@ -135,7 +143,8 @@ async function createAccount(username: string, password: string, display_name: s
     throw error || new Error("create failed");
   }
   const id = data.user.id;
-  const { error: pe } = await admin.from("profiles").insert({ user_id: id, username, display_name, must_change_password: must_change, created_by: by });
+  const { error: pe } = await admin.from("profiles").insert({ user_id: id, username, display_name, must_change_password: must_change,
+    temp_password_expires_at: must_change ? tempExpiry(new Date()).toISOString() : null, created_by: by });
   if (pe) { await admin.auth.admin.deleteUser(id); throw pe; }
   return id;
 }
@@ -220,7 +229,7 @@ Deno.serve(async (req) => {
       const { data: used } = await admin.rpc("recovery_use_code", { p_user: p.user_id, p_hash: await codeHash(p.user_id, b.code as string) }).throwOnError();
       if (!used) { await logEvent(p.user_id, username, "recovery_code_failed"); throw new Fail("bad_code", 400); }
       await setPassword(p.user_id, b.new_password as string);
-      await admin.from("profiles").update({ must_change_password: false }).eq("user_id", p.user_id).throwOnError();
+      await admin.from("profiles").update({ must_change_password: false, temp_password_expires_at: null }).eq("user_id", p.user_id).throwOnError();
       // a recovery code is the backup second factor: it also removes the lost authenticator; a new one is enrolled at sign-in
       const dropped = await dropFactors(p.user_id);
       const { data: left } = await admin.rpc("recovery_codes_left", { p_user: p.user_id });
@@ -234,7 +243,7 @@ Deno.serve(async (req) => {
     const { data: me, error: meErr } = await admin.auth.getUser(token);
     if (meErr || !me?.user) throw new Fail("not_signed_in", 401);
     const uid = me.user.id;
-    const { data: myProf } = await admin.from("profiles").select("username, must_change_password, disabled").eq("user_id", uid).maybeSingle();
+    const { data: myProf } = await admin.from("profiles").select("username, must_change_password, temp_password_expires_at, disabled").eq("user_id", uid).maybeSingle();
     if (myProf?.disabled) throw new Fail("disabled", 403);
     const claims = jwtClaims(token);
     const needMfa = async () => { // M3: once a user has a verified factor, a password-only session is not enough
@@ -243,12 +252,13 @@ Deno.serve(async (req) => {
 
     if (b.action === "change_password") {
       if (!myProf) throw new Fail("not_allowed", 403);
+      if (tempExpired(myProf, new Date())) throw new Fail("temp_expired", 403); // 7 days passed: ask for new details
       await needMfa();
       if (!okPw(b.new_password)) throw new Fail("weak_password");
       if (b.new_password === b.current_password) throw new Fail("same_password");
       await checkPassword(uid, myProf.username, b.current_password); // a separate check session, not the caller's
       await setPassword(uid, b.new_password as string);
-      await admin.from("profiles").update({ must_change_password: false }).eq("user_id", uid).throwOnError();
+      await admin.from("profiles").update({ must_change_password: false, temp_password_expires_at: null }).eq("user_id", uid).throwOnError();
       await logEvent(uid, myProf.username, "password_changed");
       return out({ ok: true });
     }
@@ -264,7 +274,7 @@ Deno.serve(async (req) => {
       if (!em) throw new Fail("not_recovery", 403);
       if (!okPw(b.new_password)) throw new Fail("weak_password");
       await setPassword(uid, b.new_password as string);
-      await admin.from("profiles").update({ must_change_password: false }).eq("user_id", uid).throwOnError();
+      await admin.from("profiles").update({ must_change_password: false, temp_password_expires_at: null }).eq("user_id", uid).throwOnError();
       await logEvent(uid, myProf.username, "recovered_by_mail");
       return out({ ok: true, username: myProf.username });
     }
@@ -355,14 +365,12 @@ Deno.serve(async (req) => {
     // every admin (platform or operator admin) must use two-step verification: no control room from a password-only session
     if (claims.aal !== "aal2") throw new Fail("mfa_enroll_required", 403);
     const canOp = (op: string) => isPlatform || adminOps.has(op);
-    // may the caller reset / disable / delete / re-assign this user? (rule: _shared/access.ts canManageUser)
+    // operator admin = view only (David 2026-11-19): every change to users is a platform admin's
+    if (!writeAllowed(String(b.action), isPlatform, String(b.user_id || "") === uid)) throw new Fail("not_allowed", 403);
+    // may the caller reset / disable / delete / re-assign this user?
     const manageable = async (target: string) => {
       if (!UUID.test(target) || target === uid) return false;
-      if (isPlatform) return true;
-      const [ms, tr] = await Promise.all([
-        admin.from("memberships").select("operator_id, role").eq("user_id", target).throwOnError(),
-        admin.from("tool_roles").select("operator_id, module, role").eq("user_id", target).throwOnError()]);
-      return canManageUser({ caller: uid, target, isPlatform, adminOps, platformIds, memberships: ms.data || [], tools: tr.data || [] });
+      return isPlatform; // operator admin: view only (David 2026-11-19)
     };
     const needTarget = async () => {
       const t = String(b.user_id || "");
@@ -390,6 +398,8 @@ Deno.serve(async (req) => {
         const { data: ms } = await admin.from("memberships").select("user_id, operator_id, role");
         const { data: tr } = await admin.from("tool_roles").select("user_id, operator_id, module, role").throwOnError();
         const seen = new Map<string, string>();
+        const withEmail = new Set<string>(isPlatform ? (((await admin.rpc("contact_email_users")).data || []) as unknown[])
+          .map((x) => typeof x === "string" ? x : String((x as Record<string, unknown>).contact_email_users)) : []);
         const mfa = new Set<string>((((await admin.rpc("mfa_users")).data || []) as unknown[]).map((x) => typeof x === "string" ? x : String((x as Record<string, unknown>).mfa_users)));
         for (let page = 1; page < 20; page++) {
           const { data } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
@@ -409,6 +419,7 @@ Deno.serve(async (req) => {
             tools: visibleT.map((m) => ({ module: m.module, operator_id: m.operator_id, role: m.role })),
             other_access: all.length + allT.length > visible.length + visibleT.length, platform: platformIds.has(p.user_id),
             me: p.user_id === uid, manageable: await manageable(p.user_id), mfa: mfa.has(p.user_id),
+            ...(isPlatform ? { has_email: withEmail.has(p.user_id) } : {}),
           });
         }
         users.sort((x, y) => x.username.localeCompare(y.username));
@@ -419,16 +430,26 @@ Deno.serve(async (req) => {
         const username = cleanUser(b.username);
         if (!USER.test(username)) throw new Fail("bad_username");
         if (!okPw(b.password)) throw new Fail("weak_password");
+        const contact = contactEmail(b.email);
+        const saveContact = async (id: string) => { if (contact) await admin.rpc("contact_email_set", { p_user: id, p_email: contact, p_by: uid }).throwOnError(); };
         if (b.role === "platform") { // platform admin: no operator needed; only a platform admin may create one
           if (!isPlatform) throw new Fail("not_allowed", 403);
           const id = await createAccount(username, b.password as string, cleanName(b.display_name), true, uid);
           await admin.from("platform_admins").insert({ user_id: id }).throwOnError();
+          await saveContact(id);
           await logEvent(uid, myProf.username, "platform_admin_created", { user: username });
           return out({ ok: true, user_id: id });
         }
-        const { op, role } = needOpRole();
+        // a role per tool (David 2026-11-19): role = deadhead ("none" = no access), tools = the other live tools
+        const g = (() => { try { return createGrants(b); } catch { throw new Fail("bad_input"); } })();
+        const op = String(b.operator_id || "");
+        if (!UUID.test(op)) throw new Fail("bad_input");
+        if (!canOp(op)) throw new Fail("not_allowed", 403);
         const id = await createAccount(username, b.password as string, cleanName(b.display_name), true, uid);
-        await admin.from("memberships").insert({ user_id: id, operator_id: op, role, created_by: uid }).throwOnError();
+        if (g.deadhead) await admin.from("memberships").insert({ user_id: id, operator_id: op, role: g.deadhead, created_by: uid }).throwOnError();
+        for (const t of g.tools) await admin.from("tool_roles").insert({ user_id: id, operator_id: op, module: t.module, role: t.role,
+          updated_at: new Date().toISOString(), updated_by: uid }).throwOnError();
+        await saveContact(id);
         return out({ ok: true, user_id: id });
       }
 
@@ -483,7 +504,7 @@ Deno.serve(async (req) => {
         const t = await needTarget();
         if (!okPw(b.password)) throw new Fail("weak_password");
         await setPassword(t, b.password as string);
-        await admin.from("profiles").update({ must_change_password: true }).eq("user_id", t).throwOnError();
+        await admin.from("profiles").update({ must_change_password: true, temp_password_expires_at: tempExpiry(new Date()).toISOString() }).eq("user_id", t).throwOnError();
         await logEvent(uid, myProf.username, "password_reset_by_admin", { user: t });
         return out({ ok: true });
       }
@@ -511,6 +532,29 @@ Deno.serve(async (req) => {
         const { error } = await admin.auth.admin.deleteUser(t);
         if (error) throw error;
         return out({ ok: true });
+      }
+
+      case "get_contact_email": {
+        const t = await needTarget();
+        const { data } = await admin.rpc("contact_email_get", { p_user: t }).throwOnError();
+        return out({ ok: true, email: data || null });
+      }
+
+      case "set_contact_email": {
+        const t = await needTarget(), em = contactEmail(b.email);
+        await admin.rpc("contact_email_set", { p_user: t, p_email: em, p_by: uid }).throwOnError();
+        await logEvent(uid, myProf.username, em ? "contact_email_set" : "contact_email_removed", { user: t });
+        return out({ ok: true });
+      }
+
+      case "send_details": {
+        const t = await needTarget();
+        const apiKey = Deno.env.get("RESEND_API_KEY");
+        if (!apiKey) throw new Fail("not_configured", 503);
+        const { data: s } = await admin.from("support_settings").select("mail_daily_cap").eq("id", 1).maybeSingle();
+        const r = await sendDetails(supabaseDetailsDeps(admin, { byUser: uid, byName: myProf.username, fetch, apiKey,
+          brand: brandFor(SB_URL), cap: s?.mail_daily_cap ?? 100, alert: alerter(admin, SB_URL, false), setPassword, anon: anonClient }), t);
+        return r.ok ? out(r) : out({ error: (r as { error: string }).error }, 422);
       }
 
       default:

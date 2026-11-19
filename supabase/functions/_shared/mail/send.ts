@@ -64,3 +64,20 @@ export async function sendMail(d: MailDeps, r: MailReq): Promise<MailOut> {
   if (q.warn80 && d.alert) await d.alert(WARN80_TEXT);
   return { ok: true, id };
 }
+
+// Account mail (welcome / login details, welcome-mail spec §6.3): straight to Resend. It carries a temporary password,
+// so nothing is stored (no support_messages row, no contact) and it is never queued. The caller checks the quota first.
+export async function sendAccountMail(d: { fetch: typeof fetch; apiKey: string; brand: Brand },
+  m: { to: string; subject: string; body: string; key: string }): Promise<{ ok: boolean; error?: string }> {
+  const { html, text } = renderMail(m.body, d.brand);
+  try {
+    const res = await d.fetch(RESEND_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${d.apiKey}`, "Content-Type": "application/json", "Idempotency-Key": m.key },
+      body: JSON.stringify({ from: FROM, to: [m.to], subject: m.subject, html, text, reply_to: REPLY_TO, headers: { "Message-ID": newMessageId() } }),
+    });
+    if (res.ok) return { ok: true };
+    console.error("account mail: resend", res.status);
+  } catch { console.error("account mail: resend fetch failed"); }
+  return { ok: false, error: "send_failed" };
+}
