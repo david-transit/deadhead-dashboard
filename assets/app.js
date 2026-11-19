@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-19.10";
+const APP_VER="2026-11-19.11";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -1578,6 +1578,8 @@ $("#gateForm").addEventListener("submit",async e=>{
       if(weakPw(pw)) throw new Error("Password should be"); if(pw!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
       await fnCall({action:"change_password",current_password:cur,new_password:pw});
       await signIn(lsGet("ys_user")||PROFILE?.username||"",pw); LASTPW=null; // a password change ends the old sessions
+      // came from the portal's "finish your account" step: back to the portal home, signed in (shared ys_session)
+      if(new URLSearchParams(location.search).get("then")==="portal"){location.replace(PORTAL);return}
       if(!(await unlock())) return}
     else if(GMODE==="noaccess"){await signOut();toPortal()}
     else if(GMODE==="error"){location.reload()}
