@@ -18,7 +18,23 @@ test("only known callers / tool modules; deadhead is never a tool_roles module",
   assert.equal(CALLER_MODULE["transit-studio"], "studio");
   assert.equal(Object.hasOwn(CALLER_MODULE, "deadhead"), false);
   assert.equal(Object.hasOwn(CALLER_MODULE, "__proto__"), false);
-  assert.deepEqual(TOOL_MODULES, ["studio"]);
+  assert.deepEqual(TOOL_MODULES, ["studio", "notice-check", "notice-create"]);
+});
+
+test("notices tiles (2026-11-19): each notices module reads only its own role, never studio's or deadhead's", () => {
+  assert.equal(CALLER_MODULE["notice-check"], "notice-check");
+  assert.equal(CALLER_MODULE["notice-create"], "notice-create");
+  const rows = [{ operator_id: OP1, module: "studio", role: "admin" }, { operator_id: OP1, module: "notice-check", role: "viewer" },
+    { operator_id: OP2, module: "notice-create", role: "editor" }];
+  assert.deepEqual(rolesForModule(rows, CALLER_MODULE["notice-check"]), [{ operator_id: OP1, role: "viewer" }]);
+  assert.deepEqual(rolesForModule(rows, CALLER_MODULE["notice-create"]), [{ operator_id: OP2, role: "editor" }]);
+  assert.deepEqual(rolesForModule(rows, CALLER_MODULE["transit-studio"]), [{ operator_id: OP1, role: "admin" }]);
+  assert.deepEqual(rolesForModule([{ operator_id: OP1, module: "studio", role: "editor" }], "notice-check"), []); // no backfill: studio role != notices
+});
+
+test("operator admin manages a notices-only user of his operator", () => {
+  assert.equal(canManageUser({ ...base, tools: [{ operator_id: OP1, module: "notice-create", role: "editor" }] }), true);
+  assert.equal(canManageUser({ ...base, tools: [{ operator_id: OP2, module: "notice-check", role: "viewer" }] }), false);
 });
 
 test("operator admin manages a studio-only user of his operator", () => {
