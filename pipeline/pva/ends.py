@@ -58,6 +58,34 @@ def annotate_service(trips, rends):
             t['first'], t['last'], t['gtfs_match'] = fl if fl else (None, None, None)
 
 
+def _km(a, b):
+    return 111 * math.hypot(a['lat'] - b['lat'], (a['lon'] - b['lon']) * 0.85)
+
+
+def learn_places(trips, min_n=2, near_km=0.5):
+    """Operator place names learned from the day's service trips (David 19.11, 'חניון ביטוח לאומי'): the name before the
+    first '-' of a service description is where that trip starts in the GTFS. Kept only when seen at least min_n times and
+    all its first stops lie within near_km of each other. Used only when an empty leg has no service neighbour."""
+    seen = collections.defaultdict(list)
+    for t in trips:
+        d = (t.get('desc') or '').strip()
+        if t['kind'] == 'service' and t.get('first') and '-' in d:
+            seen[d.split('-', 1)[0].strip()].append(t['first'])
+    out = {}
+    for n, L in seen.items():
+        if n and len(L) >= min_n and all(_km(L[0], x) <= near_km for x in L):
+            out[n] = collections.Counter(x['code'] for x in L).most_common(1)[0][0]
+            out[n] = next(x for x in L if x['code'] == out[n])
+    return out
+
+
+def _place(desc, places, start):
+    for n in sorted(places, key=len, reverse=True):
+        if desc.startswith(n) if start else desc.endswith(n):
+            return places[n]
+    return None
+
+
 def _depot(desc, depots, aliases, start):
     names = [(d['name'], d) for d in depots] + [(n, next((d for d in depots if d['id'] == i), None)) for n, i in aliases.items()]
     for n, d in sorted(names, key=lambda x: -len(x[0])):
@@ -66,8 +94,8 @@ def _depot(desc, depots, aliases, start):
     return None
 
 
-def resolve(trips, depots, aliases=None):
-    aliases = aliases or {}
+def resolve(trips, depots, aliases=None, places=None):
+    aliases, places = aliases or {}, places or {}
     for i, t in enumerate(trips):
         if t['kind'] != 'empty':
             continue
@@ -79,6 +107,8 @@ def resolve(trips, depots, aliases=None):
         # a depot named in the description is a definite place (also mid-day); otherwise the neighbouring service trip
         a = _depot(desc, depots, aliases, True) or (prv.get('last') if prv and prv['kind'] == 'service' else None)
         b = _depot(desc, depots, aliases, False) or (nxt.get('first') if nxt and nxt['kind'] == 'service' else None)
+        a = a or _place(desc, places, True)
+        b = b or _place(desc, places, False)
         t['a'], t['b'] = a, b
         if a is None or b is None:
             t['end_src'] = 'unresolved'

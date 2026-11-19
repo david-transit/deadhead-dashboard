@@ -87,17 +87,18 @@ def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, goog
         t['desc'] = ((t.get('plan') or {}).get('desc') or rdict.get((t['exec'] or t['plan'])['mkt8'], (None, ''))[1] or '')
     svc = {(t['exec'] or t['plan'])['mkt8']: (t['exec'] or t['plan'])['line'] for t in trips if t['kind'] == 'service'}
     ends.annotate_service(trips, ends.route_ends(gtfs_zip, set(svc), lines=svc, agency=cfg.get('gtfs_agency')))
+    places = ends.learn_places(trips)
     by_veh = collections.defaultdict(list)
     for t in trips:
         if t['exec']:
             by_veh[t['exec']['veh']].append(t)
     for seq in by_veh.values():
         seq.sort(key=lambda t: t['t'])
-        ends.resolve(seq, depots, cfg.get('depot_alias', {}))
+        ends.resolve(seq, depots, cfg.get('depot_alias', {}), places)
     for s in res['sidurim']:  # the sidur's plan order: only for trips that were not done (executed ones keep the vehicle pass)
         seq = [t for t in s['trips'] if t['status'] != 'added']
         keep = {id(t): (t.get('a'), t.get('b'), t.get('end_src')) for t in seq if t['status'] != 'not_done' and t['kind'] == 'empty'}
-        ends.resolve(seq, depots, cfg.get('depot_alias', {}))
+        ends.resolve(seq, depots, cfg.get('depot_alias', {}), places)
         for t in seq:
             if id(t) in keep:
                 t['a'], t['b'], t['end_src'] = keep[id(t)]

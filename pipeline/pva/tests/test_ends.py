@@ -59,6 +59,19 @@ class TestEnds(unittest.TestCase):
         self.assertEqual((t[1]['a']['code'], t[1]['b']['depot'], t[1]['end_src']), ('4156', 'gs7mosk', 'depot'))
         self.assertEqual((t[2]['a']['depot'], t[2]['b']['code']), ('gs7mosk', '1106'))
 
+    def test_place_learned_from_service_trips_fills_missing_neighbour(self):
+        # 10.11: 'בנייני האומה-חניון ביטוח לאומי' then a dispatcher leg from Atarot; the parking is where its lines start
+        PK = dict(code='7', name='תחנה תפעולית/ביטוח לאומי', lat=31.79, lon=35.20)
+        day = [dict(svc(PK, S1106), desc='חניון ביטוח לאומי-רמת גבעת זאב'), dict(svc(PK, S4156), desc='חניון ביטוח לאומי - מחנה עופר')]
+        places = ends.learn_places(day)
+        t = [svc(S1106, S4156), emp('בנייני האומה-חניון ביטוח לאומי'), emp('מוסך גבעת שאול-היכל המשפט'), svc(S1106, S4156)]
+        ends.resolve(t, DEPOTS, places=places)
+        self.assertEqual((t[1]['b']['code'], t[1]['end_src']), ('7', 'gtfs'))
+
+    def test_place_not_learned_from_one_trip_or_scattered_stops(self):
+        day = [dict(svc(S1106, S4156), desc='מקום א-ב'), dict(svc(S1106, S4156), desc='מקום ב-ג'), dict(svc(FAR, S4156), desc='מקום ב-ד')]
+        self.assertEqual(ends.learn_places(day), {})
+
     def test_empty_after_empty_unresolved(self):
         t = [svc(S1106, S4156), emp(), emp('א-ב'), svc(S1106, S4156)]
         ends.resolve(t, DEPOTS)
