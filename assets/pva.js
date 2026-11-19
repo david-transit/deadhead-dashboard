@@ -241,16 +241,18 @@
     const cur = document.querySelector(".tabs [aria-selected=true]").id; if (cur !== "tExcess") tab(cur);
   }
 
-  // local build -> database: platform admin, on localhost only (pipeline/cache is never deployed)
-  async function loadLocal() {
-    const f = new Date($("#dFrom").value + "T12:00:00"), t = new Date($("#dTo").value + "T12:00:00"); let n = 0;
-    for (let d = f; d <= t; d = new Date(d.getTime() + 864e5)) {
-      const day = d.toISOString().slice(0, 10);
-      const r = await fetch(`pipeline/cache/pva_${day}.json`, { cache: "no-store" }); if (!r.ok) continue;
-      say(`שומר את ${day}…`);
-      try { await rpc("put_pva", { p_operator: OP.id, p_day: day, p_payload: await r.json() }); n++; } catch (e) { say(`השמירה של ${day} נכשלה: ${e.message}`, true); return; }
+  // a built day -> database: platform admin only (put_pva checks it, with MFA). The file goes from this computer straight
+  // to the database; the pipeline output (pipeline/cache) is never in the repo.
+  async function loadFiles(files) {
+    let n = 0, last = null;
+    for (const f of files) {
+      let p; try { p = JSON.parse(await f.text()); } catch { say(`${f.name}: הקובץ לא נקרא`, true); return; }
+      if (!p || !/^\d{4}-\d{2}-\d{2}$/.test(p.day || "") || !Array.isArray(p.sidurim)) { say(`${f.name}: זה לא קובץ יום של תכנון מול ביצוע`, true); return; }
+      say(`שומר את ${p.day}…`);
+      try { await rpc("put_pva", { p_operator: OP.id, p_day: p.day, p_payload: p }); n++; last = p.day; } catch (e) { say(`השמירה של ${p.day} נכשלה: ${e.message}`, true); return; }
     }
-    say(n ? `נשמרו ${n} ימים` : "לא נמצאו ימים בנויים בתקופה"); if (n) load();
+    say(n ? `נשמרו ${n === 1 ? "יום אחד" : n + " ימים"}` : "");
+    if (last) { if ($("#dFrom").value > last || !$("#dFrom").value) $("#dFrom").value = last; if ($("#dTo").value < last || !$("#dTo").value) $("#dTo").value = last; load(); }
   }
 
   const setGroup = g => { GROUP = g; [["gPlace", "place"], ["gVeh", "veh"], ["gSid", "sid"]].forEach(([id, v]) => { $("#" + id).className = v === g ? "on" : ""; $("#" + id).setAttribute("aria-pressed", v === g); }); SEL = null; OPENDAY = null; SELTRIP = null; CTX = null; rank(); };
@@ -262,7 +264,7 @@
   const full = on => { const c = $(".mapcard"); c.classList.toggle("full", on); $("#bFull").textContent = on ? "✕ סגירה" : "⛶ מסך מלא"; $("#bFull").setAttribute("aria-pressed", on); if (map) setTimeout(() => { map.invalidateSize(); const b = L.featureGroup(lay.getLayers()).getBounds(); if (b.isValid()) map.fitBounds(b, { padding: [40, 40] }); }, 80); };
   $("#bFull").onclick = () => full(!$(".mapcard").classList.contains("full"));
   document.addEventListener("keydown", e => { if (e.key === "Escape" && $(".mapcard").classList.contains("full")) full(false); });
-  $("#bLoad").onclick = load; $("#bLocal").onclick = loadLocal;
+  $("#bLoad").onclick = load; $("#bFile").onclick = () => $("#fFile").click(); $("#fFile").onchange = e => { const F = [...e.target.files]; e.target.value = ""; if (F.length) loadFiles(F); };
 
   (async () => {
     if (LOCAL) { $("#sub").textContent = "תצוגה מקומית מקבצי הבנייה (לא מהשרת)"; $("#dFrom").value = $("#dTo").value = new URLSearchParams(location.search).get("day") || "2026-11-10"; load(); return; }
@@ -271,7 +273,7 @@
     if (!OP || !allowed()) { $("main").innerHTML = `<div class="empty">אין לך הרשאה למסך הזה. הוא פתוח לעורכים ומעלה.</div>`; $("#cards").hidden = true; return; }
     $("#sub").textContent = `${OP.name} · קווים עירוניים`; document.title = `יאללה־סע · תכנון מול ביצוע · ${OP.name}`;
     if (OP.logo_url) { $("#opLogo").innerHTML = `<img src="${esc(OP.logo_url)}" alt="${esc(OP.name)}">`; $("#opLogo").hidden = false; }
-    $("#bLocal").hidden = !(PLATFORM && /^(localhost|127\.0\.0\.1)$/.test(location.hostname));
+    $("#bFile").hidden = !PLATFORM;
     let days = []; try { days = (await rpc("pva_days", { p_operator: OP.id })) || []; } catch { }
     const last = days.length ? days[days.length - 1] : new Date().toISOString().slice(0, 10);
     const first = days.length ? days[Math.max(0, days.length - 7)] : last;
