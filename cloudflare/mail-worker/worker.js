@@ -5,6 +5,8 @@
 //   INBOUND_URL       https://xghfcdgettrcdciwwzbl.supabase.co/functions/v1/mail_inbound
 //   BACKUP_TO         the technical Gmail address (must be a verified Email Routing destination)
 //   MAIL_INBOUND_KEY  secret, typed by David; the same value as in Supabase
+//   COPY_TO           optional, comma-separated: always gets a copy (David, 19.11: technical Gmail + Nadav until /support/ is live).
+//                     Each address must be a verified Email Routing destination; a failed copy is logged and skipped.
 const MAX_RAW = 12 * 1024 * 1024;
 const TIMEOUT_MS = 20000;
 
@@ -18,10 +20,17 @@ async function post(env, body, contentType) {
   } finally { clearTimeout(t); }
 }
 
+const copiesOf = (env) => String(env.COPY_TO || "").split(",").map((a) => a.trim()).filter(Boolean);
+
 export default {
   async email(message, env, ctx) {
+    const copies = copiesOf(env);
+    for (const to of copies) {
+      try { await message.forward(to); } catch (e) { console.log("copy failed", to, String(e)); }
+    }
+    const backup = async () => { if (!copies.includes(env.BACKUP_TO)) await message.forward(env.BACKUP_TO); };
     if (message.rawSize > MAX_RAW) {
-      await message.forward(env.BACKUP_TO);
+      await backup();
       const notice = JSON.stringify({ oversize: true, from: message.from, subject: message.headers.get("subject"), size: message.rawSize });
       try { await post(env, notice, "application/json"); } catch (e) { console.log("oversize notice failed", String(e)); }
       return;
@@ -31,6 +40,6 @@ export default {
       const raw = await new Response(message.raw).arrayBuffer();
       status = await post(env, raw, "message/rfc822");
     } catch (e) { console.log("mail_inbound unreachable", String(e)); }
-    if (status !== 200) await message.forward(env.BACKUP_TO);
+    if (status !== 200) await backup();
   },
 };
