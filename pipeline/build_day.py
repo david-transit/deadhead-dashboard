@@ -191,6 +191,12 @@ def merge_false_starts(ts):
             if tiny(t):
                 dups.append(dup(t, p)); continue
             dups.append(dup(p, t)); out[-1] = t; continue
+        # a tiny ride not in the licensed schedule (auto) at the same time as another trip of the bus: not a trip either
+        # (20.11.2026, 7361587: a 1-minute line 400 ride inside a line 404 trip made an empty leg running backwards)
+        if p and t["start"] < p["end"] and ((tiny(t) and t.get("auto")) or (tiny(p) and p.get("auto"))):
+            if tiny(t) and t.get("auto"):
+                dups.append(dup(t, p)); continue
+            dups.append(dup(p, t)); out[-1] = t; continue
         # one physical trip split over two SIRI journeys of the same line: the second starts where the first stopped
         if (p and p["line_ref"] == t["line_ref"] and t.get("late_login") and p.get("gps_km") is not None and t.get("f_km") is not None
                 and -2 <= t["f_t"] - p["end"] <= 5 and abs(t["f_km"] - p["gps_km"]) <= 2):
