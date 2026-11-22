@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import { pushAction, TEST_TEXT } from "../push_api.ts";
 
 const EP = "https://web.push.apple.com/QAbc";
-function fake(agent = true) {
+function fake(agent = true, key = "BPUB") {
   const calls: any[] = [];
   const d = {
     isAgent: async () => agent,
     upsert: async (r: any) => { calls.push(["upsert", r]); },
     remove: async (uid: string, ep: string) => { calls.push(["remove", uid, ep]); },
     sendOwn: async (uid: string, text: string) => { calls.push(["send", uid, text]); return { ok: true, sent: 1 }; },
+    publicKey: () => key,
   };
   return { d, calls };
 }
@@ -50,4 +51,10 @@ test("test sends the fixed test text to the caller's own devices only", async ()
 test("unknown action -> bad_input", async () => {
   const { d } = fake();
   assert.deepEqual(await pushAction(d, "u1", { action: "x" }), { ok: false, error: "bad_input", status: 400 });
+});
+
+test("key returns the VAPID public key to agents; not configured -> 503", async () => {
+  assert.deepEqual(await pushAction(fake().d, "u1", { action: "key" }), { ok: true, key: "BPUB" });
+  assert.deepEqual(await pushAction(fake(true, "").d, "u1", { action: "key" }), { ok: false, error: "push_not_configured", status: 503 });
+  assert.deepEqual(await pushAction(fake(false).d, "u1", { action: "key" }), { ok: false, error: "not_allowed", status: 403 });
 });

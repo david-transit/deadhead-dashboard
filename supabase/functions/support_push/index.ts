@@ -1,6 +1,6 @@
 // support_push (yalla-sa support, PRD-email M20; design 2026-11-22-email-push-alerts-design.md §5).
 // A signed-in support agent registers or removes this device for push alerts, or sends a test to own devices.
-//   {action:"subscribe", endpoint, keys:{p256dh,auth}, label} | {action:"unsubscribe", endpoint} | {action:"test"}
+//   {action:"key"} -> {ok, key} | {action:"subscribe", endpoint, keys:{p256dh,auth}, label} | {action:"unsubscribe", endpoint} | {action:"test"}
 // aal2 is not required: the function reveals nothing (like support_is_agent). Secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { pushAction } from "../_shared/push_api.ts";
@@ -26,6 +26,7 @@ const deps = {
     },
     remove: (ids) => must(admin.from("support_push_subs").delete().in("id", ids)),
   }, text, vapidKeys()),
+  publicKey: () => vapidKeys().publicKey,
 };
 
 Deno.serve(async (req) => {
