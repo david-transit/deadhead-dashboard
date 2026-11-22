@@ -1,0 +1,8 @@
+# Pinned test dependencies for .github/workflows/ci.yml (all transitive deps pinned too).
+pytest==9.2.0
+iniconfig==2.3.1
+pluggy==1.7.0
+packaging==26.3
+openpyxl==3.1.5
+et_xmlfile==2.0.0
+tzdata==2026.6
