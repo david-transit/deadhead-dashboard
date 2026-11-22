@@ -23,7 +23,7 @@ class TestSeal(unittest.TestCase):
         json.dump(POLICY, open(os.path.join(self.root, 'seals', 'policy.json'), 'w'))
         for d in ('2026-11-23', '2026-11-24', '2026-11-25', '2026-11-20', '2026-11-10'):
             self.day_file(d, 'encrypted ' + d)
-        git(self.root, 'add', '-A'); git(self.root, 'commit', '-q', '-m', 'init'); git(self.root, 'push', '-q', '-u', 'origin', 'HEAD')
+        git(self.root, 'add', '-A'); git(self.root, 'commit', '-q', '-m', 'init'); git(self.root, 'branch', '-M', 'main'); git(self.root, 'push', '-q', '-u', 'origin', 'main')
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -37,12 +37,19 @@ class TestSeal(unittest.TestCase):
     def test_valid_seal_is_blind(self):
         new = seal.seal_days(['2026-11-23'], OP, root=self.root)
         self.assertEqual(len(new), 1)
-        rec = json.load(open(new[0]))
-        self.assertEqual(set(rec), {'day', 'operator', 'sealed_at', 'files'})   # hashes only, no data
-        self.assertEqual(len(rec['files'][0]['sha256']), 64)
-        # the seal is on the remote ("GitHub")
-        out = subprocess.run(['git', '--git-dir', self.remote, 'log', '--format=%s'], capture_output=True, text=True).stdout
+        self.assertEqual(new, ['derech-egged/2026-11-23.json'])
+        # the seal is on the remote ("GitHub"), on the seals branch only, and holds hashes only
+        out = subprocess.run(['git', '--git-dir', self.remote, 'log', '--format=%s', 'seals'], capture_output=True, text=True).stdout
         self.assertIn('seal: derech-egged 2026-11-23', out)
+        rec = json.loads(subprocess.run(['git', '--git-dir', self.remote, 'show', 'seals:derech-egged/2026-11-23.json'],
+                                        capture_output=True, text=True, encoding='utf-8').stdout)
+        self.assertEqual(set(rec), {'day', 'operator', 'sealed_at', 'files'})
+        self.assertEqual(len(rec['files'][0]['sha256']), 64)
+        main = subprocess.run(['git', '--git-dir', self.remote, 'log', '--format=%s', 'main'], capture_output=True, text=True).stdout
+        self.assertNotIn('seal:', main)
+        # a second day goes on top of the existing seals branch; an existing seal is never rewritten
+        self.assertEqual(seal.seal_days(['2026-11-24'], OP, root=self.root), ['derech-egged/2026-11-24.json'])
+        self.assertEqual(seal.seal_days(['2026-11-23'], OP, root=self.root), [])
         v = seal.verify('2026-11-23', OP, self.later(), root=self.root)
         self.assertTrue(v['blind'], v['why'])
         self.assertTrue(seal.gate_a_eligible({'blind': v['blind']}))
@@ -72,7 +79,8 @@ class TestSeal(unittest.TestCase):
     def test_locked_period_refused_before_opening(self):
         with self.assertRaises(seal.SealError):
             seal.seal_days(['2026-11-10'], OP, root=self.root)
-        self.assertFalse(os.path.exists(seal.seal_path('2026-11-10', OP, self.root)))
+        out = subprocess.run(['git', '--git-dir', self.remote, 'branch', '--list', 'seals'], capture_output=True, text=True).stdout
+        self.assertEqual(out.strip(), '')
 
     def test_missing_reconstruction_refused(self):
         with self.assertRaises(seal.SealError):
