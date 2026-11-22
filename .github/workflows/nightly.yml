@@ -18,6 +18,9 @@ on:
       operator:
         description: "Only this operator slug (empty = every active operator in pipeline/operators.json)"
         required: false
+      seed_rev:
+        description: "One-off move to Storage: upload the operator files as they were in git at this commit (then nothing is built)"
+        required: false
 
 permissions:
   contents: read   # default for every job; only "build" may push (security review L7)
@@ -88,6 +91,33 @@ jobs:
           key: deadhead-cache-${{ github.run_id }}-${{ matrix.op.slug }}
           restore-keys: deadhead-cache-
 
+      # Operator data (encrypted day / ends / days files) lives in the private Storage bucket 'operator-data', not in the
+      # repo. The runner keeps a local copy in the Actions cache and downloads only what is missing or changed.
+      - name: Restore operator data copy
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: data/${{ matrix.op.slug }}/*.js
+          key: opdata-${{ matrix.op.slug }}-${{ github.run_id }}
+          restore-keys: opdata-${{ matrix.op.slug }}-
+
+      - name: One-off move of the operator files to Storage
+        if: inputs.seed_rev != ''
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLUG: ${{ matrix.op.slug }}
+          REV: ${{ inputs.seed_rev }}
+        run: |
+          set -eu
+          [[ "$REV" =~ ^[0-9a-f]{7,40}$ ]] || { echo "seed_rev must be a commit sha"; exit 1; }
+          git fetch -q --depth=1 origin "$REV"
+          python pipeline/storage_sync.py seed "$SLUG" "$REV"
+
+      - name: Operator data from Storage
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLUG: ${{ matrix.op.slug }}
+        run: python pipeline/storage_sync.py pull "$SLUG"
+
       - name: Pick days
         id: days
         env:
@@ -95,8 +125,10 @@ jobs:
           TO: ${{ inputs.to }}
           FORCE: ${{ inputs.force }}
           SLUG: ${{ matrix.op.slug }}
+          SEED: ${{ inputs.seed_rev }}
         run: |
           set -eu
+          if [ -n "${SEED:-}" ]; then echo "days=" >> "$GITHUB_OUTPUT"; echo "seed run: nothing to build"; exit 0; fi
           if [ -z "${FROM:-}" ]; then FROM=$(TZ=Asia/Jerusalem date -d yesterday +%F); fi
           if [ -z "${TO:-}" ]; then TO=$FROM; fi
           re='^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
@@ -186,6 +218,23 @@ jobs:
         if: always()
         run: rm -f data/*/day_*.json data/*/ends_*.json
 
+      - name: Upload to Storage, write the public hash list
+        if: steps.days.outputs.days != ''
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLUG: ${{ matrix.op.slug }}
+        run: |
+          set -eu
+          python pipeline/storage_sync.py push "$SLUG"
+          python pipeline/storage_sync.py manifest "$SLUG"
+
+      - name: Save operator data copy
+        if: always() && steps.days.outputs.days != ''
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: data/${{ matrix.op.slug }}/*.js
+          key: opdata-${{ matrix.op.slug }}-${{ github.run_id }}
+
       - name: Save caches
         if: always() && steps.days.outputs.days != ''
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -205,9 +254,10 @@ jobs:
           set -eu
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/*/day_*.js data/*/days.js data/*/ends_*.js
+          # only the public hash list (pva.seal reads it); the operator files themselves are in Storage
+          git add "data/$SLUG/hashes.json"
           if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
-          git commit -m "Add day(s) $SLUG:$DAYS"
+          git commit -m "Day hashes $SLUG:$DAYS"
           for i in 1 2 3; do
             git pull --rebase && git push && exit 0
             sleep 10

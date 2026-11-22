@@ -256,8 +256,18 @@ const reinOf=(v,i)=>MODEL.reinOf(D.day,v.veh,i);
 
 // ---- days, the cross-day index (ends) and the saved choices ----
 const loadScript=src=>new Promise((ok,bad)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=bad;document.head.appendChild(s)});
+// operator data files (encrypted day / ends files and the days list) are in the private Storage bucket 'operator-data',
+// read with the portal session (RLS: viewer of the operator). Never in the public repo or site. Parsed, never executed.
+async function opFile(name){
+  const r=await fetch(`${SB}/storage/v1/object/authenticated/operator-data/${encodeURIComponent(OP.slug)}/${encodeURIComponent(name)}`,
+    {cache:"no-cache",headers:{apikey:KEY,Authorization:"Bearer "+await token()}});
+  if(!r.ok) throw new Error(`${name}: ${r.status}`); return r.text()}
+const OPF_RE=/^\(window\.(OPDAYS|ENC_DAY|ENC_ENDS)=window\.\1\|\|\{\}\)\[("[^"]+")\]=(\{.*\});\s*$/s;
+function parseOpFile(text){const m=text.match(OPF_RE);if(!m) throw new Error("not an operator data file");
+  return [m[1],JSON.parse(m[2]),JSON.parse(m[3].replace(/([{,])\s*([A-Za-z_]\w*)\s*:/g,'$1"$2":'))]}
+async function loadOpFile(name){const [g,k,v]=parseOpFile(await opFile(name));(window[g]=window[g]||{})[k]=v}
 async function initDays(){
-  try{await loadScript(`data/${OP.slug}/days.js?v=${Date.now()}`)}catch{}
+  try{await loadOpFile("days.js")}catch(e){console.warn("days",e)}
   const m=(window.OPDAYS||{})[OP.slug]||{days:[]}; days=(m.days||[]).slice().sort(); DAYVER=m.ver||{}; ENDSVER=m.ends||{}; DAY_START_H=m.day_start_hour??4;
   const now=new Date(Date.now()-new Date().getTimezoneOffset()*6e4-DAY_START_H*36e5); today=ymd(now); yest=ymd(new Date(now-864e5));
   $("#day").innerHTML=days.map(d=>`<option value="${d}">${d.split("-").reverse().join(".")}</option>`).join("");
@@ -266,7 +276,7 @@ async function initDays(){
   $("#bToday").title=days.includes(today)?"":"אין עדיין נתונים להיום"; $("#bYest").title=days.includes(yest)?"":"אין נתונים לאתמול";
 }
 async function loadEnds(){ENDS={};
-  await Promise.all(Object.keys(ENDSVER).map(async m=>{try{if(!(window.ENC_ENDS&&window.ENC_ENDS[m])) await loadScript(`data/${OP.slug}/ends_${m}.js?v=${ENDSVER[m]}`);
+  await Promise.all(Object.keys(ENDSVER).map(async m=>{try{if(!(window.ENC_ENDS&&window.ENC_ENDS[m])) await loadOpFile(`ends_${m}.js`);
     Object.assign(ENDS,(await decryptEnc(window.ENC_ENDS[m])).days)}catch(e){console.warn("ends",m,e)}}))}
 async function loadAll(t,cols,order){let out=[];for(let off=0;;off+=1000){const r=await getRows(t,`select=${cols}&${opq()}&order=${order}&limit=1000&offset=${off}`)||[];out=out.concat(r);if(r.length<1000) break}return out}
 async function loadChoices(){
@@ -292,8 +302,7 @@ function loadDay(day,after){
     render();ensureRoad();if(sel) document.querySelector(`.row[data-v="${CSS.escape(sel)}"]`)?.scrollIntoView({block:"nearest"});after&&after()};
   if((window.DAY_DATA&&window.DAY_DATA[day])||(window.ENC_DAY&&window.ENC_DAY[day])) return go();
   $("#gantt").innerHTML='<div class="empty-state">טוען…</div>';
-  const s=document.createElement("script"); s.src=`data/${OP.slug}/day_${day}.js?v=${encodeURIComponent(DAYVER[day]||APP_VER)}`; s.onload=go;
-  s.onerror=()=>{$("#gantt").innerHTML='<div class="empty-state">לא ניתן לטעון את נתוני היום הזה</div>'}; document.head.appendChild(s);
+  loadOpFile(`day_${day}.js`).then(go,()=>{$("#gantt").innerHTML='<div class="empty-state">לא ניתן לטעון את נתוני היום הזה</div>'});
 }
 // saved choices that no longer match the day's data (rebuilt day, vehicle not running): shown, never dropped silently
 function orphans(){if(!D) return [];const e=eff(),out=[],vs=new Map(D.vehicles.map(v=>[v.veh,v]));
@@ -949,7 +958,7 @@ function endsEff(){const c=edCache();if(c.ends) return c.ends;const ed={};
 function ensureDayLoaded(day){return new Promise((ok,bad)=>{if(window.DAY_DATA&&window.DAY_DATA[day]) return ok();
   const fin=async()=>{try{window.DAY_DATA=window.DAY_DATA||{};window.DAY_DATA[day]=await decryptDay(day);ok()}catch(e){bad(e)}};
   if(window.ENC_DAY&&window.ENC_DAY[day]) return fin();
-  const s=document.createElement("script");s.src=`data/${OP.slug}/day_${day}.js?v=${encodeURIComponent(DAYVER[day]||APP_VER)}`;s.onload=fin;s.onerror=bad;document.head.appendChild(s)})}
+  loadOpFile(`day_${day}.js`).then(fin,bad)})}
 // edits on nearby days change where vehicles start/end, so those days are read too (nights across days stay right)
 function loadEditedNeighbours(day){const n=DH.dayNum(day);
   for(const d of new Set(Object.values(eff().BLK).map(e=>e.day)))

@@ -1,4 +1,4 @@
-import datetime as dt, json, os, shutil, subprocess, tempfile, unittest
+import datetime as dt, hashlib, json, os, shutil, subprocess, tempfile, unittest
 from pva import seal
 
 OP = 'derech-egged'
@@ -28,8 +28,15 @@ class TestSeal(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def day_file(self, d, text):
-        open(os.path.join(self.root, 'data', OP, f'day_{d}.js'), 'w').write(text)
+    def day_file(self, d, text, push=False):
+        """The nightly publishes the hash of the encrypted day file (in Storage) in data/<op>/hashes.json."""
+        f = os.path.join(self.root, 'data', OP, 'hashes.json')
+        h = json.load(open(f)) if os.path.exists(f) else {}
+        h[d] = hashlib.sha256(text.encode()).hexdigest()
+        with open(f, 'w') as fh:
+            json.dump(h, fh)
+        if push:
+            git(self.root, 'commit', '-q', '-am', f'hash {d}'); git(self.root, 'push', '-q', 'origin', 'main')
 
     def later(self):
         return dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=5)
@@ -61,7 +68,7 @@ class TestSeal(unittest.TestCase):
 
     def test_changed_reconstruction_is_not_blind(self):
         seal.seal_days(['2026-11-25'], OP, root=self.root)
-        self.day_file('2026-11-25', 'rebuilt after looking at the operator file')
+        self.day_file('2026-11-25', 'rebuilt after looking at the operator file', push=True)
         v = seal.verify('2026-11-25', OP, self.later(), root=self.root)
         self.assertFalse(v['blind']); self.assertIn('שונה מהחתימה', v['why'])
 
