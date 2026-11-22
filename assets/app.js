@@ -179,6 +179,11 @@ const rokChanged=(r,km)=>{const d=Math.abs(km-r.km);return d>0.3||d>0.1*r.km};
 // manual check, with the km in practice beside ours. Nothing from Google is used. ----
 const GV_TOL={pct:15,km:0.5};
 const gvOk=i=>!!(i.gv&&i.km!=null&&Math.abs(i.gv[0]-i.km)<=Math.max(GV_TOL.pct/100*i.km,GV_TOL.km));
+// no GPS passage: Google Routes yes / no (table route_gcheck, tools/google_yesno.py; nothing else from Google is kept). Valid
+// while the leg's km is still the km that was checked. Said only in the route warnings list, never next to a map.
+let GCK=new Map();
+async function loadGck(){try{GCK=new Map((await getRows("route_gcheck",`select=a_lat,a_lon,b_lat,b_lon,our_km,ok,checked_at&${opq()}`)||[]).map(r=>[rokRowKey(r),{...r,km:+r.our_km}]))}catch(e){GCK=new Map()}}
+function gckOf(i){if(i.gv||!i.a||!i.b||i.km==null) return null;const [A,B]=subPair(i.a,i.b),r=GCK.get(rokKey(A,B));return r&&!rokChanged(r,i.km)?r:null}
 const gvTxt=i=>i.gv?`בפועל ${kmTxt(i.gv[0])} ק״מ (${nf(i.gv[1])} ${i.gv[1]===1?"נסיעה":"נסיעות"} ב־GPS)`:"";
 function roadGet(a,b){const r=ROAD.get(roadKey(a,b));if(!r) return null;const ls=linksFor(a,b),vpc=r.meta&&r.meta.vpc;
   if((ls.length||(vpc&&vpc.length))&&!ROUTE.sameIds(vpc,ls.map(ROUTE.linkSig))) return null; // computed with another set of links
@@ -587,7 +592,7 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-rpnav]");i
 function drawRouteList(){const box=$("#rwList");if(!box) return;
   box.innerHTML=RP.length?RP.map((g,n)=>{const k=rpKey(g),dr=DRAFT.reports[k],frees=g.legs.map(x=>x.end-x.start);
     return `<section class="rwg" data-rg="${n}" data-rgk="${esc(g.k)}" tabindex="-1" aria-label="${esc(g.frm)} ← ${esc(g.to)}"><h4>${esc(g.frm)} ← ${esc(g.to)}</h4>
-      <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span>${g.legs[0].i.gv?`<span>${gvTxt(g.legs[0].i)}</span>`:`<span class="muted">אין נסיעות GPS במקטע: לבדיקה ידנית</span>`}<span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
+      <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span>${g.legs[0].i.gv?`<span>${gvTxt(g.legs[0].i)}</span>`:gckOf(g.legs[0].i)?`<span class="muted">אין נסיעות GPS במקטע, ולא תואם לניתוב Google Maps: לבדיקה ידנית</span>`:`<span class="muted">אין נסיעות GPS במקטע: לבדיקה ידנית</span>`}<span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
       <div class="rwveh" role="group" aria-label="הצג סידור">${g.legs.map(x=>`<button type="button" class="btn small" data-rgv="${esc(x.veh)}" data-rgs="${x.start}" aria-label="הצג סידור של רכב ${esc(x.veh)}, הנסיעה הריקה של ${fmt(x.start)}">הצג סידור · ${esc(x.veh)} · ${fmt(x.start)}</button>`).join("")}</div>
       <div class="rwact"><button type="button" class="btn small" data-rgmap="${n}">הצג על מפה</button>${canEdit()?`<button type="button" class="btn small" data-rgvia="${n}">הצע נקודת מעבר</button><button type="button" class="btn small" data-rgnote="${n}">הערה</button><button type="button" class="btn small primary" data-rgsend="${n}" ${dr||RSENT[k]?"disabled":""}>${RSENT[k]?"נשלח לבדיקה":dr?"בטיוטה":"שלח לבדיקה"}</button>${g.kinds.has("detour")||g.kinds.has("route")||g.kinds.has("okchg")?`<button type="button" class="btn small" data-rgok="${n}">מסלול תקין</button>`:""}`:""}</div>
       ${g.ok&&g.kinds.has("okchg")?`<div class="sub edtm">סומן כמסלול תקין ב־${kmTxt(g.ok.km)} ק״מ; עכשיו ${kmTxt(g.km)} ק״מ. אפשר לסמן שוב</div>`:""}
@@ -597,8 +602,8 @@ function drawRouteList(){const box=$("#rwList");if(!box) return;
   box.insertAdjacentHTML("beforeend",gvFoot()+rokFoot())}
 let GVOPEN=false;
 function gvFoot(){const L=routeVerified();if(!L.length) return "";
-  return `<div class="rokfoot"><span>${nf(L.reduce((s,x)=>s+x.legs.length,0))} נסיעות אומתו מול נסיעות בפועל (לא נספרות כבעיה)</span> · <button type="button" class="linkbtn" data-gvshow aria-expanded="${GVOPEN}">${GVOPEN?"הסתר":"הצג"}</button></div>
-    <ul class="roklist" ${GVOPEN?"":"hidden"}>${L.map(x=>`<li><span>${esc(x.frm)} ← ${esc(x.to)} · שלנו ${kmTxt(x.km)} ק״מ · ${gvTxt(x.i)} · ${x.legs.map(l=>`${esc(l.veh)} ${fmt(l.start)}`).join(", ")}</span></li>`).join("")}</ul>`}
+  return `<div class="rokfoot"><span>${nf(L.reduce((s,x)=>s+x.legs.length,0))} נסיעות אומתו (מול נסיעות בפועל, או מול ניתוב Google Maps כשאין GPS; לא נספרות כבעיה)</span> · <button type="button" class="linkbtn" data-gvshow aria-expanded="${GVOPEN}">${GVOPEN?"הסתר":"הצג"}</button></div>
+    <ul class="roklist" ${GVOPEN?"":"hidden"}>${L.map(x=>`<li><span>${esc(x.frm)} ← ${esc(x.to)} · שלנו ${kmTxt(x.km)} ק״מ · ${x.i.gv?gvTxt(x.i):`אומת מול ניתוב Google Maps (${esc((gckOf(x.i)?.checked_at||"").slice(0,10).split("-").reverse().join("."))})`} · ${x.legs.map(l=>`${esc(l.veh)} ${fmt(l.start)}`).join(", ")}</span></li>`).join("")}</ul>`}
 // the pairs marked as correct (all days) + cancel; a saved row cancelled in the drafts is listed until "שמירה"
 let ROKOPEN=false;
 function rokFoot(){const m=rokM(),gone=ROK.filter(r=>DRAFT.rok[rokRowKey(r)]===null);if(!m.size&&!gone.length) return "";
@@ -679,11 +684,11 @@ function legProblems(i,raw){if(i.kind!=="empty"||i.overlap||i.km==null||i.wait) 
   const ax=i.a&&i.b?hav(i.a,i.b):null; if(ax!=null&&i.km>4&&i.km>2.5*Math.max(ax,0.01)) p.push("detour");
   if(ROUTE.unresolved(i.rt)) p.push("route");
   if(p.some(t=>t!=="time")){const ok=rokOf(i);if(ok){if(rokChanged(ok,i.km)) p.push("okchg"); else p=p.filter(t=>t==="time")}}
-  if(!raw&&p.some(t=>t!=="time")&&gvOk(i)) p=p.filter(t=>t==="time");
+  if(!raw&&p.some(t=>t!=="time")&&(gvOk(i)||gckOf(i)?.ok)) p=p.filter(t=>t==="time");
   return p.length?p:null}
 // the legs whose road warning the GPS of buses in service confirmed, by pair: shown under the list, not counted
 function routeVerified(){const g=new Map();if(!D) return [];
-  for(const v of D.vehicles) for(const i of v.items){const p=legProblems(i,true);if(!p||!p.some(t=>t!=="time")||!gvOk(i)) continue;
+  for(const v of D.vehicles) for(const i of v.items){const p=legProblems(i,true);if(!p||!p.some(t=>t!=="time")||!(gvOk(i)||gckOf(i)?.ok)) continue;
     const k=pk(i.a)+">"+pk(i.b);let x=g.get(k);if(!x){x={frm:i.frm,to:i.to,km:i.km,i,legs:[]};g.set(k,x)}x.legs.push({veh:v.veh,start:i.start})}
   return [...g.values()]}
 function errsOf(v){const c={inc:0,over:0,dup:0,rp:0};
@@ -1479,7 +1484,7 @@ async function unlock(){
   if(!OP){gateMode("noaccess");return false}
   const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k||!k.keys||!Object.keys(k.keys).length) throw new Error("no_key");
   CKEYS={};for(const [kid,v] of Object.entries(k.keys)) CKEYS[kid]=await crypto.subtle.importKey("raw",b64(v),"AES-GCM",false,["decrypt"]);
-  applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad(),loadEnds(),loadChoices(),loadVia(),loadRok()]); drawSaveBar();
+  applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad(),loadEnds(),loadChoices(),loadVia(),loadRok(),loadGck()]); drawSaveBar();
   // the day loads behind the gate while the logo intro is still playing
   if(!days.length) $("#gantt").innerHTML='<div class="empty-state">אין עדיין נתונים למפעיל הזה</div>';
   else loadDay(days.includes(QP.get("day"))?QP.get("day"):days.includes(yest)?yest:days[days.length-1],()=>{

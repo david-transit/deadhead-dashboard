@@ -179,6 +179,22 @@ jobs:
           done
           rm -f "$DATA_KEY_FILE"
 
+      # Road warnings with no GPS passage, checked against Google Routes: yes / no only (R51, tools/google_yesno.py).
+      # Missing secret or a failure: skipped quietly, never fails the build.
+      - name: Route warnings without GPS vs Google (yes/no)
+        if: steps.days.outputs.days != ''
+        continue-on-error: true
+        env:
+          GOOGLE_ROUTES_API_KEY: ${{ secrets.GOOGLE_ROUTES_API_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLUG: ${{ matrix.op.slug }}
+          DAYS: ${{ steps.days.outputs.days }}
+        run: |
+          set -u
+          f=""; for d in $DAYS; do [ -f "data/$SLUG/day_$d.json" ] && f="$f data/$SLUG/day_$d.json"; done
+          [ -n "$f" ] || { echo "no day file"; exit 0; }
+          timeout 10m python -I tools/google_yesno.py --op "$SLUG" --days $f || echo "::warning::Google yes/no check failed (skipped)"
+
       - name: Remove plaintext day files
         if: always()
         run: rm -f data/*/day_*.json data/*/ends_*.json
