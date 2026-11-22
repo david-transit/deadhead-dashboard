@@ -996,6 +996,7 @@ const OWNLINK={added:"לא שויכה ב־Stride (המאגר הציבורי של
   relinked:"Stride (המאגר הציבורי של Open Bus) שייך אותה לנסיעה אחרת בלוח; שויכה על ידינו מול לוח הרישוי של היום"};
 function srcTxt(i){return (i.own_link&&OWNLINK[i.own_link]?`<span class="sub">${OWNLINK[i.own_link]}</span>`:"")
   +(i.own_gps?`<span class="sub">שעות ההתחלה והסיום חושבו על ידינו מנקודות ה־GPS של הנסיעה (Stride לא חישב אותן)</span>`:"")
+  +(i.end_wait?`<span class="sub">האוטובוס עמד בתחנה האחרונה עוד ${i.end_wait} דק׳ אחרי שהגיע (SIRI השאיר את הנסיעה פתוחה); הסיום לפי ההגעה</span>`:"")
   +(i.no_time?`<span class="sub" style="color:var(--warn)">שעת סיום: אין נתון (אין GPS ואין זמן מתוכנן לקו)</span>`:"")
   +(i.dur_line&&i.no_gps?`<span class="sub">משך לפי הזמן המתוכנן של הקו באותו יום</span>`:"")}
 function tripExtra(i){let h=srcTxt(i)+(i.edited?`<span class="sub edtm">✎ נערך ידנית${i.edit&&i.edit.by?" · "+esc(i.edit.by):""}${i.moved_from?" · הועבר מרכב "+esc(i.moved_from):""}</span>`:"");

@@ -379,6 +379,7 @@ def route_dev(sid, tr, m=None, run_m=None):
 
 
 STILL_KM, STILL_MIN = 0.2, 15  # a bus that stays within 200 m for 15 minutes has stopped
+END_WAIT_MIN = 10  # a wait at the last stop this long is not part of the ride
 
 
 def gps_span(pts):
@@ -497,7 +498,7 @@ def own_gtfs(raw, day, LOC):
             n["two_buses"] += 1
             n["two_buses_both_licensed" if sum(1 for r in rs if r in got) == len(rs) else
               "two_buses_by_stride" if len(slink[tid] & rs) == 1 else "two_buses_by_rule"] += 1
-    n.update(licensed=len(L), matched=len(got), not_run=len(L) - len(used))
+    n.update(licensed=len(L) + len(by_no), matched=len(got), not_run=len(L) - len(used - {got[r]["id"] for r in by_no}))
     trip_rides = collections.Counter((r["gtfs_ride__journey_ref"] or "").split("_")[0] + "|" + str(r["gtfs_ride__start_time"]) for r in rides if r["gtfs_ride_id"])
     for r in rides:
         x = got.get(r["id"])
@@ -729,6 +730,15 @@ def build(day):
             continue
         if not (ok(f) and ok(l)):
             f = l = None
+        wait = 0
+        if f and l and TRACE.get(str(x["id"])):
+            # SIRI keeps a ride open while the bus waits at the last stop (21.11.2026: 17 of 506 rides, up to 83 minutes;
+            # 23405102 line 404 "arrived" 27:11 after standing at the last stop since 26:09): arrival = the start of that stop
+            g = gps_span(TRACE[str(x["id"])])
+            if g:
+                wait = (P(l[0]) - P(g[1][0])).total_seconds() / 60
+                if wait >= END_WAIT_MIN: l = g[1]
+                else: wait = 0
         if f and l:
             # actual GPS: departure = first point (not before the scheduled time: waiting at the terminal is not driving),
             # arrival = last point of the ride; positions = where the bus really was
@@ -750,6 +760,7 @@ def build(day):
             km = t["km_plan"] if done and t["km_plan"] is not None else gkm
             t.update(f_t=mins(P(f[0])), f_km=round(f[3] / 1000, 1) if f[3] is not None else None,
                      ha=f[4] if len(f) > 4 and f[4] else None, hb=l[4] if len(l) > 4 and l[4] else None)  # 0 = SIRI "unknown"
+            if wait: t["end_wait"] = round(wait)
             t.update(start=round(t0), end=max(round(t1), round(t0) + 1), a=a, b=b, frm=frm, to=to, ca=ca, cb=cb, km=km, gps_km=gkm)
             if f[3] and f[3] > LATE_M and t["o"] and t["km_plan"] and dur and dur > 0:
                 # logged in mid-route (first GPS point already f[3] m along the route): the trip began at the route's first
@@ -839,7 +850,7 @@ def build(day):
                               frm=t["frm"], to=t["to"], a=t["a"], b=t["b"], ca=t["ca"], cb=t["cb"],
                               **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute",
                                            "snap_end", "snap_start", "trunc_end", "trunc_start", "trunc_to", "asm", "contra", "dev",
-                                           "own_link", "own_gps", "no_time", "dur_line")
+                                           "own_link", "own_gps", "no_time", "dur_line", "end_wait")
                                  if t.get(k) is not None}))
         items += dups + ghosts.pop(v, [])
         # an empty leg sits right before the trip it leads to (also when SIRI shows overlapping rides)
