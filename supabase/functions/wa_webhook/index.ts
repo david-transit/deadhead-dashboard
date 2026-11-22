@@ -4,6 +4,7 @@
 //   POST X-Hub-Signature-256 over the raw body; answered 200 at once, the work runs after the response.
 // Secrets: WA_APP_SECRET, WA_VERIFY_TOKEN, WA_TOKEN, WA_PHONE_ID.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { pushAlert } from "../_shared/push_db.ts";
 import { parseWebhook, verifySignature } from "../_shared/meta.ts";
 import { handleInbound } from "../_shared/inbound.ts";
 import { supabaseDb } from "../_shared/db.ts";
@@ -33,6 +34,6 @@ Deno.serve(async (req) => {
   const token = Deno.env.get("WA_TOKEN"), phoneId = Deno.env.get("WA_PHONE_ID");
   if (!token || !phoneId) return new Response("not_configured", { status: 503 });
 
-  EdgeRuntime.waitUntil(handleInbound({ db, cfg: { token, phoneId }, mail: MAIL }, parseWebhook(json)).catch((e) => console.error("wa_webhook", e)));
+  EdgeRuntime.waitUntil(handleInbound({ db, cfg: { token, phoneId }, mail: MAIL, push: pushAlert(admin) }, parseWebhook(json)).catch((e) => console.error("wa_webhook", e)));
   return new Response("ok", { status: 200 });
 });
