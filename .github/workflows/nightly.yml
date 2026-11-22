@@ -82,7 +82,7 @@ jobs:
       - run: pip install -r pipeline/requirements.txt
 
       - name: Restore caches (route ends, OSRM)
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             pipeline/cache/route_ends.json
@@ -94,7 +94,7 @@ jobs:
       # Operator data (encrypted day / ends / days files) lives in the private Storage bucket 'operator-data', not in the
       # repo. The runner keeps a local copy in the Actions cache and downloads only what is missing or changed.
       - name: Restore operator data copy
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: data/${{ matrix.op.slug }}/*.js
           key: opdata-${{ matrix.op.slug }}-${{ github.run_id }}
@@ -174,7 +174,7 @@ jobs:
       - name: Restore OSRM bus graph
         if: steps.days.outputs.days != '' && vars.DEADHEAD_ROUTING == 'bus'
         id: osrmcache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/osrm/bus-strict
           key: osrm-bus-strict-v26.10.0-${{ steps.osrmkey.outputs.week }}-${{ hashFiles('pipeline/osrm/profiles/*.lua', 'pipeline/osrm/local/*') }}
