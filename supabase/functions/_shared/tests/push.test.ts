@@ -94,3 +94,10 @@ test("isPushEndpoint: only https on known push services", () => {
 });
 
 test("title is the brand only", () => { assert.equal(PUSH_TITLE, "יאללה־סע"); });
+
+test("vapidPairOk: true for a matching pair, false for a mismatched or malformed public key", async () => {
+  const { vapidPairOk } = await import("../push.ts");
+  assert.equal(await vapidPairOk(KEYS), true);
+  assert.equal(await vapidPairOk({ publicKey: V.uaPub, privateKey: V.asPriv }), false);
+  assert.equal(await vapidPairOk({ publicKey: "abc", privateKey: V.asPriv }), false);
+});
