@@ -44,4 +44,4 @@ jobs:
       - name: JS tests (Edge Function modules, access, mail worker, savings engine)
         run: |
           node --test supabase/functions/_shared/tests/*.test.ts supabase/tests/*.test.mjs \
-            cloudflare/mail-worker/worker.test.mjs savings/tests/engine.test.js
+            cloudflare/mail-worker/worker.test.mjs savings/tests/*.test.js

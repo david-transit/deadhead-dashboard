@@ -845,7 +845,7 @@ def build(day):
                 elif km > 2 and (leg["drive_min"] > gap + TIGHT_MIN or gap == 0 or km / (gap / 60) > 100):
                     leg["tight"] = True     # not enough time to drive it: data warning
                 items.append(leg)
-                if not leg.get("overlap"): tot_day += km
+                if counts_km(leg): tot_day += km
             items.append(dict(kind="trip", start=t["start"], end=t["end"], line=t["line"], km=t["km"], cls=t["cls"], sched=t["sched"],
                               frm=t["frm"], to=t["to"], a=t["a"], b=t["b"], ca=t["ca"], cb=t["cb"],
                               **{k: t[k] for k in ("auto", "line_ref", "unmapped", "dur_est", "incomplete", "gps_km", "km_plan", "no_gps", "late_login", "midroute",
@@ -859,7 +859,8 @@ def build(day):
         vehicles.append(dict(veh=v, cls=cls,
             first_o=[f["a"][0], f["a"][1], f["ca"]], last_d=[l["b"][0], l["b"][1], l["cb"]],
             service_km=round(sum(t["km"] or 0 for t in ts if not t.get("auto")), 1), items=items,
-            empty_day_km=round(sum(i["km"] or 0 for i in items if i["kind"] == "empty" and not i.get("overlap")), 1)))
+            empty_day_km=round(sum(i["km"] or 0 for i in items if i["kind"] == "empty" and counts_km(i)), 1),
+            car_est_km=round(sum(i["km"] or 0 for i in items if i["kind"] == "empty" and i.get("fb")), 1)))
 
     # catalog of service routes (line + direction, planned terminals) seen this day, for marking reinforcement trips
     cat = {}
@@ -892,12 +893,20 @@ def build(day):
                snap_end=sum(1 for v in by.values() for t in v if t.get("snap_end")), snap_start=sum(1 for v in by.values() for t in v if t.get("snap_start")),
                trunc_end=sum(1 for v in by.values() for t in v if t.get("trunc_end")), trunc_start=sum(1 for v in by.values() for t in v if t.get("trunc_start")),
                route_dev=sum(1 for v in by.values() for t in v if t.get("dev")), gtfs_link=gm), vehicles=vehicles)
+    out["summary"]["car_est_km"] = round(sum(v["car_est_km"] for v in vehicles))  # ADR-0009 #10: shown, never in any km sum
+    out["summary"]["car_est_legs"] = n_fb
     out["summary"]["shape_guard"] = sum(1 for v in vehicles for i in v["items"] if i.get("sg") is not None)
     if SHAPE_GUARD_FAIL:
         raise SystemExit(f"shape guard failed ({len(SHAPE_GUARD_FAIL)}): " + "; ".join(SHAPE_GUARD_FAIL[:10]))
     os.makedirs(DATA, exist_ok=True)
     json.dump(out, open(os.path.join(DATA, f"day_{day}.json"), "w", encoding="utf-8"), ensure_ascii=False)
     print(json.dumps(out["summary"], ensure_ascii=False))
+
+
+def counts_km(leg):
+    """Does an empty leg count in the empty-km sums? Not an overlap (SIRI data error, 0 km), and not the public car-OSRM
+    fallback (fb: "הערכת רכב, לא אוטובוס", ADR-0009 item 10: marked, never summed, never in recommendations)."""
+    return not leg.get("overlap") and not leg.get("fb")
 
 
 def decrypt_file(path):
