@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-22.3";
+const APP_VER="2026-11-22.4";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -180,6 +180,10 @@ const rokChanged=(r,km)=>{const d=Math.abs(km-r.km);return d>0.3||d>0.1*r.km};
 const GV_TOL={pct:15,km:0.5};
 const gvOk=i=>!!(i.gv&&i.km!=null&&Math.abs(i.gv[0]-i.km)<=Math.max(GV_TOL.pct/100*i.km,GV_TOL.km));
 const gvTxt=i=>i.gv?`בפועל ${kmTxt(i.gv[0])} ק״מ (${nf(i.gv[1])} ${i.gv[1]===1?"נסיעה":"נסיעות"} ב־GPS)`:"";
+// a road warning (detour / suspicious route) that GPS of buses in service does not confirm: "לבדיקה ידנית" (R51, David 22.11.2026);
+// no Google answer is shown in its place. A "time" problem alone is not a km question: no GPS text
+const manual=(i,kinds)=>[...kinds].some(t=>t!=="time")&&!gvOk(i);
+const gvCell=(i,kinds,cls="")=>manual(i,kinds)?`<span class="${cls} muted">${i.gv?`${gvTxt(i)}, לא תואם: לבדיקה ידנית`:"אין נסיעות GPS במקטע: לבדיקה ידנית"}</span>`:i.gv?`<span class="${cls}">${gvTxt(i)}</span>`:"";
 function roadGet(a,b){const r=ROAD.get(roadKey(a,b));if(!r) return null;const ls=linksFor(a,b),vpc=r.meta&&r.meta.vpc;
   if((ls.length||(vpc&&vpc.length))&&!ROUTE.sameIds(vpc,ls.map(ROUTE.linkSig))) return null; // computed with another set of links
   return r}
@@ -556,8 +560,8 @@ function routeProblems(){const g=new Map();if(!D) return [];
     if(!x){const [A,B]=subPair(i.a,i.b);x={k,a:i.a,b:i.b,A,B,ok:rokOf(i),frm:i.frm,to:i.to,km:i.km,air:hav(i.a,i.b),min:i.drive_min,kinds:new Set(),legs:[]};g.set(k,x)}
     p.forEach(t=>x.kinds.add(t));x.legs.push({veh:v.veh,start:i.start,end:i.end,km:i.km,min:i.drive_min,i})}
   return [...g.values()].sort((x,y)=>(y.kinds.has("time")-x.kinds.has("time"))||y.legs.length-x.legs.length||y.km/Math.max(y.air,.1)-x.km/Math.max(x.air,.1))}
-function drawRouteBar(){RP=routeProblems();const b=$("#rwBar");if(!b) return;const nl=RP.reduce((s,g)=>s+g.legs.length,0);
-  b.hidden=!RP.length;b.innerHTML=RP.length?`<button type="button" class="rwbtn" data-rwopen aria-haspopup="dialog">⚠ ${nf(RP.length)} בעיות מסלול ביום הזה</button><span class="rwsub">${nf(nl)} נסיעות ריקות · ${[...new Set(RP.flatMap(g=>[...g.kinds]))].map(k=>RPTXT[k]).join(" · ")}</span>`:"";
+function drawRouteBar(){RP=routeProblems();const b=$("#rwBar");if(!b) return;const nl=RP.reduce((s,g)=>s+g.legs.length,0);const nm=RP.filter(g=>manual(g.legs[0].i,g.kinds)).length;
+  b.hidden=!RP.length;b.innerHTML=RP.length?`<button type="button" class="rwbtn" data-rwopen aria-haspopup="dialog">⚠ ${nf(RP.length)} בעיות מסלול ביום הזה</button><span class="rwsub">${nf(nl)} נסיעות ריקות${nm?` · ${nf(nm)} לבדיקה ידנית`:""} · ${[...new Set(RP.flatMap(g=>[...g.kinds]))].map(k=>RPTXT[k]).join(" · ")}</span>`:"";
   const dl=$("#dlgRw");if(dl&&dl.open&&!(dl.contains(document.activeElement)&&/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName))) drawRouteList()}
 document.addEventListener("click",e=>{if(e.target.closest("[data-rwopen]")) openRouteList()});
 function rwDlg(){let d=$("#dlgRw");if(d) return d;d=document.createElement("dialog");d.id="dlgRw";d.className="rwdlg";d.setAttribute("aria-labelledby","rwT");
@@ -577,7 +581,7 @@ const rpFlat=()=>RP.flatMap(g=>g.legs.map(x=>({g,x})));
 async function rpShow(n,k){const L=rpFlat(),z=L[n];if(!z) return;const {g,x}=z,v=D.vehicles.find(q=>q.veh===x.veh);
   const nav=(d,lab)=>`<button type="button" class="btn small" data-rpnav="${d}" ${L[n+d]?"":"disabled"}>${lab}</button>`;
   const head=`<div class="vehnav rpnav" role="group" aria-label="מעבר לסידור אחר"><b class="rphd">רכב ${esc(x.veh)}${v&&v.cls?` · ${esc(v.cls)}`:""} · ${esc(vehDayTxt(D.day))} · ריק <bdi dir="ltr">${fmt(x.start)}–${fmt(x.end)}</bdi></b><span class="sp"></span>
-${x.i.gv?`<span class="pos">${gvTxt(x.i)}</span>`:""}<div class="grp">${nav(-1,`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg> הסידור הקודם`)}<span class="pos">${nf(n+1)} מתוך ${nf(L.length)}</span>${nav(1,`הסידור הבא <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>`)}</div></div>`;
+${gvCell(x.i,g.kinds,"pos")}<div class="grp">${nav(-1,`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg> הסידור הקודם`)}<span class="pos">${nf(n+1)} מתוך ${nf(L.length)}</span>${nav(1,`הסידור הבא <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>`)}</div></div>`;
   RPN=n;const pr=legMap({a:g.a,b:g.b,km:x.km,min:x.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:"בעיית מסלול",back:openRouteList,head});
   // the map dialog is drawn (and focuses its close button) before the map loads: keep the focus on the nav button
   if(k){const b=document.querySelector(`#mapInfo [data-rpnav="${k}"]`);(b&&!b.disabled?b:document.querySelector(`#mapInfo [data-rpnav="${-k}"]`))?.focus()}
@@ -587,7 +591,7 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-rpnav]");i
 function drawRouteList(){const box=$("#rwList");if(!box) return;
   box.innerHTML=RP.length?RP.map((g,n)=>{const k=rpKey(g),dr=DRAFT.reports[k],frees=g.legs.map(x=>x.end-x.start);
     return `<section class="rwg" data-rg="${n}" data-rgk="${esc(g.k)}" tabindex="-1" aria-label="${esc(g.frm)} ← ${esc(g.to)}"><h4>${esc(g.frm)} ← ${esc(g.to)}</h4>
-      <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span>${g.legs[0].i.gv?`<span>${gvTxt(g.legs[0].i)}</span>`:`<span class="muted">אין נסיעות GPS במקטע: לבדיקה ידנית</span>`}<span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
+      <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span>${gvCell(g.legs[0].i,g.kinds)}<span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
       <div class="rwveh" role="group" aria-label="הצג סידור">${g.legs.map(x=>`<button type="button" class="btn small" data-rgv="${esc(x.veh)}" data-rgs="${x.start}" aria-label="הצג סידור של רכב ${esc(x.veh)}, הנסיעה הריקה של ${fmt(x.start)}">הצג סידור · ${esc(x.veh)} · ${fmt(x.start)}</button>`).join("")}</div>
       <div class="rwact"><button type="button" class="btn small" data-rgmap="${n}">הצג על מפה</button>${canEdit()?`<button type="button" class="btn small" data-rgvia="${n}">הצע נקודת מעבר</button><button type="button" class="btn small" data-rgnote="${n}">הערה</button><button type="button" class="btn small primary" data-rgsend="${n}" ${dr||RSENT[k]?"disabled":""}>${RSENT[k]?"נשלח לבדיקה":dr?"בטיוטה":"שלח לבדיקה"}</button>${g.kinds.has("detour")||g.kinds.has("route")||g.kinds.has("okchg")?`<button type="button" class="btn small" data-rgok="${n}">מסלול תקין</button>`:""}`:""}</div>
       ${g.ok&&g.kinds.has("okchg")?`<div class="sub edtm">סומן כמסלול תקין ב־${kmTxt(g.ok.km)} ק״מ; עכשיו ${kmTxt(g.km)} ק״מ. אפשר לסמן שוב</div>`:""}
