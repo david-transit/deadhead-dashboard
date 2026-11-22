@@ -54,7 +54,13 @@
   // "רציפות גיאוגרפית" (David 19.11): only the legs marked for review, in the list and in its totals
   const shown = () => trips().filter(t => (!DAYF || t.day === DAYF) && (!Q || String(t.veh).includes(Q) || String(t.sidur).includes(Q)) && (!GEO || REVIEW.has(t.plaus)));
 
+  // OP-DATA-7 blind seal: only days verified blind count in gate A metrics; a day without the field was built before the procedure
+  const blind = day => (DAYS.find(d => d.day === day) || {}).blind === true;
+  const NB = day => blind(day) ? "" : ` <span class="nb" title="${esc((DAYS.find(d => d.day === day) || {}).blind_why || "נבנה לפני נוהל החתימה")} · לא נספר במדדי שער A">לא עיוור</span>`;
   function cards() {
+    { const ds = DAYS.filter(d => !DAYF || d.day === DAYF), nb = ds.filter(d => d.blind !== true).length;
+      $("#cBlind").textContent = `${nf(ds.length - nb)} מתוך ${nf(ds.length)}`;
+      $("#cBlindS").textContent = nb ? `${nf(nb)} ימים לא עיוורים: לא נספרים במדדי שער A` : "כל הימים חתומים ועיוורים"; }
     const T = trips().filter(t => t.kind === "empty" && (!DAYF || t.day === DAYF));
     const plan = T.filter(t => t.status !== "added").reduce((a, t) => a + (t.op_km || 0), 0);
     const act = T.filter(t => t.status !== "not_done").reduce((a, t) => a + kmOf(t), 0);
@@ -110,7 +116,7 @@
     if (OPENDAY == null) OPENDAY = ds.slice().sort((a, b) => dayKm(b) - dayKm(a))[0];
     box.innerHTML = `<h2>${esc(gname(SEL))} · ${nf(tot)} ק״מ ${GEO ? "לבדיקה" : "שהוסיף הסדרן"}</h2>` + ds.map(d => {
       const open = d === OPENDAY, L = byDay.get(d).sort((a, b) => a.t0 - b.t0);
-      return `<div class="day"><button aria-expanded="${open}" data-d="${d}"><span>${dlabel(d)} · ${nf(dayKm(d))} ק״מ</span><span aria-hidden="true">${open ? "▴" : "▾"}</span></button>
+      return `<div class="day"><button aria-expanded="${open}" data-d="${d}"><span>${dlabel(d)} · ${nf(dayKm(d))} ק״מ${NB(d)}</span><span aria-hidden="true">${open ? "▴" : "▾"}</span></button>
         ${open ? L.map((t, i) => { const k = `${d}|${i}`, on = CTX === k;
           return `<button class="trip${t.status === "not_done" ? " nd" : ""}" data-i="${k}" aria-current="${SELTRIP && SELTRIP.day === d && SELTRIP.i === i}">
           <span>${hm(t.t0)}</span><span>${esc(pl(t, "a"))} ← ${esc(pl(t, "b"))}<small class="sv">סידור ${esc(t.sidur)} · רכב ${esc(t.veh)}</small></span><span class="km">${nf(kmOf(t))} ק״מ</span><span>${TAG(t)} ${PTAG(t)}${nOf(t).length ? ` <span class="tag mid" title="יש הערה">✎ ${nOf(t).length}</span>` : ""}</span></button>
@@ -270,7 +276,7 @@
     catch (e) { say("הטעינה נכשלה: " + e.message, true); return; }
     await loadNotes(f, t);
     say(DAYS.length ? "" : "אין נתונים לתקופה הזו");
-    const df = $("#fDay"); df.innerHTML = `<option value="">כל הימים</option>` + DAYS.map(d => `<option value="${esc(d.day)}">${dlabel(d.day)}</option>`).join("");
+    const df = $("#fDay"); df.innerHTML = `<option value="">כל הימים</option>` + DAYS.map(d => `<option value="${esc(d.day)}">${dlabel(d.day)}${d.blind === true ? "" : " · לא עיוור"}</option>`).join("");
     DAYF = DAYS.length === 1 ? "" : (DAYS.some(d => d.day === DAYF) ? DAYF : ""); df.value = DAYF;
     reset(); cards(); rank();
     const cur = document.querySelector(".tabs [aria-selected=true]").id; if (cur !== "tExcess") tab(cur);
