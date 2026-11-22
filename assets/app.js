@@ -333,7 +333,9 @@ function render(){
    $("#cTs").textContent=[au.length?`מתוכן ${nf(ar)} תגבור אוטומטי (לא בלוח הרישוי)${pend?` · ${nf(pend)} ממתינות לאישור`:""}`:"",
      nInc?`${nf(nInc)} לא הושלמו לפי GPS`:"",nDup?`${nf(nDup)} התחלות כפולות אוחדו`:""].filter(Boolean).join(" · ")}
   $("#cE").textContent=nf(Math.round(emp));
-  $("#cEs").textContent=["לפי כביש, בין מיקומי ה־GPS",rein?`בלי ${nf(Math.round(rein))} ק״מ תגבור`:"",nOver?`${nf(nOver)} חפיפות בנתונים (0 ק״מ)`:""].filter(Boolean).join(" · ");
+  const car=sum((v,s)=>s.car), nCar=sum(v=>v.items.filter(i=>i.kind==="empty"&&i.fb).length);
+  $("#cEs").textContent=["לפי כביש, בין מיקומי ה־GPS",rein?`בלי ${nf(Math.round(rein))} ק״מ תגבור`:"",nOver?`${nf(nOver)} חפיפות בנתונים (0 ק״מ)`:"",
+    nCar?`בלי ${nf(Math.round(car))} ק״מ הערכת רכב, לא אוטובוס (${nf(nCar)} נסיעות)`:""].filter(Boolean).join(" · ");
   $("#cN").textContent=nf(Math.round(nk));
   $("#cNs").innerHTML=esc(`יציאה ${nf(Math.round(sum((v,s)=>s.out)))} · חזרה ${nf(Math.round(sum((v,s)=>s.in)))} · מעבר לילה ${nf(Math.round(sum((v,s)=>s.over)))}`+
       (sum((v,s)=>s.nrein)?` · תגבור לילה ${nf(Math.round(sum((v,s)=>s.nrein)))}`:""))+
@@ -369,7 +371,7 @@ function render(){
         if(+r.after_km>=1) b+=bar("emp",i.end-Math.max(m3,3),i.end,"",`ריק אחרי התגבור ${nf(r.after_km)} ק״מ`);}
       else if(i.kind==="empty"&&i.overlap) b+=bar("emp",i.end,i.end+3,"",`חפיפה בין נסיעות (שגיאה בנתוני SIRI): 0 ק״מ ריק`,"bad");
       else if(i.kind==="empty"&&i.km>=1){const de=Math.min(i.end,i.start+Math.max(i.drive_min||0,3));
-        b+=bar("emp",i.start,de,nf(i.km)+" ק״מ",`ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}${i.fb?" · חושב ברכב פרטי (גיבוי)":""}, כ־${nf(i.drive_min)} דק׳ נסיעה: ${i.frm} ← ${i.to} (זמן פנוי ${fmt(i.start)}–${fmt(i.end)})${i.tight?" · לא מספיק זמן לנסוע את זה: נתון חשוד":""}`,i.tight?"bad":"");}
+        b+=bar("emp",i.start,de,nf(i.km)+" ק״מ",`ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}${i.fb?" · הערכת רכב, לא אוטובוס (לא נספר)":""}, כ־${nf(i.drive_min)} דק׳ נסיעה: ${i.frm} ← ${i.to} (זמן פנוי ${fmt(i.start)}–${fmt(i.end)})${i.tight?" · לא מספיק זמן לנסוע את זה: נתון חשוד":""}`,i.tight?"bad":"");}
     }
     const f=fuelFor(v);
     h+=`<div class="row${v.veh===sel?" sel":""}" role="listitem" tabindex="0" data-v="${esc(v.veh)}"><div class="lab">${esc(v.veh)}${accIcon(v.veh)} ${errBadge(v)}${brBadge(v)}<span class="badge ${v.cls==="עירוני"?"urb":"ic"}">${esc(v.cls)}</span>${f?`<span class="badge fuelb">${esc(f)}</span>`:""}</div><div class="track">${grid}${b}</div></div>`;
@@ -449,7 +451,7 @@ function sideBody(veh){
       if(r) h+=`<div class="it rein"${mi({k:"rein",v,i,r})}><span>תגבור קו ${esc(r.line)} · ${nf(r.rein_km)} ק״מ<span class="sub">${esc(r.route_frm)} ← ${esc(r.route_to)}</span>
           <span class="sub" style="color:#B4630E">ריק לפני ${nf(r.before_km)} ק״מ · ריק אחרי ${nf(r.after_km)} ק״מ (במקום ${nf(i.km)} ק״מ ריק)</span>
           ${canEdit()&&BLKMODE?`<button class="btn small" data-unrein="${i.next_sched}">ביטול התגבור</button>`:""}${legActs("day",i.start)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
-      else h+=`<div class="it emp${legProblems(i)?" rpw":""}${hlLeg(v,i)?" hl":""}"${mi({k:"emp",v,i})}><span>ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}${i.fb?" · חושב ברכב פרטי (גיבוי)":""} · כ־${nf(i.drive_min)} דק׳<span class="sub">${esc(i.frm)} ← ${esc(i.to)} · זמן פנוי ${Math.round(i.end-i.start)} דק׳</span>
+      else h+=`<div class="it emp${legProblems(i)?" rpw":""}${hlLeg(v,i)?" hl":""}"${mi({k:"emp",v,i})}><span>ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}${i.fb?" · הערכת רכב, לא אוטובוס (לא נספר)":""} · כ־${nf(i.drive_min)} דק׳<span class="sub">${esc(i.frm)} ← ${esc(i.to)} · זמן פנוי ${Math.round(i.end-i.start)} דק׳</span>
           ${forcedTxt(i)}${i.tight?`<span class="sub" style="color:var(--warn)">אין מספיק זמן לנסוע את זה: נתון חשוד</span>${fixLink()}`:""}${routeNote(i)}${legEdTxt(i)}
           ${legActs("day",i.start)}${legEdBtn(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
     else h+=`<div class="it wait${hlLeg(v,i)?" hl":""}"><span>המתנה${i.km>0.05?` · מעבר ${nf(i.km)} ק״מ`:""}${legEdTxt(i)}${legEdBtn(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;

@@ -148,9 +148,10 @@
       for (const nt of [morning, evening]) if (nt) for (const l of nt.legs) if (l.day === D)
         n.push({ ...l, start: rel(D, l.start), end: rel(D, l.end), night: nt.key });
       n.sort((a, b) => a.start - b.start);
-      let emp = 0, rein = 0, svc = v.service_km || 0, est = 0, warn = [];
+      let emp = 0, rein = 0, svc = v.service_km || 0, est = 0, car = 0, warn = [];
       for (const i of v.items) if (i.kind === "trip" && i.auto) { if (autoSt(D, veh, i) === "rejected") svc += i.km || 0; else rein += i.km || 0; }
       for (const i of v.items) if (i.kind === "empty" && !i.overlap && i.km) {
+        if (i.fb) { car += i.km; continue; }  // public car-OSRM fallback: "הערכת רכב, לא אוטובוס", in no sum (ADR-0009 #10)
         const r = reinOf(D, veh, i);
         if (r) { rein += +r.rein_km || 0; emp += (+r.before_km || 0) + (+r.after_km || 0); } else { emp += i.km; if (i.est) est += i.km; }
       }
@@ -164,7 +165,7 @@
       }
       const flags = [...(morning ? morning.flags : []), ...(evening ? evening.flags.filter(f => f === "tight") : [])];
       if (nx.open) flags.push("open_end");
-      return { veh, emp, rein, svc, n, nk, out, in: inn, over, nrein, est, missing, flags, morning, evening, next: nx,
+      return { veh, emp, rein, svc, n, nk, out, in: inn, over, nrein, est, car, missing, flags, morning, evening, next: nx,
         day: svc + emp + rein + nk };
     }
     Object.assign(M, { night, vehicleDay, prevActive, nextActive, branchOf, autoBranch, depotFor, autoSt, reinOf, leg, abs, rel });
