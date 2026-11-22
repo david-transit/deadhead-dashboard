@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-22.2";
+const APP_VER="2026-11-22.3";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -348,8 +348,8 @@ function render(){
     for(const i of v.items){
       if(i.kind==="ghost") continue;
       if(i.kind==="dup") b+=bar("dup",i.start,i.end,"",`${fmt(i.start)}–${fmt(i.end)} התחלה כפולה של קו ${i.line}: נסיעה קצרה שאוחדה עם הנסיעה הבאה (לא נסיעה, לא תגבור)`);
-      else if(i.kind==="trip"&&i.auto&&autoSt(v,i)!=="rejected") b+=bar("rein"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} תגבור אוטומטי (לא בלוח הרישוי) · קו ${i.line}: ${i.frm} ← ${i.to} · ${AUTOTXT[autoSt(v,i)]}${i.incomplete?" · לא הושלמה לפי GPS":""}`,i.incomplete?"inc":"");
-      else if(i.kind==="trip") b+=bar("svc"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} קו ${i.line}: ${i.frm} ← ${i.to}${i.incomplete?` · לא הושלמה לפי GPS (${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ)`:""}${i.no_gps?" · בלי GPS: לפי הלוח":""}`,i.incomplete?"inc":"");
+      else if(i.kind==="trip"&&i.auto&&autoSt(v,i)!=="rejected") b+=bar("rein"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} תגבור אוטומטי (לא בלוח הרישוי) · קו ${i.line}: ${i.frm} ← ${i.to} · ${AUTOTXT[autoSt(v,i)]}${i.incomplete?" · לא הושלמה לפי GPS":""}${i.no_time?" · שעת סיום: אין נתון":""}`,i.incomplete?"inc":"");
+      else if(i.kind==="trip") b+=bar("svc"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} קו ${i.line}: ${i.frm} ← ${i.to}${i.incomplete?` · לא הושלמה לפי GPS (${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ)`:""}${i.no_gps?" · בלי GPS: לפי הלוח":""}${i.no_time?" · שעת סיום: אין נתון":""}`,i.incomplete?"inc":"");
       else if(i.kind==="empty"&&reinOf(v,i)){const r=reinOf(v,i),m1=estMin(+r.before_km||0),m3=estMin(+r.after_km||0),m2=Math.max(i.end-i.start-m1-m3,5);
         if(+r.before_km>=1) b+=bar("emp",i.start,i.start+Math.max(m1,3),"",`ריק לפני התגבור ${nf(r.before_km)} ק״מ`);
         b+=bar("rein",i.start+m1,i.start+m1+m2,r.line,`תגבור קו ${r.line}: ${r.route_frm} ← ${r.route_to}, ${nf(r.rein_km)} ק״מ`);
@@ -991,7 +991,15 @@ function editsBlock(veh){const es=editsOf(D.day).filter(e=>e.veh===veh||(e.paylo
 function origBlock(veh){const raw=(window.DAY_DATA[D.day].vehicles||[]).find(x=>x.veh===veh);
   return `<div class="orig"><b>המקור (לפני העריכה)</b>`+(raw?raw.items.filter(i=>i.kind==="trip").map(i=>`<div>${fmt(i.start)}–${fmt(i.end)} · קו ${esc(i.line)} · ${esc(i.frm)} ← ${esc(i.to)}</div>`).join(""):"<div>הרכב לא פעל ביום הזה במקור</div>")+`</div>`}
 const fixLink=()=>canEdit()&&!BLKMODE?` <button class="linkbtn" data-blkmode>עריכת הסידור</button>`:"";
-function tripExtra(i){let h=i.edited?`<span class="sub edtm">✎ נערך ידנית${i.edit&&i.edit.by?" · "+esc(i.edit.by):""}${i.moved_from?" · הועבר מרכב "+esc(i.moved_from):""}</span>`:"";
+const OWNLINK={added:"לא שויכה ב־Stride (המאגר הציבורי של Open Bus שממנו מגיעים מיקומי ה־GPS); שויכה על ידינו מול לוח הרישוי",
+  trip_no:"לא שויכה ב־Stride (המאגר הציבורי של Open Bus שממנו מגיעים מיקומי ה־GPS); שויכה על ידינו מול לוח הרישוי, לפי מספר הנסיעה",
+  relinked:"Stride (המאגר הציבורי של Open Bus) שייך אותה לנסיעה אחרת בלוח; שויכה על ידינו מול לוח הרישוי של היום"};
+function srcTxt(i){return (i.own_link&&OWNLINK[i.own_link]?`<span class="sub">${OWNLINK[i.own_link]}</span>`:"")
+  +(i.own_gps?`<span class="sub">שעות ההתחלה והסיום חושבו על ידינו מנקודות ה־GPS של הנסיעה (Stride לא חישב אותן)</span>`:"")
+  +(i.end_wait?`<span class="sub">האוטובוס עמד בתחנה האחרונה עוד ${i.end_wait} דק׳ אחרי שהגיע (SIRI השאיר את הנסיעה פתוחה); הסיום לפי ההגעה</span>`:"")
+  +(i.no_time?`<span class="sub" style="color:var(--warn)">שעת סיום: אין נתון (אין GPS ואין זמן מתוכנן לקו)</span>`:"")
+  +(i.dur_line&&i.no_gps?`<span class="sub">משך לפי הזמן המתוכנן של הקו באותו יום</span>`:"")}
+function tripExtra(i){let h=srcTxt(i)+(i.edited?`<span class="sub edtm">✎ נערך ידנית${i.edit&&i.edit.by?" · "+esc(i.edit.by):""}${i.moved_from?" · הועבר מרכב "+esc(i.moved_from):""}</span>`:"");
   if(BLKMODE&&canEdit()) h+=`<span class="sub">${[["delete","מחיקה"],["replace","החלפה"],["times","שעות"],["move","העברה לרכב"]].map(([a,t])=>`<button class="btn small" data-bact="${a}" data-s="${i.sched}">${t}</button>`).join(" ")}</span>`;
   return h}
 function mkEdit(action,payload){const id=crypto.randomUUID?crypto.randomUUID():"10000000-1000-4000-8000-100000000000".replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
