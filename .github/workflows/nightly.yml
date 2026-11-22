@@ -32,7 +32,7 @@ jobs:
     outputs:
       ops: ${{ steps.ops.outputs.ops }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - id: ops
@@ -63,7 +63,7 @@ jobs:
       matrix:
         op: ${{ fromJSON(needs.plan.outputs.ops) }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # main requires the CI check (ruleset); the nightly data commit is pushed with this deploy key, the ruleset's only bypass
           ssh-key: ${{ secrets.NIGHTLY_DEPLOY_KEY }}
