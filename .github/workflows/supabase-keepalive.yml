@@ -4,12 +4,19 @@ name: supabase-keepalive
 # Supabase pauses Free projects with too little *user database activity* over 7 days
 # (https://supabase.com/docs/guides/platform/free-project-pausing), so this runs a real query:
 # the public keepalive() RPC through the REST API (a real SQL query, returns true, no side effects).
-# Runs outside Supabase (GitHub Actions). On failure the job fails; GitHub emails the failure.
+# Runs outside Supabase (GitHub Actions). If the check fails, one alert mail goes to support@yalla-sa.app
+# through Resend (secret RESEND_API_KEY), and the job fails.
+# Manual run with test_alert=true queries a function that does not exist, to test the alert without touching the project.
 
 on:
   schedule:
     - cron: "17 6 */3 * *"   # every 3 days, 08:17 Israel (winter)
   workflow_dispatch:
+    inputs:
+      test_alert:
+        description: "Fail on purpose to test the alert mail"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -20,24 +27,50 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Query the database through the REST API
+        id: check
         env:
           SB_URL: https://xghfcdgettrcdciwwzbl.supabase.co
           SB_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          FN: ${{ inputs.test_alert && 'keepalive_test_alert_missing' || 'keepalive' }}
         run: |
           set -u
-          [ -n "$SB_KEY" ] || { echo "::error::secret SUPABASE_ANON_KEY is missing"; exit 1; }
-          ok=""
+          [ -n "$SB_KEY" ] || { echo "detail=secret SUPABASE_ANON_KEY is missing" >> "$GITHUB_OUTPUT"; echo "::error::secret SUPABASE_ANON_KEY is missing"; exit 1; }
+          ok=""; code=000; body=""
           for i in 1 2 3; do
             code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 60 \
-              -X POST "$SB_URL/rest/v1/rpc/keepalive" \
+              -X POST "$SB_URL/rest/v1/rpc/$FN" \
               -H "apikey: $SB_KEY" -H "Content-Type: application/json" -d '{}' || echo 000)
-            body=$(head -c 300 body.txt 2>/dev/null)
+            body=$(head -c 300 body.txt 2>/dev/null | tr -d '\r\n')
             echo "attempt $i: HTTP $code, body: $body"
-            if [ "$code" = "200" ] && { [ "$body" = "true" ]; }; then ok=1; break; fi
+            if [ "$code" = "200" ] && [ "$body" = "true" ]; then ok=1; break; fi
             sleep 30
           done
           if [ -z "$ok" ]; then
+            echo "detail=HTTP $code: $(echo "$body" | head -c 200)" >> "$GITHUB_OUTPUT"
             echo "::error::Supabase project did not answer the database query (HTTP $code). It may be paused: open https://supabase.com/dashboard/project/xghfcdgettrcdciwwzbl and click Resume."
             exit 1
           fi
           echo "database answered: project is active"
+
+      - name: Alert mail (only when the check failed)
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DETAIL: ${{ steps.check.outputs.detail }}
+          TEST: ${{ inputs.test_alert && 'true' || 'false' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -u
+          [ -n "$RESEND_API_KEY" ] || { echo "::error::secret RESEND_API_KEY is missing, no alert sent"; exit 1; }
+          prefix=""; [ "$TEST" = "true" ] && prefix="[בדיקה] "
+          subject="${prefix}התראה: פרויקט Supabase של יאללה־סע לא ענה"
+          text="${prefix}בדיקת התקינות של Supabase (deadhead-dashboard) נכשלה.
+          פירוט: ${DETAIL:-לא ידוע}
+          ייתכן שהפרויקט הושהה. לחידוש: https://supabase.com/dashboard/project/xghfcdgettrcdciwwzbl ואז Resume project.
+          הריצה ב-GitHub: ${RUN_URL}"
+          payload=$(jq -n --arg s "$subject" --arg t "$text" \
+            '{from:"יאללה־סע – התראות <support@yalla-sa.app>", to:["support@yalla-sa.app"], subject:$s, text:$t}')
+          code=$(curl -sS -o res.json -w '%{http_code}' --max-time 60 -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" -H "Content-Type: application/json" -d "$payload" || echo 000)
+          echo "Resend: HTTP $code $(cat res.json 2>/dev/null)"
+          [ "$code" = "200" ] || { echo "::error::alert mail was not accepted by Resend"; exit 1; }
