@@ -143,8 +143,9 @@ jobs:
           echo "to build:$list"
 
       # Licensed route shapes of the operator from the MOT GTFS of each day built (pipeline/gtfs_shapes.py, README "קווי
-      # הרישוי"): the day's file from the Open Bus archive of the MOT GTFS (routes change from day to day), else today's MOT
-      # file; ~140 MB each, to the runner's temp folder (outside the checkout), only the operator's shapes kept.
+      # הרישוי"): only the day's own file, from the Open Bus archive of the MOT GTFS (routes change from day to day; R48).
+      # No fallback to today's MOT file: a day without its GTFS is marked "אין GTFS של היום" and not computed (next step).
+      # ~140 MB each, to the runner's temp folder (outside the checkout), only the operator's shapes kept.
       - name: Line shapes from the MOT GTFS of each day
         if: steps.days.outputs.days != ''
         env:
@@ -155,10 +156,12 @@ jobs:
           t="$RUNNER_TEMP/gtfs-mot"; mkdir -p "$t" pipeline/cache
           for d in $DAYS; do
             y=${d:0:4}; m=${d:5:2}; dd=${d:8:2}
-            if curl -sSf -m 900 --retry 3 -o "$t/gtfs.zip" "https://openbus-stride-public.s3.eu-west-1.amazonaws.com/gtfs_archive/$y/$m/$dd/israel-public-transportation.zip"                || curl -sSf -m 900 --retry 3 -A "Mozilla/5.0" -o "$t/gtfs.zip" https://gtfs.mot.gov.il/gtfsfiles/israel-public-transportation.zip; then
-              python -I pipeline/gtfs_shapes.py "$t/gtfs.zip" --op "$SLUG" --out "pipeline/cache/gtfs_shapes_${SLUG}_$d.json" || echo "::warning::GTFS shapes failed for $d"
+            out="pipeline/cache/gtfs_shapes_${SLUG}_$d.json"
+            if [ -f "$out" ]; then echo "$d: GTFS of the day already in the cache"; continue; fi
+            if curl -sSf -m 900 --retry 3 -o "$t/gtfs.zip" "https://openbus-stride-public.s3.eu-west-1.amazonaws.com/gtfs_archive/$y/$m/$dd/israel-public-transportation.zip"; then
+              python -I pipeline/gtfs_shapes.py "$t/gtfs.zip" --op "$SLUG" --out "$out" || { rm -f "$out"; echo "::warning::$d: GTFS of the day unreadable - day not computed (אין GTFS של היום)"; }
             else
-              echo "::warning::no GTFS for $d: empty legs from a GPS point use OSRM between stops, no route-deviation check"
+              echo "::warning::$d: no GTFS of the day in the Open Bus archive - day not computed (אין GTFS של היום)"
             fi
             rm -f "$t/gtfs.zip"
           done
@@ -210,6 +213,9 @@ jobs:
           (umask 077; printf '%s' "$DATA_KEY" > "$DATA_KEY_FILE")
           for d in $DAYS; do
             echo "== $d"
+            if [ ! -f "pipeline/cache/gtfs_shapes_${SLUG}_$d.json" ]; then  # R48: no GTFS of the day = not computed, marked
+              python pipeline/build_day.py "$d" --op "$SLUG" --no-gtfs; continue
+            fi
             timeout 110m python pipeline/build_day.py "$d" --op "$SLUG"  # first run after the route check (v3) re-routes the whole cache
           done
           rm -f "$DATA_KEY_FILE"
@@ -256,6 +262,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # only the public hash list (pva.seal reads it); the operator files themselves are in Storage
           git add "data/$SLUG/hashes.json"
+          f="data/$SLUG/nogtfs.json"  # days without their own GTFS (dates only); removed when the last one gets built
+          if [ -e "$f" ] || git ls-files --error-unmatch "$f" >/dev/null 2>&1; then git add -A -- "$f"; fi
           if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
           git commit -m "Day hashes $SLUG:$DAYS"
           for i in 1 2 3; do

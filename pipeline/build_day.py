@@ -1,4 +1,4 @@
-"""Build one day for one operator:  python pipeline/build_day.py YYYY-MM-DD [--op derech-egged]
+"""Build one day for one operator:  python pipeline/build_day.py YYYY-MM-DD [--op derech-egged] [--no-gtfs]
 
 Fetches the operator's rides (Open Bus Stride) and each ride's first/last SIRI GPS point, finds route ends, computes
 trips and empty legs (OSRM road km), writes plaintext data/<slug>/day_<day>.json (gitignored), encrypts it to
@@ -51,9 +51,9 @@ if os.environ.get("GPS_END_SNAP") == "0": SNAP["enabled"] = False
 HEAD = dict(dict(enabled=True, tol_deg=60, radius_m=15, line_m=60, shape_m=150, trace_n=2, trace_min_m=30),
             **json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("gps_heading", {}))
 if os.environ.get("GPS_HEADING") == "0": HEAD["enabled"] = False
-# The line's road = the licensed shape of the ride (MOT GTFS of that day, pipeline/gtfs_shapes.py -> cache/gtfs_shapes_<slug>_<day>.json,
-# else cache/gtfs_shapes_<slug>.json; David,
-# 18.11.2026). Without that file: OSRM between the two licensed stops around the point, checked against the ride's own
+# The line's road = the licensed shape of the ride (MOT GTFS of that day only, pipeline/gtfs_shapes.py ->
+# cache/gtfs_shapes_<slug>_<day>.json; David, 18.11.2026; R48: without that day's file the day is not computed, 23.11).
+# A ride with no shape in it: OSRM between the two licensed stops around the point, checked against the ride's own
 # GPS trace (cache/trace_<slug>_<day>.json, stride.fetch_traces). GPS_TRACES=0: no traces (no Stride calls for them).
 SHAPES = {}
 SHC = {}
@@ -650,8 +650,56 @@ def snap_ends(ts, road=None):
                 t.update(a=[round(o[0], 5), round(o[1], 5)], frm=f'{o[3]}, {o[2]}', ca=o[3])
 
 
+NO_GTFS = "אין GTFS של היום"
+
+
+class NoDayGtfs(SystemExit):
+    """R48: a day is computed only with the MOT GTFS of that same day. No other day's file, no current file."""
+
+
+def day_shapes_file(day):
+    """cache/gtfs_shapes_<slug>_<day>.json, made by gtfs_shapes.py from the Open Bus archive of the MOT GTFS of that day.
+    Missing = the day is not computed (no fallback to another day's or the current MOT file)."""
+    sf = os.path.join(CACHE_DIR, f"gtfs_shapes_{OP['slug']}_{day}.json")
+    if not os.path.exists(sf):
+        raise NoDayGtfs(f"{day}: {NO_GTFS} ({os.path.basename(sf)} missing) - the day is not computed (R48)")
+    return sf
+
+
+def nogtfs_path():
+    return os.path.join(DATA, "nogtfs.json")
+
+
+def nogtfs_days():
+    """{day: reason} of days not computed for lack of that day's GTFS (public: dates only, in git like hashes.json)."""
+    f = nogtfs_path()
+    return json.load(open(f, encoding="utf-8")) if os.path.exists(f) else {}
+
+
+def set_nogtfs(day, on):
+    d = nogtfs_days()
+    if on: d[day] = NO_GTFS
+    else: d.pop(day, None)
+    f = nogtfs_path()
+    if d:
+        os.makedirs(DATA, exist_ok=True)
+        open(f, "w", encoding="utf-8", newline="\n").write(json.dumps(dict(sorted(d.items())), ensure_ascii=False, indent=0) + "\n")
+    elif os.path.exists(f):
+        os.remove(f)
+
+
+def mark_no_gtfs(day):
+    """The day has no MOT GTFS of its own: recorded and shown as such, not computed. A day already built keeps its file."""
+    if os.path.exists(os.path.join(DATA, f"day_{day}.js")):
+        print(f"{day}: already built with its own GTFS, kept", file=sys.stderr); return
+    set_nogtfs(day, True)
+    write_days_index()
+    print(f"{day}: {NO_GTFS} - not computed", file=sys.stderr)
+
+
 def build(day):
     os.makedirs(CACHE_DIR, exist_ok=True)
+    sf = day_shapes_file(day)  # before anything is fetched: no day's GTFS, no day
     rf = os.path.join(CACHE_DIR, f"rides_{OP['slug']}_{day}_h{DAY_START_H}.json")
     raw = json.load(open(rf, encoding="utf-8")) if os.path.exists(rf) else fetch_rides(day, rf, OP["operator_ref"], DAY_START_H)
     LOC = fetch_locations(raw, os.path.join(CACHE_DIR, f"vloc_{OP['slug']}_{day}.json"))
@@ -661,8 +709,7 @@ def build(day):
     ends = update_route_ends(raw, os.path.join(CACHE_DIR, "route_ends.json"))
     global TRACE
     TRACE = {} if os.environ.get("GPS_TRACES") == "0" or not HEAD["enabled"] else fetch_traces(raw, os.path.join(CACHE_DIR, f"trace_{OP['slug']}_{day}.json"))
-    sf = os.path.join(CACHE_DIR, f"gtfs_shapes_{OP['slug']}_{day}.json")  # that day's GTFS (routes change: 152/154/160 in 11.2026)
-    if not os.path.exists(sf): sf = os.path.join(CACHE_DIR, f"gtfs_shapes_{OP['slug']}.json")  # else the latest one
+    # sf: that day's GTFS only (R48; routes change: 152/154/160 in 11.2026), checked at the top of build()
     SHAPES.clear(); SHC.clear()
     if HEAD["enabled"] and os.path.exists(sf): SHAPES.update(json.load(open(sf, encoding="utf-8")))
     print("line shapes:", f"{len(SHAPES.get('shapes', {}))} (GTFS {SHAPES.get('gtfs_date')})" if SHAPES else "none (OSRM between stops)",
@@ -945,6 +992,7 @@ def update_ends(day):
 def encrypt(day):
     subprocess.run(["node", os.path.join(HERE, "encrypt.js"), KEY_FILE, DATA, day], check=True)
     update_ends(day)
+    set_nogtfs(day, False)
     write_days_index()
 
 
@@ -955,7 +1003,8 @@ def write_days_index():
     days = [os.path.basename(f)[4:14] for f in files]
     ver = {os.path.basename(f)[4:14]: h(f) for f in files}
     ends = {os.path.basename(f)[5:12]: h(f) for f in sorted(glob.glob(os.path.join(DATA, "ends_*.js")))}
-    meta = dict(days=days, day_start_hour=DAY_START_H, name=OP["name"], ver=ver, ends=ends)
+    nogtfs = sorted(d for d in nogtfs_days() if d not in ver)  # shown as "אין GTFS של היום", never computed
+    meta = dict(days=days, day_start_hour=DAY_START_H, name=OP["name"], ver=ver, ends=ends, nogtfs=nogtfs)
     open(os.path.join(DATA, "days.js"), "w", encoding="utf-8").write(
         f"(window.OPDAYS=window.OPDAYS||{{}})[{json.dumps(OP['slug'])}]=" + json.dumps(meta, ensure_ascii=False) + ";\n")
     print("days:", days)
@@ -974,6 +1023,8 @@ def main():
         return write_days_index()
     day = args[0]
     dt.date.fromisoformat(day)
+    if "--no-gtfs" in args[1:]:  # the nightly found no MOT GTFS of this day: mark it, compute nothing
+        return mark_no_gtfs(day)
     KEY_FILE = os.environ.get("DATA_KEY_FILE") or os.path.join(REPO, "config", f".data_key_{slug}")
     if not os.path.exists(KEY_FILE):
         raise SystemExit("missing data key: " + KEY_FILE)
