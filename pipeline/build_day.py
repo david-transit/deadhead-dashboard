@@ -384,7 +384,7 @@ def own_gtfs(raw, day, LOC):
     for d in (day, (dt.date.fromisoformat(day) + dt.timedelta(days=1)).isoformat()):
         L += fetch_gtfs_rides(d, OP["operator_ref"], os.path.join(CACHE_DIR, f"gtfs_rides_{OP['slug']}_{d}.json"))
     P = dt.datetime.fromisoformat
-    L = [x for x in L if a <= P(x["start_time"]) < b]
+    L = [x for x in L if x.get("start_time") and a <= P(x["start_time"]) < b]  # Stride may list a ride with no start time (21.11.2026)
     if not L: return {}
     by = collections.defaultdict(list)
     for x in L: by[x["line_ref"]].append(x)
