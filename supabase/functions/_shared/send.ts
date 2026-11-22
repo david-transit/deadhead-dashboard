@@ -6,7 +6,7 @@ import { graphSend, mediaPayload, templatePayload, textPayload } from "./meta.ts
 import type { Hours } from "./bot.ts";
 
 export interface SupportSettings extends Settings {
-  alert_channel: "whatsapp" | "email" | "off"; alert_to: string | null; alert_email?: string | null; hours: Hours;
+  alert_channel: "whatsapp" | "email" | "push" | "off"; alert_to: string | null; alert_email?: string | null; hours: Hours;
 }
 export interface Contact { id: string; consent: boolean; optedOut: boolean }
 export interface NewMessage {
@@ -26,6 +26,7 @@ export interface Deps {
   db: SupportDb; cfg: { token: string; phoneId: string };
   fetchFn?: typeof fetch; sleep?: (ms: number) => Promise<void>; now?: Date;
   mail?: { url: string; key: string }; // mail_send (email sub-project), for alerts on the email channel
+  push?: (text: string) => Promise<SendOut>; // Web Push to the agents' devices (PRD-email M20), for the push channel
 }
 export interface SendReq {
   to: string; kind: "text" | "template" | "media"; body?: string;
@@ -76,6 +77,7 @@ function fileLabel(m: { filename: string; size: number }): string {
 export async function sendAlert(d: Deps, text: string, budgetAlert = false): Promise<SendOut> {
   const s = await d.db.settings();
   if (s.alert_channel === "email") return mailAlert(d, s.alert_email ?? null, text);
+  if (s.alert_channel === "push") return d.push ? d.push(text) : { ok: false, error: "push_not_configured" };
   if (s.alert_channel !== "whatsapp" || !s.alert_to) return { ok: false, error: `alert_channel_${s.alert_channel}` };
   return sendMessage(d, { to: s.alert_to, kind: "template", template: "alert_v1", params: [text], category: "utility", sender: "system", isAlert: true, isBudgetAlert: budgetAlert });
 }

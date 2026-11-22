@@ -8,6 +8,7 @@
 //       {action:"template", to, template, params, quickReply?}   template name must be in TEMPLATES
 // Secrets (Edge Function env, typed by David): WA_TOKEN, WA_PHONE_ID, WA_INTERNAL_KEY.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { pushAlert } from "../_shared/push_db.ts";
 import { sendMessage } from "../_shared/send.ts";
 import { mediaKind, normPhone, type Category } from "../_shared/rules.ts";
 import { mediaUpload } from "../_shared/meta.ts";
@@ -41,7 +42,7 @@ Deno.serve(async (req) => {
 
   const token = Deno.env.get("WA_TOKEN"), phoneId = Deno.env.get("WA_PHONE_ID");
   if (!token || !phoneId) return out({ error: "not_configured" }, 503);
-  const deps = { db, cfg: { token, phoneId }, mail: MAIL };
+  const deps = { db, cfg: { token, phoneId }, mail: MAIL, push: pushAlert(admin) };
 
   try {
     const isForm = (req.headers.get("content-type") || "").startsWith("multipart/form-data");
