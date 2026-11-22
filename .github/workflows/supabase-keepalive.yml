@@ -3,7 +3,7 @@ name: supabase-keepalive
 # Keeps the Free-plan Supabase project (deadhead-dashboard) from being paused for inactivity.
 # Supabase pauses Free projects with too little *user database activity* over 7 days
 # (https://supabase.com/docs/guides/platform/free-project-pausing), so this runs a real query:
-# the public has_edit_password() RPC through the REST API (reads one row, no password, no side effects).
+# the public keepalive() RPC through the REST API (a real SQL query, returns true, no side effects).
 # Runs outside Supabase (GitHub Actions). On failure the job fails; GitHub emails the failure.
 
 on:
@@ -29,11 +29,11 @@ jobs:
           ok=""
           for i in 1 2 3; do
             code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 60 \
-              -X POST "$SB_URL/rest/v1/rpc/has_edit_password" \
+              -X POST "$SB_URL/rest/v1/rpc/keepalive" \
               -H "apikey: $SB_KEY" -H "Content-Type: application/json" -d '{}' || echo 000)
             body=$(head -c 300 body.txt 2>/dev/null)
             echo "attempt $i: HTTP $code, body: $body"
-            if [ "$code" = "200" ] && { [ "$body" = "true" ] || [ "$body" = "false" ]; }; then ok=1; break; fi
+            if [ "$code" = "200" ] && { [ "$body" = "true" ]; }; then ok=1; break; fi
             sleep 30
           done
           if [ -z "$ok" ]; then
