@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-23.1";
+const APP_VER="2026-11-23.2";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -106,7 +106,8 @@ let S={depots:[],fuel_stations:[],driver_change_points:[],stop_anchors:[],forced
 // saved choices of the operator (all days), keyed "day|veh" (night before day) and "day|veh|scheduled start minute"
 let OVN={}, REIN={}, AUTOR={}, BLK={}, NOTES={}; // NOTES: my own saved leg notes (feedback to the product team)
 // days of the current operator: data/<slug>/days.js (built by the pipeline); service day D = D hh:00 … D+1 hh:00 (operators.json)
-let days=[],DAY_START_H=4,today="",yest="",DAYVER={},ENDSVER={},ENDS={};
+let days=[],NOGTFS=[],DAY_START_H=4,today="",yest="",DAYVER={},ENDSVER={},ENDS={};
+const NO_GTFS="אין GTFS של היום"; // R48: a day without the MOT GTFS of that same day is not computed (pipeline: nogtfs)
 const {hav,estKm,estMin,roadKey,addDays,OVMODES,LEGNAME}=DH;
 const hasLoc=x=>x&&x.lat!=null&&x.lon!=null&&x.lat!==""&&x.lon!==""&&isFinite(parseFloat(x.lat))&&isFinite(parseFloat(x.lon));
 
@@ -269,11 +270,14 @@ async function loadOpFile(name){const [g,k,v]=parseOpFile(await opFile(name));(w
 async function initDays(){
   try{await loadOpFile("days.js")}catch(e){console.warn("days",e)}
   const m=(window.OPDAYS||{})[OP.slug]||{days:[]}; days=(m.days||[]).slice().sort(); DAYVER=m.ver||{}; ENDSVER=m.ends||{}; DAY_START_H=m.day_start_hour??4;
+  NOGTFS=(m.nogtfs||[]).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&!days.includes(d));
   const now=new Date(Date.now()-new Date().getTimezoneOffset()*6e4-DAY_START_H*36e5); today=ymd(now); yest=ymd(new Date(now-864e5));
-  $("#day").innerHTML=days.map(d=>`<option value="${d}">${d.split("-").reverse().join(".")}</option>`).join("");
+  // days without their own GTFS are listed, marked and cannot be opened: there is nothing computed for them
+  $("#day").innerHTML=[...days,...NOGTFS].sort().map(d=>NOGTFS.includes(d)?`<option value="${d}" disabled>${d.split("-").reverse().join(".")} – ${NO_GTFS}</option>`
+    :`<option value="${d}">${d.split("-").reverse().join(".")}</option>`).join("");
   $("#fdDay").innerHTML=days.map(d=>`<option value="${d}">${fdDayTxt(d)}</option>`).join("");
   $("#bToday").disabled=!days.includes(today); $("#bYest").disabled=!days.includes(yest);
-  $("#bToday").title=days.includes(today)?"":"אין עדיין נתונים להיום"; $("#bYest").title=days.includes(yest)?"":"אין נתונים לאתמול";
+  $("#bToday").title=days.includes(today)?"":NOGTFS.includes(today)?NO_GTFS:"אין עדיין נתונים להיום"; $("#bYest").title=days.includes(yest)?"":NOGTFS.includes(yest)?NO_GTFS:"אין נתונים לאתמול";
 }
 async function loadEnds(){ENDS={};
   await Promise.all(Object.keys(ENDSVER).map(async m=>{try{if(!(window.ENC_ENDS&&window.ENC_ENDS[m])) await loadOpFile(`ends_${m}.js`);
