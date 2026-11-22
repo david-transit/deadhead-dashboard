@@ -38,3 +38,10 @@
 - **תיק פרטיות** (מסמך הגדרות מאגר, נוהל אבטחה, אירועים, שמירה, ספקים, טיוטות לעו"ד): `yalla-sa-portal/docs/privacy/`. מדיניות הפרטיות (טיוטה) באתר: `privacy.html`, עם קישור ממסך הכניסה והודעה קצרה בכניסה הראשונה.
 - **שמירת לוגים:** `private.auth_events` נשמר 24 חודשים ואז נמחק אוטומטית (migration `20261116200000_log_retention`).
 - **גיבוי:** `.github/workflows/backup-weekly.yml` כל יום ראשון: `pg_dump` (public, private, auth), בדיקת שחזור ל־Postgres זמני, הצפנה ל־`pipeline/backup/backup-cert.pem`, artifact ל־35 יום. דורש את הסוד `SUPABASE_DB_URL`. מפתח הפענוח רק אצל דוד.
+
+## בדיקות והגנה על main
+
+- כל PR וכל push ל-main מריצים את `.github/workflows/ci.yml`: בדיקות Python (`pipeline`) ובדיקות JS (`node --test`), עם תלויות נעולות ב-`pipeline/requirements-ci.txt`.
+- ruleset על main: הבדיקה `tests` חייבת לעבור לפני מיזוג, אין force-push ואין מחיקה. זה חל גם על מנהלים.
+- העקיפה היחידה: ה-deploy key של הצינור הלילי (secret `NIGHTLY_DEPLOY_KEY`), שדוחף את קובצי הימים המוצפנים.
+- חתימות השחזור העיוור נדחפות לענף נפרד, `seals`.
