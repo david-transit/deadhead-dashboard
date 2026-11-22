@@ -3,7 +3,7 @@
   "use strict";
   const $ = s => document.querySelector(s);
   const ST = { planned: "כמתוכנן", changed: "השתנתה", added: "נוספה", not_done: "לא בוצעה" };
-  const VERD = { match: "תואם", op: "גוגל: המפעיל צודק", ours: "גוגל: הניתוב שלנו צודק", third: "לבדיקה פרטנית", pending: "ממתין לגוגל", "n/a": "–" };
+  const VERD = { match: "תואם", third: "לבדיקה פרטנית", op: "לבדיקה פרטנית", ours: "לבדיקה פרטנית", pending: "לבדיקה פרטנית", "n/a": "–" };
   const LES = { via_stop: "המפעיל עובר דרך מוסך או חניון ביניים, ואנחנו נוסעים ישר", other_destination: "יעד אחר לנסיעה הריקה",
     missing_in_ours: "נסיעות ריקות של המפעיל שלא ראינו בכלל", km_gap: "פערי ק״מ מול המפעיל" };
 
@@ -28,8 +28,8 @@
     for (const t of T) { if (!["op", "ours", "third", "pending"].includes(t.verdict)) continue;
       const k = t.desc + "|" + h.place(t.a) + "|" + h.place(t.b); const x = g.get(k) || { t, n: 0 }; x.n++; g.set(k, x); }
     const G = [...g.values()].sort((a, b) => b.n - a.n), U = days.flatMap(d => d.unresolved.map(t => ({ ...t, day: d.day })));
-    $("#pGap").innerHTML = `<div class="col"><h2>פערי ק״מ (${G.length} צמדים)</h2><table class="tbl"><thead><tr><th>תיאור המפעיל</th><th>מ־</th><th>אל</th><th>המפעיל</th><th>שלנו</th><th>גוגל</th><th>הכרעה</th><th>נסיעות</th></tr></thead><tbody>` +
-      G.map(x => `<tr><td>${h.esc(x.t.desc)}</td><td>${h.esc(h.place(x.t.a))}</td><td>${h.esc(h.place(x.t.b))}</td><td>${h.nf(x.t.op_km)}</td><td>${h.nf(x.t.our_km)}</td><td>${h.nf(x.t.g_km)}</td><td>${VERD[x.t.verdict]}</td><td>${x.n}</td></tr>`).join("") +
+    $("#pGap").innerHTML = `<div class="col"><h2>פערי ק״מ (${G.length} צמדים)</h2><table class="tbl"><thead><tr><th>תיאור המפעיל</th><th>מ־</th><th>אל</th><th>המפעיל</th><th>שלנו</th><th>הכרעה</th><th>נסיעות</th></tr></thead><tbody>` +
+      G.map(x => `<tr><td>${h.esc(x.t.desc)}</td><td>${h.esc(h.place(x.t.a))}</td><td>${h.esc(h.place(x.t.b))}</td><td>${h.nf(x.t.op_km)}</td><td>${h.nf(x.t.our_km)}</td><td>${VERD[x.t.verdict]}</td><td>${x.n}</td></tr>`).join("") +
       `</tbody></table><h2>לבדיקה: נסיעות ריקות בלי מוצא או יעד ידוע (${U.length})</h2><table class="tbl"><thead><tr><th>יום</th><th>שעה</th><th>סידור</th><th>רכב</th><th>תיאור המפעיל</th></tr></thead><tbody>` +
       U.map(t => `<tr><td>${h.dlabel(t.day)}</td><td>${h.hm(t.t0)}</td><td>${h.esc(t.sidur)}</td><td>${h.esc(t.veh)}</td><td>${h.esc(t.desc)}</td></tr>`).join("") + `</tbody></table>` + places(days, h) + `</div>`;
   }
