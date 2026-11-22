@@ -76,8 +76,9 @@ export async function sendPush(sub: PushSub, payload: string, keys: VapidKeys, f
       "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream", TTL: "86400", Urgency: "high",
       Authorization: await vapidHeader(sub.endpoint, keys) } });
     if (r.status === 404 || r.status === 410) return "gone";
+    if (!r.ok) console.error("push rejected", r.status, new URL(sub.endpoint).host, (await r.text().catch(() => "")).slice(0, 200));
     return r.ok ? "ok" : "error";
-  } catch { return "error"; }
+  } catch (e) { console.error("push failed", String(e).slice(0, 200)); return "error"; }
 }
 
 export interface PushStore { list(): Promise<PushSub[]>; remove(ids: string[]): Promise<void> }
@@ -102,4 +103,16 @@ const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^([a-z0-9-]+\.)*push\.apple\.com$
   /^[a-z0-9-]+\.notify\.windows\.com$/];
 export function isPushEndpoint(u: string): boolean {
   try { const x = new URL(u); return x.protocol === "https:" && !x.port && PUSH_HOSTS.some((r) => r.test(x.hostname)); } catch { return false; }
+}
+
+// the two secrets belong together: sign with the private key, verify with the public one (reveals neither)
+export async function vapidPairOk(keys: VapidKeys): Promise<boolean> {
+  try {
+    const pub = b64u.dec(keys.publicKey);
+    if (pub.length !== 65 || pub[0] !== 4) return false;
+    const h = await vapidHeader("https://fcm.googleapis.com/x", keys);
+    const [hd, cl, sig] = h.slice(8, h.indexOf(", k=")).split(".");
+    const k = await subtle().importKey("jwk", jwkOf(pub), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+    return await subtle().verify({ name: "ECDSA", hash: "SHA-256" }, k, b64u.dec(sig), te.encode(`${hd}.${cl}`));
+  } catch { return false; }
 }

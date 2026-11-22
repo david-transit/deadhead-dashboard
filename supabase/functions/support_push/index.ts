@@ -1,11 +1,13 @@
 // support_push (yalla-sa support, PRD-email M20; design 2026-11-22-email-push-alerts-design.md §5).
 // A signed-in support agent registers or removes this device for push alerts, or sends a test to own devices.
 //   {action:"key"} -> {ok, key} | {action:"subscribe", endpoint, keys:{p256dh,auth}, label} | {action:"unsubscribe", endpoint} | {action:"test"}
+// Server self-check: header x-internal-key (WA_INTERNAL_KEY) -> {pairOk, sent...} to every device.
 // aal2 is not required: the function reveals nothing (like support_is_agent). Secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { pushAction } from "../_shared/push_api.ts";
-import { pushToAgents } from "../_shared/push.ts";
-import { vapidKeys } from "../_shared/push_db.ts";
+import { pushAction, TEST_TEXT } from "../_shared/push_api.ts";
+import { pushToAgents, vapidPairOk } from "../_shared/push.ts";
+import { vapidKeys, supabasePushStore } from "../_shared/push_db.ts";
+import { safeEq } from "../_shared/mail/http.ts";
 
 const ORIGINS = ["https://yalla-sa.app"];
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -37,6 +39,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: H });
   if (req.method !== "POST") return out({ ok: false, error: "method" }, 405);
   try {
+    // server check (x-internal-key, from the database only): do the two VAPID secrets match, and does a test reach every device
+    const ik = req.headers.get("x-internal-key") || "";
+    if (ik) {
+      if (!safeEq(ik, Deno.env.get("WA_INTERNAL_KEY") || "")) return out({ ok: false, error: "unauthorized" }, 401);
+      return out({ pairOk: await vapidPairOk(vapidKeys()), ...(await pushToAgents(supabasePushStore(admin), TEST_TEXT, vapidKeys())) });
+    }
     const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: me } = await admin.auth.getUser(jwt);
     if (!me?.user) return out({ ok: false, error: "unauthorized" }, 401);
