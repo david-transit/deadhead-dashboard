@@ -3,7 +3,7 @@
 The operator files stay outside the repo; the payload and SQL are written to --out (default pipeline/cache, git-ignored).
 Driver names are never read (pva.read); drivers appear by code only."""
 import argparse, collections, glob, json, os
-from pva import read, ends, km, lessons as lessons_mod, plausibility
+from pva import read, ends, km, lessons as lessons_mod, plausibility, seal
 from pva.classify import classify
 
 PLAN_FILES = dict(weekday='בסיס א-ה', fri='בסיס שישי', sat='בסיס שבת')
@@ -160,16 +160,24 @@ def main():
     ap.add_argument('--gtfs', required=True, help='GTFS zip of that day (R48); one day per run when days differ')
     ap.add_argument('--settings', required=True, help='json: {operator_id, depots, forced_legs, forced_out_km}')
     ap.add_argument('--ours', help="folder of our plaintext day files (day_<D>.json) for the lessons tab")
+    ap.add_argument('--op', default='derech-egged', help='operator slug: data/<op>/ holds the blind reconstruction to seal')
     ap.add_argument('--out', default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cache'))
     a = ap.parse_args()
     st = json.load(open(a.settings, encoding='utf-8'))
     pc = json.load(open(os.path.join(km.HERE, 'config.json'), encoding='utf-8'))['pva']
     cfg = dict(km.load_cfg(), depot_alias=pc.get('depot_alias', {}), gtfs_agency=pc.get('gtfs_agency'))
     road, save, _ = bd.osrm_router(os.path.join(bd.CACHE_DIR, 'osrm_cache.json'))
+    # OP-DATA-7: seal the blind reconstruction of every day (commit + push) BEFORE any operator file is opened
+    seal.seal_days(a.day, a.op)
+    opened_at = dt.datetime.now(dt.timezone.utc)
     src = Source(a.src)
     for d in a.day:
         p = build_day(src, dt.date.fromisoformat(d), st['depots'], st.get('forced_legs', []), st.get('forced_out_km', 5),
                       a.gtfs, road, cfg)
+        v = seal.verify(d, a.op, opened_at)  # the extra check after opening
+        p.update(blind=v['blind'], blind_why=v['why'], seal=v['seal'])
+        if not v['blind']:
+            print(d, 'NOT BLIND:', v['why'])
         of = os.path.join(a.ours, f'day_{d}.json') if a.ours else None
         if of and os.path.exists(of):
             p['lessons'] = lessons_mod.lessons(json.load(open(of, encoding='utf-8')), p)
