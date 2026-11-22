@@ -1,7 +1,7 @@
 """Blind seal (OP-DATA-7, ADR-0010 interim procedure, David 22.11.2026).
 
 Before an operator file of a service day is opened, the SHA-256 of every file of that day's blind reconstruction
-(the nightly pipeline's day file, data/<operator>/day_<D>.js) is written to <operator>/<D>.json on the 'seals' branch and pushed:
+(the nightly pipeline's encrypted day file in private Storage, by its hash in data/<operator>/hashes.json on GitHub) is written to <operator>/<D>.json on the 'seals' branch and pushed:
 the commit on GitHub is the external timestamp. Only hashes, never data.
 After the files are read, verify() hashes the reconstruction again and compares: no seal, a different hash,
 a seal that is not on GitHub or is later than the opening, or a day read before the procedure -> "not blind",
@@ -26,11 +26,20 @@ def sha256(path):
         return hashlib.sha256(fh.read().replace(b'\r\n', b'\n')).hexdigest()
 
 
-def blind_files(day, op, root=ROOT):
-    files = sorted(glob.glob(os.path.join(root, 'data', op, f'day_{day}.js')))
-    if not files:
-        raise SealError(f'{day}: no blind reconstruction (data/{op}/day_{day}.js) to seal; build the day first')
-    return files
+def blind_hashes(day, op, root=ROOT):
+    """{file: sha256} of the day's blind reconstruction. The encrypted day file is in private Storage (operator-data);
+    the nightly pipeline publishes its hash in data/<op>/hashes.json on GitHub, read here from origin/main."""
+    try:
+        _git(root, 'fetch', '-q', 'origin', '+refs/heads/main:refs/remotes/origin/main')
+    except subprocess.CalledProcessError:
+        pass  # offline: the last fetched origin/main
+    try:
+        h = json.loads(_git(root, 'show', f'origin/main:data/{op}/hashes.json')).get(str(day))
+    except (subprocess.CalledProcessError, ValueError):
+        h = None
+    if not h:
+        raise SealError(f'{day}: no blind reconstruction in data/{op}/hashes.json on GitHub; build the day first')
+    return {f'storage:operator-data/{op}/day_{day}.js': h}
 
 
 SEAL_BRANCH = 'seals'  # seals live on their own branch: main is protected (CI must pass), this branch takes direct pushes
@@ -94,7 +103,7 @@ def seal_days(days, op, root=ROOT, now=None):
         if has_branch and _remote_seal(root, rel)[0] is not None:
             continue  # the first seal stands; verify() compares against it
         recs[rel] = dict(day=d, operator=op, sealed_at=now.isoformat(timespec='seconds'),
-                         files=[dict(path=os.path.relpath(f, root).replace(os.sep, '/'), sha256=sha256(f)) for f in blind_files(d, op, root)])
+                         files=[dict(path=f, sha256=h) for f, h in blind_hashes(d, op, root).items()])
     if not recs:
         return []
     wt = tempfile.mkdtemp(prefix='seal-')
@@ -134,7 +143,7 @@ def verify(day, op, opened_at, root=ROOT):
     if rec is None:
         return dict(blind=False, why='אין חתימה לשחזור העיוור ב-GitHub', seal=None)
     try:
-        now = {os.path.relpath(f, root).replace(os.sep, '/'): sha256(f) for f in blind_files(day, op, root)}
+        now = blind_hashes(day, op, root)
     except SealError:
         now = {}
     if now != {f['path']: f['sha256'] for f in rec['files']}:
