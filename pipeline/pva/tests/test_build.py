@@ -4,7 +4,7 @@ from pva.tests.fixtures import plan_xlsx, exec_xlsx, D
 from pva.tests.test_ends import gtfs_zip
 
 DEPOTS = [dict(id='gs7mosk', name='מוסך גבעת שאול', lat='31.796505', lon='35.184479')]
-CFG = dict(gap_km=0.3, gap_pct=10, google_tol_km=0.3, depot_alias={})
+CFG = dict(gap_km=0.3, gap_pct=10, depot_alias={})
 
 
 def src_dir():
@@ -34,7 +34,7 @@ class TestBuild(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.src = build.Source(src_dir())
-        cls.p = build.build_day(cls.src, dt.date(2026, 11, 10), DEPOTS, [], 5, gtfs_zip(), road, {}, CFG)
+        cls.p = build.build_day(cls.src, dt.date(2026, 11, 10), DEPOTS, [], 5, gtfs_zip(), road, CFG)
 
     def test_payload_has_no_names(self):
         s = json.dumps(self.p, ensure_ascii=False)
@@ -56,7 +56,7 @@ class TestBuild(unittest.TestCase):
 
     def test_trip_fields(self):
         t = next(t for s in self.p['sidurim'] for t in s['trips'] if t.get('empty_kind') == 'dispatcher')
-        for k in ('veh', 'sidur', 'status', 'kind', 'empty_kind', 't0', 't1', 'a', 'b', 'op_km', 'our_km', 'g_km', 'verdict', 'km_src', 'end_src', 'driver'):
+        for k in ('veh', 'sidur', 'status', 'kind', 'empty_kind', 't0', 't1', 'a', 'b', 'op_km', 'our_km', 'verdict', 'km_src', 'end_src', 'driver'):
             self.assertIn(k, t)
         self.assertEqual(t['a']['code'], '4156')  # previous service of the same vehicle (other sidur) ended at 4156
 
@@ -86,7 +86,7 @@ class TestSecondSidurOnSameVehicle(unittest.TestCase):
             dict(id=2, kind='ריקה', start=D(2026, 11, 10, 9, 0), end=D(2026, 11, 10, 9, 10), sidur=2, mkt8=66292044, veh=5, driver=99002),
             dict(id=3, kind='שירות', start=D(2026, 11, 10, 9, 15), end=D(2026, 11, 10, 10, 0), sidur=2, mkt8=12154240, line=154, veh=5, driver=99002)]),
             os.path.join(d, 'דוח ביצוע.xlsx'))
-        p = build.build_day(build.Source(d), dt.date(2026, 11, 10), DEPOTS, [], 5, gtfs_zip(), road, {}, CFG)
+        p = build.build_day(build.Source(d), dt.date(2026, 11, 10), DEPOTS, [], 5, gtfs_zip(), road, CFG)
         e = next(t for s in p['sidurim'] for t in s['trips'] if t['kind'] == 'empty')
         self.assertEqual((e['end_src'], e['a']['code'], e['b']['code']), ('gtfs', '4156', '1106'))
 
@@ -96,7 +96,7 @@ class TestGeometry(unittest.TestCase):
         def r(p, q, term=(True, True)):
             return (5.0, 10.0, {})
         r.geom = lambda p, q: [5.12, [[31.78861, 35.20259], [31.79, 35.21], [31.78651, 35.20556]]]
-        p = build.build_day(build.Source(src_dir()), dt.date(2026, 11, 10), DEPOTS, [], 5, gtfs_zip(), r, {}, CFG)
+        p = build.build_day(build.Source(src_dir()), dt.date(2026, 11, 10), DEPOTS, [], 5, gtfs_zip(), r, CFG)
         t = next(t for s in p['sidurim'] for t in s['trips'] if t.get('empty_kind') == 'dispatcher')
         self.assertEqual((t['our_km'], len(t['geom'])), (5.12, 3))
         planned = next(t for s in p['sidurim'] for t in s['trips'] if t['kind'] == 'empty' and t['status'] == 'planned')
