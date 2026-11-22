@@ -231,6 +231,9 @@ def brg(a, b):
 
 
 TRACE = {}
+# route warnings checked against real GPS passages of buses in service (pipeline/gps_verify.py, R51)
+import gps_verify
+GV = dict(gps_verify.DEF, **{k: v for k, v in json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8")).get("gps_verify", {}).items() if not k.startswith("_")})
 
 
 def near(t, pos, end):
@@ -725,6 +728,12 @@ def build(day):
                            a=p["b"], b=t["a"])
                 if rt and (rt.get("fix") or rt.get("u") or max(rt.get("s") or [0]) > 30):
                     leg["rt"] = {x: rt[x] for x in ("s", "fix", "km0", "u", "ok") if x in rt}  # route check (assets/route.js)
+                # a road warning (as the dashboard flags it: detour, or a route check that is not clean) -> the km buses in
+                # service drove between the same two points that day: "gv" = [median km, passages]; the dashboard decides
+                if GV["enabled"] and TRACE and km is not None and p["b"] and t["a"] and ((km > 4 and km > 2.5 * max(hav(p["b"], t["a"]), 0.01))
+                        or (rt and (rt.get("u") or any(m > 30 for m in rt.get("s") or [])))):
+                    gv = gps_verify.verify(TRACE, p["b"], t["a"], km, GV)
+                    if gv: leg["gv"] = gv[:2]
                 if rt and rt.get("hd"):
                     leg["hd"] = rt["hd"]  # routed in the bus's direction of travel ([heading at a, heading at b])
                 if sg is not None:
