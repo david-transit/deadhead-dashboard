@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-19.14";
+const APP_VER="2026-11-23.2";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -106,7 +106,8 @@ let S={depots:[],fuel_stations:[],driver_change_points:[],stop_anchors:[],forced
 // saved choices of the operator (all days), keyed "day|veh" (night before day) and "day|veh|scheduled start minute"
 let OVN={}, REIN={}, AUTOR={}, BLK={}, NOTES={}; // NOTES: my own saved leg notes (feedback to the product team)
 // days of the current operator: data/<slug>/days.js (built by the pipeline); service day D = D hh:00 … D+1 hh:00 (operators.json)
-let days=[],DAY_START_H=4,today="",yest="",DAYVER={},ENDSVER={},ENDS={};
+let days=[],NOGTFS=[],DAY_START_H=4,today="",yest="",DAYVER={},ENDSVER={},ENDS={};
+const NO_GTFS="אין GTFS של היום"; // R48: a day without the MOT GTFS of that same day is not computed (pipeline: nogtfs)
 const {hav,estKm,estMin,roadKey,addDays,OVMODES,LEGNAME}=DH;
 const hasLoc=x=>x&&x.lat!=null&&x.lon!=null&&x.lat!==""&&x.lon!==""&&isFinite(parseFloat(x.lat))&&isFinite(parseFloat(x.lon));
 
@@ -173,16 +174,17 @@ function rokOf(i){if(!i.a||!i.b) return null;const [A,B]=subPair(i.a,i.b),m=rokM
   for(const r of m.values()) if(hav(A,[+r.a_lat,+r.a_lon])<=ROK_NEAR_KM&&hav(B,[+r.b_lat,+r.b_lon])<=ROK_NEAR_KM) return r;
   return null}
 const rokChanged=(r,km)=>{const d=Math.abs(km-r.km);return d>0.3||d>0.1*r.km};
-// ---- "אומת מול גוגל" (table route_google, written by tools/google_route_check.py, PRD R51): Google Routes km of a flagged
-// pair (the routed pair, as route_ok). ok = within pipeline/config.json google_check -> not a problem, listed apart with
-// Google's km; otherwise the warning stays for a manual check, with Google's km beside ours. The verdict is taken here,
-// with the leg's km as the dashboard has it now (the table's ok is the verdict at checking time). ----
-let GOO=new Map();
-async function loadGoo(){try{GOO=new Map((await getRows("route_google",`select=a_lat,a_lon,b_lat,b_lon,our_km,g_km,g_min,ok&${opq()}`)||[]).map(r=>[rokRowKey(r),{...r,km:+r.our_km,g_km:r.g_km==null?null:+r.g_km}]))}catch(e){console.warn("route google",e);GOO=new Map()}}
-// close = |Google - the leg's km now| <= max(15%, 0.5 km): pipeline/config.json google_check (tol_pct, tol_km), the same rule
-const GOO_TOL={pct:15,km:0.5};
-function gooOf(i){if(!i.a||!i.b||i.km==null) return null;const [A,B]=subPair(i.a,i.b),r=GOO.get(rokKey(A,B));if(!r||r.g_km==null) return null;
-  return {...r,ok:Math.abs(r.g_km-i.km)<=Math.max(GOO_TOL.pct/100*i.km,GOO_TOL.km)}}
+// ---- "אומת מול נסיעות בפועל" (R51, David 22.11.2026): leg gv = [median km, passages] that buses in service drove that day
+// between the same two points (pipeline/gps_verify.py). Close to the leg's km now (max(15%, 0.5 km): pipeline/config.json
+// gps_verify tol_pct / tol_km, the same rule) = verified: not a problem, listed apart. Otherwise, or no passage: stays for a
+// manual check, with the km in practice beside ours. Nothing from Google is used. ----
+const GV_TOL={pct:15,km:0.5};
+const gvOk=i=>!!(i.gv&&i.km!=null&&Math.abs(i.gv[0]-i.km)<=Math.max(GV_TOL.pct/100*i.km,GV_TOL.km));
+const gvTxt=i=>i.gv?`בפועל ${kmTxt(i.gv[0])} ק״מ (${nf(i.gv[1])} ${i.gv[1]===1?"נסיעה":"נסיעות"} ב־GPS)`:"";
+// a road warning (detour / suspicious route) that GPS of buses in service does not confirm: "לבדיקה ידנית" (R51, David 22.11.2026);
+// no Google answer is shown in its place. A "time" problem alone is not a km question: no GPS text
+const manual=(i,kinds)=>[...kinds].some(t=>t!=="time")&&!gvOk(i);
+const gvCell=(i,kinds,cls="")=>manual(i,kinds)?`<span class="${cls} muted">${i.gv?`${gvTxt(i)}, לא תואם: לבדיקה ידנית`:"אין נסיעות GPS במקטע: לבדיקה ידנית"}</span>`:i.gv?`<span class="${cls}">${gvTxt(i)}</span>`:"";
 function roadGet(a,b){const r=ROAD.get(roadKey(a,b));if(!r) return null;const ls=linksFor(a,b),vpc=r.meta&&r.meta.vpc;
   if((ls.length||(vpc&&vpc.length))&&!ROUTE.sameIds(vpc,ls.map(ROUTE.linkSig))) return null; // computed with another set of links
   return r}
@@ -255,17 +257,30 @@ const reinOf=(v,i)=>MODEL.reinOf(D.day,v.veh,i);
 
 // ---- days, the cross-day index (ends) and the saved choices ----
 const loadScript=src=>new Promise((ok,bad)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=bad;document.head.appendChild(s)});
+// operator data files (encrypted day / ends files and the days list) are in the private Storage bucket 'operator-data',
+// read with the portal session (RLS: viewer of the operator). Never in the public repo or site. Parsed, never executed.
+async function opFile(name){
+  const r=await fetch(`${SB}/storage/v1/object/authenticated/operator-data/${encodeURIComponent(OP.slug)}/${encodeURIComponent(name)}`,
+    {cache:"no-cache",headers:{apikey:KEY,Authorization:"Bearer "+await token()}});
+  if(!r.ok) throw new Error(`${name}: ${r.status}`); return r.text()}
+const OPF_RE=/^\(window\.(OPDAYS|ENC_DAY|ENC_ENDS)=window\.\1\|\|\{\}\)\[("[^"]+")\]=(\{.*\});\s*$/s;
+function parseOpFile(text){const m=text.match(OPF_RE);if(!m) throw new Error("not an operator data file");
+  return [m[1],JSON.parse(m[2]),JSON.parse(m[3].replace(/([{,])\s*([A-Za-z_]\w*)\s*:/g,'$1"$2":'))]}
+async function loadOpFile(name){const [g,k,v]=parseOpFile(await opFile(name));(window[g]=window[g]||{})[k]=v}
 async function initDays(){
-  try{await loadScript(`data/${OP.slug}/days.js?v=${Date.now()}`)}catch{}
+  try{await loadOpFile("days.js")}catch(e){console.warn("days",e)}
   const m=(window.OPDAYS||{})[OP.slug]||{days:[]}; days=(m.days||[]).slice().sort(); DAYVER=m.ver||{}; ENDSVER=m.ends||{}; DAY_START_H=m.day_start_hour??4;
+  NOGTFS=(m.nogtfs||[]).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&!days.includes(d));
   const now=new Date(Date.now()-new Date().getTimezoneOffset()*6e4-DAY_START_H*36e5); today=ymd(now); yest=ymd(new Date(now-864e5));
-  $("#day").innerHTML=days.map(d=>`<option value="${d}">${d.split("-").reverse().join(".")}</option>`).join("");
+  // days without their own GTFS are listed, marked and cannot be opened: there is nothing computed for them
+  $("#day").innerHTML=[...days,...NOGTFS].sort().map(d=>NOGTFS.includes(d)?`<option value="${d}" disabled>${d.split("-").reverse().join(".")} – ${NO_GTFS}</option>`
+    :`<option value="${d}">${d.split("-").reverse().join(".")}</option>`).join("");
   $("#fdDay").innerHTML=days.map(d=>`<option value="${d}">${fdDayTxt(d)}</option>`).join("");
   $("#bToday").disabled=!days.includes(today); $("#bYest").disabled=!days.includes(yest);
-  $("#bToday").title=days.includes(today)?"":"אין עדיין נתונים להיום"; $("#bYest").title=days.includes(yest)?"":"אין נתונים לאתמול";
+  $("#bToday").title=days.includes(today)?"":NOGTFS.includes(today)?NO_GTFS:"אין עדיין נתונים להיום"; $("#bYest").title=days.includes(yest)?"":NOGTFS.includes(yest)?NO_GTFS:"אין נתונים לאתמול";
 }
 async function loadEnds(){ENDS={};
-  await Promise.all(Object.keys(ENDSVER).map(async m=>{try{if(!(window.ENC_ENDS&&window.ENC_ENDS[m])) await loadScript(`data/${OP.slug}/ends_${m}.js?v=${ENDSVER[m]}`);
+  await Promise.all(Object.keys(ENDSVER).map(async m=>{try{if(!(window.ENC_ENDS&&window.ENC_ENDS[m])) await loadOpFile(`ends_${m}.js`);
     Object.assign(ENDS,(await decryptEnc(window.ENC_ENDS[m])).days)}catch(e){console.warn("ends",m,e)}}))}
 async function loadAll(t,cols,order){let out=[];for(let off=0;;off+=1000){const r=await getRows(t,`select=${cols}&${opq()}&order=${order}&limit=1000&offset=${off}`)||[];out=out.concat(r);if(r.length<1000) break}return out}
 async function loadChoices(){
@@ -291,8 +306,7 @@ function loadDay(day,after){
     render();ensureRoad();if(sel) document.querySelector(`.row[data-v="${CSS.escape(sel)}"]`)?.scrollIntoView({block:"nearest"});after&&after()};
   if((window.DAY_DATA&&window.DAY_DATA[day])||(window.ENC_DAY&&window.ENC_DAY[day])) return go();
   $("#gantt").innerHTML='<div class="empty-state">טוען…</div>';
-  const s=document.createElement("script"); s.src=`data/${OP.slug}/day_${day}.js?v=${encodeURIComponent(DAYVER[day]||APP_VER)}`; s.onload=go;
-  s.onerror=()=>{$("#gantt").innerHTML='<div class="empty-state">לא ניתן לטעון את נתוני היום הזה</div>'}; document.head.appendChild(s);
+  loadOpFile(`day_${day}.js`).then(go,()=>{$("#gantt").innerHTML='<div class="empty-state">לא ניתן לטעון את נתוני היום הזה</div>'});
 }
 // saved choices that no longer match the day's data (rebuilt day, vehicle not running): shown, never dropped silently
 function orphans(){if(!D) return [];const e=eff(),out=[],vs=new Map(D.vehicles.map(v=>[v.veh,v]));
@@ -323,7 +337,9 @@ function render(){
    $("#cTs").textContent=[au.length?`מתוכן ${nf(ar)} תגבור אוטומטי (לא בלוח הרישוי)${pend?` · ${nf(pend)} ממתינות לאישור`:""}`:"",
      nInc?`${nf(nInc)} לא הושלמו לפי GPS`:"",nDup?`${nf(nDup)} התחלות כפולות אוחדו`:""].filter(Boolean).join(" · ")}
   $("#cE").textContent=nf(Math.round(emp));
-  $("#cEs").textContent=["לפי כביש, בין מיקומי ה־GPS",rein?`בלי ${nf(Math.round(rein))} ק״מ תגבור`:"",nOver?`${nf(nOver)} חפיפות בנתונים (0 ק״מ)`:""].filter(Boolean).join(" · ");
+  const car=sum((v,s)=>s.car), nCar=sum(v=>v.items.filter(i=>i.kind==="empty"&&i.fb).length);
+  $("#cEs").textContent=["לפי כביש, בין מיקומי ה־GPS",rein?`בלי ${nf(Math.round(rein))} ק״מ תגבור`:"",nOver?`${nf(nOver)} חפיפות בנתונים (0 ק״מ)`:"",
+    nCar?`בלי ${nf(Math.round(car))} ק״מ הערכת רכב, לא אוטובוס (${nf(nCar)} נסיעות)`:""].filter(Boolean).join(" · ");
   $("#cN").textContent=nf(Math.round(nk));
   $("#cNs").innerHTML=esc(`יציאה ${nf(Math.round(sum((v,s)=>s.out)))} · חזרה ${nf(Math.round(sum((v,s)=>s.in)))} · מעבר לילה ${nf(Math.round(sum((v,s)=>s.over)))}`+
       (sum((v,s)=>s.nrein)?` · תגבור לילה ${nf(Math.round(sum((v,s)=>s.nrein)))}`:""))+
@@ -351,15 +367,15 @@ function render(){
     for(const i of v.items){
       if(i.kind==="ghost") continue;
       if(i.kind==="dup") b+=bar("dup",i.start,i.end,"",`${fmt(i.start)}–${fmt(i.end)} התחלה כפולה של קו ${i.line}: נסיעה קצרה שאוחדה עם הנסיעה הבאה (לא נסיעה, לא תגבור)`);
-      else if(i.kind==="trip"&&i.auto&&autoSt(v,i)!=="rejected") b+=bar("rein"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} תגבור אוטומטי (לא בלוח הרישוי) · קו ${i.line}: ${i.frm} ← ${i.to} · ${AUTOTXT[autoSt(v,i)]}${i.incomplete?" · לא הושלמה לפי GPS":""}`,i.incomplete?"inc":"");
-      else if(i.kind==="trip") b+=bar("svc"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} קו ${i.line}: ${i.frm} ← ${i.to}${i.incomplete?` · לא הושלמה לפי GPS (${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ)`:""}${i.no_gps?" · בלי GPS: לפי הלוח":""}`,i.incomplete?"inc":"");
+      else if(i.kind==="trip"&&i.auto&&autoSt(v,i)!=="rejected") b+=bar("rein"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} תגבור אוטומטי (לא בלוח הרישוי) · קו ${i.line}: ${i.frm} ← ${i.to} · ${AUTOTXT[autoSt(v,i)]}${i.incomplete?" · לא הושלמה לפי GPS":""}${i.no_time?" · שעת סיום: אין נתון":""}`,i.incomplete?"inc":"");
+      else if(i.kind==="trip") b+=bar("svc"+(i.edited?" edt":"")+(i.sched===hlS?" hl":""),i.start,i.end,(i.edited?"✎":"")+i.line+(i.asm?"*":""),`${i.edited?"✎ נערך ידנית · ":""}${fmt(i.start)}–${fmt(i.end)}${i.asm?" * לפי הנחה: "+asmTxt(i)+" ·":""} קו ${i.line}: ${i.frm} ← ${i.to}${i.incomplete?` · לא הושלמה לפי GPS (${nf(i.gps_km)} מתוך ${nf(i.km_plan)} ק״מ)`:""}${i.no_gps?" · בלי GPS: לפי הלוח":""}${i.no_time?" · שעת סיום: אין נתון":""}`,i.incomplete?"inc":"");
       else if(i.kind==="empty"&&reinOf(v,i)){const r=reinOf(v,i),m1=estMin(+r.before_km||0),m3=estMin(+r.after_km||0),m2=Math.max(i.end-i.start-m1-m3,5);
         if(+r.before_km>=1) b+=bar("emp",i.start,i.start+Math.max(m1,3),"",`ריק לפני התגבור ${nf(r.before_km)} ק״מ`);
         b+=bar("rein",i.start+m1,i.start+m1+m2,r.line,`תגבור קו ${r.line}: ${r.route_frm} ← ${r.route_to}, ${nf(r.rein_km)} ק״מ`);
         if(+r.after_km>=1) b+=bar("emp",i.end-Math.max(m3,3),i.end,"",`ריק אחרי התגבור ${nf(r.after_km)} ק״מ`);}
       else if(i.kind==="empty"&&i.overlap) b+=bar("emp",i.end,i.end+3,"",`חפיפה בין נסיעות (שגיאה בנתוני SIRI): 0 ק״מ ריק`,"bad");
       else if(i.kind==="empty"&&i.km>=1){const de=Math.min(i.end,i.start+Math.max(i.drive_min||0,3));
-        b+=bar("emp",i.start,de,nf(i.km)+" ק״מ",`ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}${i.fb?" · חושב ברכב פרטי (גיבוי)":""}, כ־${nf(i.drive_min)} דק׳ נסיעה: ${i.frm} ← ${i.to} (זמן פנוי ${fmt(i.start)}–${fmt(i.end)})${i.tight?" · לא מספיק זמן לנסוע את זה: נתון חשוד":""}`,i.tight?"bad":"");}
+        b+=bar("emp",i.start,de,nf(i.km)+" ק״מ",`ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}${i.fb?" · הערכת רכב, לא אוטובוס (לא נספר)":""}, כ־${nf(i.drive_min)} דק׳ נסיעה: ${i.frm} ← ${i.to} (זמן פנוי ${fmt(i.start)}–${fmt(i.end)})${i.tight?" · לא מספיק זמן לנסוע את זה: נתון חשוד":""}`,i.tight?"bad":"");}
     }
     const f=fuelFor(v);
     h+=`<div class="row${v.veh===sel?" sel":""}" role="listitem" tabindex="0" data-v="${esc(v.veh)}"><div class="lab">${esc(v.veh)}${accIcon(v.veh)} ${errBadge(v)}${brBadge(v)}<span class="badge ${v.cls==="עירוני"?"urb":"ic"}">${esc(v.cls)}</span>${f?`<span class="badge fuelb">${esc(f)}</span>`:""}</div><div class="track">${grid}${b}</div></div>`;
@@ -439,7 +455,7 @@ function sideBody(veh){
       if(r) h+=`<div class="it rein"${mi({k:"rein",v,i,r})}><span>תגבור קו ${esc(r.line)} · ${nf(r.rein_km)} ק״מ<span class="sub">${esc(r.route_frm)} ← ${esc(r.route_to)}</span>
           <span class="sub" style="color:#B4630E">ריק לפני ${nf(r.before_km)} ק״מ · ריק אחרי ${nf(r.after_km)} ק״מ (במקום ${nf(i.km)} ק״מ ריק)</span>
           ${canEdit()&&BLKMODE?`<button class="btn small" data-unrein="${i.next_sched}">ביטול התגבור</button>`:""}${legActs("day",i.start)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
-      else h+=`<div class="it emp${legProblems(i)?" rpw":""}${hlLeg(v,i)?" hl":""}"${mi({k:"emp",v,i})}><span>ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}${i.fb?" · חושב ברכב פרטי (גיבוי)":""} · כ־${nf(i.drive_min)} דק׳<span class="sub">${esc(i.frm)} ← ${esc(i.to)} · זמן פנוי ${Math.round(i.end-i.start)} דק׳</span>
+      else h+=`<div class="it emp${legProblems(i)?" rpw":""}${hlLeg(v,i)?" hl":""}"${mi({k:"emp",v,i})}><span>ריק ${nf(i.km)} ק״מ${i.est?" (הערכה)":""}${i.fb?" · הערכת רכב, לא אוטובוס (לא נספר)":""} · כ־${nf(i.drive_min)} דק׳<span class="sub">${esc(i.frm)} ← ${esc(i.to)} · זמן פנוי ${Math.round(i.end-i.start)} דק׳</span>
           ${forcedTxt(i)}${i.tight?`<span class="sub" style="color:var(--warn)">אין מספיק זמן לנסוע את זה: נתון חשוד</span>${fixLink()}`:""}${routeNote(i)}${legEdTxt(i)}
           ${legActs("day",i.start)}${legEdBtn(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;}
     else h+=`<div class="it wait${hlLeg(v,i)?" hl":""}"><span>המתנה${i.km>0.05?` · מעבר ${nf(i.km)} ק״מ`:""}${legEdTxt(i)}${legEdBtn(i)}</span><span class="t">${fmt(i.start)}–${fmt(i.end)}</span></div>`;
@@ -559,8 +575,8 @@ function routeProblems(){const g=new Map();if(!D) return [];
     if(!x){const [A,B]=subPair(i.a,i.b);x={k,a:i.a,b:i.b,A,B,ok:rokOf(i),frm:i.frm,to:i.to,km:i.km,air:hav(i.a,i.b),min:i.drive_min,kinds:new Set(),legs:[]};g.set(k,x)}
     p.forEach(t=>x.kinds.add(t));x.legs.push({veh:v.veh,start:i.start,end:i.end,km:i.km,min:i.drive_min,i})}
   return [...g.values()].sort((x,y)=>(y.kinds.has("time")-x.kinds.has("time"))||y.legs.length-x.legs.length||y.km/Math.max(y.air,.1)-x.km/Math.max(x.air,.1))}
-function drawRouteBar(){RP=routeProblems();const b=$("#rwBar");if(!b) return;const nl=RP.reduce((s,g)=>s+g.legs.length,0);
-  b.hidden=!RP.length;b.innerHTML=RP.length?`<button type="button" class="rwbtn" data-rwopen aria-haspopup="dialog">⚠ ${nf(RP.length)} בעיות מסלול ביום הזה</button><span class="rwsub">${nf(nl)} נסיעות ריקות · ${[...new Set(RP.flatMap(g=>[...g.kinds]))].map(k=>RPTXT[k]).join(" · ")}</span>`:"";
+function drawRouteBar(){RP=routeProblems();const b=$("#rwBar");if(!b) return;const nl=RP.reduce((s,g)=>s+g.legs.length,0);const nm=RP.filter(g=>manual(g.legs[0].i,g.kinds)).length;
+  b.hidden=!RP.length;b.innerHTML=RP.length?`<button type="button" class="rwbtn" data-rwopen aria-haspopup="dialog">⚠ ${nf(RP.length)} בעיות מסלול ביום הזה</button><span class="rwsub">${nf(nl)} נסיעות ריקות${nm?` · ${nf(nm)} לבדיקה ידנית`:""} · ${[...new Set(RP.flatMap(g=>[...g.kinds]))].map(k=>RPTXT[k]).join(" · ")}</span>`:"";
   const dl=$("#dlgRw");if(dl&&dl.open&&!(dl.contains(document.activeElement)&&/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName))) drawRouteList()}
 document.addEventListener("click",e=>{if(e.target.closest("[data-rwopen]")) openRouteList()});
 function rwDlg(){let d=$("#dlgRw");if(d) return d;d=document.createElement("dialog");d.id="dlgRw";d.className="rwdlg";d.setAttribute("aria-labelledby","rwT");
@@ -580,7 +596,7 @@ const rpFlat=()=>RP.flatMap(g=>g.legs.map(x=>({g,x})));
 async function rpShow(n,k){const L=rpFlat(),z=L[n];if(!z) return;const {g,x}=z,v=D.vehicles.find(q=>q.veh===x.veh);
   const nav=(d,lab)=>`<button type="button" class="btn small" data-rpnav="${d}" ${L[n+d]?"":"disabled"}>${lab}</button>`;
   const head=`<div class="vehnav rpnav" role="group" aria-label="מעבר לסידור אחר"><b class="rphd">רכב ${esc(x.veh)}${v&&v.cls?` · ${esc(v.cls)}`:""} · ${esc(vehDayTxt(D.day))} · ריק <bdi dir="ltr">${fmt(x.start)}–${fmt(x.end)}</bdi></b><span class="sp"></span>
-    ${(r=>r?`<span class="pos">גוגל: ${kmTxt(r.g_km)} ק״מ${r.ok?" · אומת":""}</span>`:"")(gooOf(x.i))}<div class="grp">${nav(-1,`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg> הסידור הקודם`)}<span class="pos">${nf(n+1)} מתוך ${nf(L.length)}</span>${nav(1,`הסידור הבא <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>`)}</div></div>`;
+${gvCell(x.i,g.kinds,"pos")}<div class="grp">${nav(-1,`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg> הסידור הקודם`)}<span class="pos">${nf(n+1)} מתוך ${nf(L.length)}</span>${nav(1,`הסידור הבא <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>`)}</div></div>`;
   RPN=n;const pr=legMap({a:g.a,b:g.b,km:x.km,min:x.min,free:x.end-x.start,frm:g.frm,to:g.to,rt:x.i.rt,title:"בעיית מסלול",back:openRouteList,head});
   // the map dialog is drawn (and focuses its close button) before the map loads: keep the focus on the nav button
   if(k){const b=document.querySelector(`#mapInfo [data-rpnav="${k}"]`);(b&&!b.disabled?b:document.querySelector(`#mapInfo [data-rpnav="${-k}"]`))?.focus()}
@@ -590,18 +606,18 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-rpnav]");i
 function drawRouteList(){const box=$("#rwList");if(!box) return;
   box.innerHTML=RP.length?RP.map((g,n)=>{const k=rpKey(g),dr=DRAFT.reports[k],frees=g.legs.map(x=>x.end-x.start);
     return `<section class="rwg" data-rg="${n}" data-rgk="${esc(g.k)}" tabindex="-1" aria-label="${esc(g.frm)} ← ${esc(g.to)}"><h4>${esc(g.frm)} ← ${esc(g.to)}</h4>
-      <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span>${(r=>r?`<span>גוגל <b>${kmTxt(r.g_km)}</b> ק״מ</span>`:"")(gooOf(g.legs[0].i))}<span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
+      <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span>${gvCell(g.legs[0].i,g.kinds)}<span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
       <div class="rwveh" role="group" aria-label="הצג סידור">${g.legs.map(x=>`<button type="button" class="btn small" data-rgv="${esc(x.veh)}" data-rgs="${x.start}" aria-label="הצג סידור של רכב ${esc(x.veh)}, הנסיעה הריקה של ${fmt(x.start)}">הצג סידור · ${esc(x.veh)} · ${fmt(x.start)}</button>`).join("")}</div>
       <div class="rwact"><button type="button" class="btn small" data-rgmap="${n}">הצג על מפה</button>${canEdit()?`<button type="button" class="btn small" data-rgvia="${n}">הצע נקודת מעבר</button><button type="button" class="btn small" data-rgnote="${n}">הערה</button><button type="button" class="btn small primary" data-rgsend="${n}" ${dr||RSENT[k]?"disabled":""}>${RSENT[k]?"נשלח לבדיקה":dr?"בטיוטה":"שלח לבדיקה"}</button>${g.kinds.has("detour")||g.kinds.has("route")||g.kinds.has("okchg")?`<button type="button" class="btn small" data-rgok="${n}">מסלול תקין</button>`:""}`:""}</div>
       ${g.ok&&g.kinds.has("okchg")?`<div class="sub edtm">סומן כמסלול תקין ב־${kmTxt(g.ok.km)} ק״מ; עכשיו ${kmTxt(g.km)} ק״מ. אפשר לסמן שוב</div>`:""}
       ${dr?`<div class="sub edtm">טיוטה: ${esc(dr.text||"לבדיקה")}${dr.proposed_via?" · הוצעה נקודת מעבר":""} · תישלח ב"שמירה"</div>`:""}
       <div class="rwnote" hidden><textarea rows="2" maxlength="2000" aria-label="הערה על המסלול" placeholder="בלי שמות של אנשים ובלי כתובות פרטיות"></textarea><button type="button" class="btn small" data-rgnoteok="${n}">הוספה לטיוטה</button></div>
       <div class="rwnote rwok" hidden><textarea rows="2" maxlength="300" aria-label="הערה למסלול התקין (לא חובה)" placeholder="הערה (לא חובה)"></textarea><button type="button" class="btn small primary" data-rgokok="${n}">סימון כתקין (טיוטה)</button></div></section>`}).join(""):`<p class="muted">אין בעיות מסלול ביום הזה.</p>`;
-  box.insertAdjacentHTML("beforeend",gooFoot()+rokFoot())}
-let GOOOPEN=false;
-function gooFoot(){const L=routeVerified();if(!L.length) return "";
-  return `<div class="rokfoot"><span>${nf(L.reduce((s,x)=>s+x.legs.length,0))} נסיעות אומתו מול גוגל (לא נספרות כבעיה)</span> · <button type="button" class="linkbtn" data-gooshow aria-expanded="${GOOOPEN}">${GOOOPEN?"הסתר":"הצג"}</button></div>
-    <ul class="roklist" ${GOOOPEN?"":"hidden"}>${L.map(x=>`<li><span>${esc(x.frm)} ← ${esc(x.to)} · שלנו ${kmTxt(x.km)} ק״מ · גוגל ${kmTxt(x.g.g_km)} ק״מ · ${x.legs.map(l=>`${esc(l.veh)} ${fmt(l.start)}`).join(", ")}</span></li>`).join("")}</ul>`}
+  box.insertAdjacentHTML("beforeend",gvFoot()+rokFoot())}
+let GVOPEN=false;
+function gvFoot(){const L=routeVerified();if(!L.length) return "";
+  return `<div class="rokfoot"><span>${nf(L.reduce((s,x)=>s+x.legs.length,0))} נסיעות אומתו מול נסיעות בפועל (לא נספרות כבעיה)</span> · <button type="button" class="linkbtn" data-gvshow aria-expanded="${GVOPEN}">${GVOPEN?"הסתר":"הצג"}</button></div>
+    <ul class="roklist" ${GVOPEN?"":"hidden"}>${L.map(x=>`<li><span>${esc(x.frm)} ← ${esc(x.to)} · שלנו ${kmTxt(x.km)} ק״מ · ${gvTxt(x.i)} · ${x.legs.map(l=>`${esc(l.veh)} ${fmt(l.start)}`).join(", ")}</span></li>`).join("")}</ul>`}
 // the pairs marked as correct (all days) + cancel; a saved row cancelled in the drafts is listed until "שמירה"
 let ROKOPEN=false;
 function rokFoot(){const m=rokM(),gone=ROK.filter(r=>DRAFT.rok[rokRowKey(r)]===null);if(!m.size&&!gone.length) return "";
@@ -616,7 +632,7 @@ function rpDraft(g,patch){const k=rpKey(g),cur=DRAFT.reports[k]||{day:D.day,orig
   DRAFT.reports[k]={...cur,...patch};touched();drawRouteList()}
 async function rwClick(e){const t=e.target,d=$("#dlgRw");
   if(t.closest("[data-rwclose]")||t===d){d.close();return}
-  if(t.dataset.gooshow!=null){GOOOPEN=!GOOOPEN;drawRouteList();$("#rwList [data-gooshow]")?.focus();return}
+  if(t.dataset.gvshow!=null){GVOPEN=!GVOPEN;drawRouteList();$("#rwList [data-gvshow]")?.focus();return}
   if(t.dataset.rokshow!=null){ROKOPEN=!ROKOPEN;drawRouteList();$("#rwList [data-rokshow]")?.focus();return}
   if(t.dataset.rokdel!=null){const k=t.dataset.rokdel;rokSet(k,DRAFT.rok[k]===null||(DRAFT.rok[k]&&!ROK.some(r=>rokRowKey(r)===k))?undefined:null);$("#rwList [data-rokshow]")?.focus();return}
   const n=t.dataset.rgmap??t.dataset.rgvia??t.dataset.rgnote??t.dataset.rgsend??t.dataset.rgnoteok??t.dataset.rgok??t.dataset.rgokok;const g=n!=null?RP[+n]:null;
@@ -682,12 +698,12 @@ function legProblems(i,raw){if(i.kind!=="empty"||i.overlap||i.km==null||i.wait) 
   const ax=i.a&&i.b?hav(i.a,i.b):null; if(ax!=null&&i.km>4&&i.km>2.5*Math.max(ax,0.01)) p.push("detour");
   if(ROUTE.unresolved(i.rt)) p.push("route");
   if(p.some(t=>t!=="time")){const ok=rokOf(i);if(ok){if(rokChanged(ok,i.km)) p.push("okchg"); else p=p.filter(t=>t==="time")}}
-  if(!raw&&p.some(t=>t!=="time")&&gooOf(i)?.ok) p=p.filter(t=>t==="time");
+  if(!raw&&p.some(t=>t!=="time")&&gvOk(i)) p=p.filter(t=>t==="time");
   return p.length?p:null}
-// the legs whose road warning Google confirmed (same km), by pair: shown under the list, not counted
+// the legs whose road warning the GPS of buses in service confirmed, by pair: shown under the list, not counted
 function routeVerified(){const g=new Map();if(!D) return [];
-  for(const v of D.vehicles) for(const i of v.items){const p=legProblems(i,true);if(!p||!p.some(t=>t!=="time")) continue;const r=gooOf(i);if(!r||!r.ok) continue;
-    const k=pk(i.a)+">"+pk(i.b);let x=g.get(k);if(!x){x={frm:i.frm,to:i.to,km:i.km,g:r,legs:[]};g.set(k,x)}x.legs.push({veh:v.veh,start:i.start})}
+  for(const v of D.vehicles) for(const i of v.items){const p=legProblems(i,true);if(!p||!p.some(t=>t!=="time")||!gvOk(i)) continue;
+    const k=pk(i.a)+">"+pk(i.b);let x=g.get(k);if(!x){x={frm:i.frm,to:i.to,km:i.km,i,legs:[]};g.set(k,x)}x.legs.push({veh:v.veh,start:i.start})}
   return [...g.values()]}
 function errsOf(v){const c={inc:0,over:0,dup:0,rp:0};
   for(const i of v.items){if(i.kind==="dup") c.dup++;else if(i.kind==="trip"&&i.incomplete) c.inc++;
@@ -948,7 +964,7 @@ function endsEff(){const c=edCache();if(c.ends) return c.ends;const ed={};
 function ensureDayLoaded(day){return new Promise((ok,bad)=>{if(window.DAY_DATA&&window.DAY_DATA[day]) return ok();
   const fin=async()=>{try{window.DAY_DATA=window.DAY_DATA||{};window.DAY_DATA[day]=await decryptDay(day);ok()}catch(e){bad(e)}};
   if(window.ENC_DAY&&window.ENC_DAY[day]) return fin();
-  const s=document.createElement("script");s.src=`data/${OP.slug}/day_${day}.js?v=${encodeURIComponent(DAYVER[day]||APP_VER)}`;s.onload=fin;s.onerror=bad;document.head.appendChild(s)})}
+  loadOpFile(`day_${day}.js`).then(fin,bad)})}
 // edits on nearby days change where vehicles start/end, so those days are read too (nights across days stay right)
 function loadEditedNeighbours(day){const n=DH.dayNum(day);
   for(const d of new Set(Object.values(eff().BLK).map(e=>e.day)))
@@ -994,7 +1010,15 @@ function editsBlock(veh){const es=editsOf(D.day).filter(e=>e.veh===veh||(e.paylo
 function origBlock(veh){const raw=(window.DAY_DATA[D.day].vehicles||[]).find(x=>x.veh===veh);
   return `<div class="orig"><b>המקור (לפני העריכה)</b>`+(raw?raw.items.filter(i=>i.kind==="trip").map(i=>`<div>${fmt(i.start)}–${fmt(i.end)} · קו ${esc(i.line)} · ${esc(i.frm)} ← ${esc(i.to)}</div>`).join(""):"<div>הרכב לא פעל ביום הזה במקור</div>")+`</div>`}
 const fixLink=()=>canEdit()&&!BLKMODE?` <button class="linkbtn" data-blkmode>עריכת הסידור</button>`:"";
-function tripExtra(i){let h=i.edited?`<span class="sub edtm">✎ נערך ידנית${i.edit&&i.edit.by?" · "+esc(i.edit.by):""}${i.moved_from?" · הועבר מרכב "+esc(i.moved_from):""}</span>`:"";
+const OWNLINK={added:"לא שויכה ב־Stride (המאגר הציבורי של Open Bus שממנו מגיעים מיקומי ה־GPS); שויכה על ידינו מול לוח הרישוי",
+  trip_no:"לא שויכה ב־Stride (המאגר הציבורי של Open Bus שממנו מגיעים מיקומי ה־GPS); שויכה על ידינו מול לוח הרישוי, לפי מספר הנסיעה",
+  relinked:"Stride (המאגר הציבורי של Open Bus) שייך אותה לנסיעה אחרת בלוח; שויכה על ידינו מול לוח הרישוי של היום"};
+function srcTxt(i){return (i.own_link&&OWNLINK[i.own_link]?`<span class="sub">${OWNLINK[i.own_link]}</span>`:"")
+  +(i.own_gps?`<span class="sub">שעות ההתחלה והסיום חושבו על ידינו מנקודות ה־GPS של הנסיעה (Stride לא חישב אותן)</span>`:"")
+  +(i.end_wait?`<span class="sub">האוטובוס עמד בתחנה האחרונה עוד ${i.end_wait} דק׳ אחרי שהגיע (SIRI השאיר את הנסיעה פתוחה); הסיום לפי ההגעה</span>`:"")
+  +(i.no_time?`<span class="sub" style="color:var(--warn)">שעת סיום: אין נתון (אין GPS ואין זמן מתוכנן לקו)</span>`:"")
+  +(i.dur_line&&i.no_gps?`<span class="sub">משך לפי הזמן המתוכנן של הקו באותו יום</span>`:"")}
+function tripExtra(i){let h=srcTxt(i)+(i.edited?`<span class="sub edtm">✎ נערך ידנית${i.edit&&i.edit.by?" · "+esc(i.edit.by):""}${i.moved_from?" · הועבר מרכב "+esc(i.moved_from):""}</span>`:"");
   if(BLKMODE&&canEdit()) h+=`<span class="sub">${[["delete","מחיקה"],["replace","החלפה"],["times","שעות"],["move","העברה לרכב"]].map(([a,t])=>`<button class="btn small" data-bact="${a}" data-s="${i.sched}">${t}</button>`).join(" ")}</span>`;
   return h}
 function mkEdit(action,payload){const id=crypto.randomUUID?crypto.randomUUID():"10000000-1000-4000-8000-100000000000".replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
@@ -1474,7 +1498,7 @@ async function unlock(){
   if(!OP){gateMode("noaccess");return false}
   const k=await rpc("get_operator_key",{p_operator:OP.id}); if(!k||!k.keys||!Object.keys(k.keys).length) throw new Error("no_key");
   CKEYS={};for(const [kid,v] of Object.entries(k.keys)) CKEYS[kid]=await crypto.subtle.importKey("raw",b64(v),"AES-GCM",false,["decrypt"]);
-  applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad(),loadEnds(),loadChoices(),loadVia(),loadRok(),loadGoo()]); drawSaveBar();
+  applyOperator(); await initDays(); await Promise.all([loadSettings(),loadRoad(),loadEnds(),loadChoices(),loadVia(),loadRok()]); drawSaveBar();
   // the day loads behind the gate while the logo intro is still playing
   if(!days.length) $("#gantt").innerHTML='<div class="empty-state">אין עדיין נתונים למפעיל הזה</div>';
   else loadDay(days.includes(QP.get("day"))?QP.get("day"):days.includes(yest)?yest:days[days.length-1],()=>{

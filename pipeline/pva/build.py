@@ -3,7 +3,7 @@
 The operator files stay outside the repo; the payload and SQL are written to --out (default pipeline/cache, git-ignored).
 Driver names are never read (pva.read); drivers appear by code only."""
 import argparse, collections, glob, json, os
-from pva import read, ends, km, lessons as lessons_mod, plausibility
+from pva import read, ends, km, lessons as lessons_mod, plausibility, seal
 from pva.classify import classify
 
 PLAN_FILES = dict(weekday='בסיס א-ה', fri='בסיס שישי', sat='בסיס שבת')
@@ -52,7 +52,7 @@ def _trip(t, sidur, day):
                 t0=t['t'], t1=(t['t'] + int((e['end'] - e['start']).total_seconds() // 60)) if e else None,
                 mkt8=(e or p)['mkt8'], line=(e['line'] if e else p.get('line')) or None, desc=t.get('desc', ''),
                 plan_t=p['dep_min'] if p else None, a=_stop(t.get('a') or t.get('first')), b=_stop(t.get('b') or t.get('last')),
-                op_km=t.get('op_km'), our_km=t.get('our_km'), g_km=t.get('g_km'), verdict=t.get('verdict'),
+                op_km=t.get('op_km'), our_km=t.get('our_km'), verdict=t.get('verdict'),
                 km_src=t.get('km_src'), end_src=t.get('end_src'), inferred=t.get('inferred'), gtfs_match=t.get('gtfs_match'), plaus=t.get('plaus'), plaus_why=t.get('plaus_why'), geom=t.get('geom'))
 
 
@@ -73,7 +73,7 @@ def excess_km(t):
     return (t['op_km'] if t['op_km'] is not None else t['our_km']) or 0.0
 
 
-def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, google, cfg):
+def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, cfg):
     dtype = read.day_type(day)
     plan = src.plan(dtype)
     urban = read.urban_sidurim(plan)
@@ -107,7 +107,7 @@ def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, goog
     opk = {m: v[0] for m, v in rdict.items() if v[0] is not None}
     for t in trips:
         if t['kind'] == 'empty':
-            km.fill(t, opk, road, google, cfg)
+            km.fill(t, opk, road, cfg)
             t['forced'] = ends.is_forced(t, forced_legs, depots, forced_out_km)
             g = getattr(road, 'geom', None)
             if t['status'] == 'added' and g and t.get('a') and t.get('b'):  # the map draws this road and shows its km (R13)
@@ -115,7 +115,7 @@ def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, goog
                 if r and r[1]:
                     t['geom'] = thin([[round(x[0], 5), round(x[1], 5)] for x in r[1]])
                     t['our_km'] = round(r[0], 2)
-                    t['verdict'] = km.verdict(t['op_km'], t['our_km'], t['g_km'], cfg)
+                    t['verdict'] = km.verdict(t['op_km'], t['our_km'], cfg)
         else:
             t['op_km'] = (t.get('plan') or {}).get('km') or opk.get(t['exec']['mkt8'] if t['exec'] else None)
     for seq in by_veh.values():  # dispatcher legs: does the vehicle's day explain them?
@@ -141,9 +141,8 @@ def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, goog
     all_t = [t for s in out_sid for t in s['trips']]
     return dict(day=day.isoformat(), day_type=dtype, drivers=drivers, sidurim=out_sid,
                 unresolved=[t for t in all_t if t['kind'] == 'empty' and t['end_src'] == 'unresolved' and t['status'] != 'not_done'],
-                gaps=[t for t in all_t if t.get('verdict') in ('op', 'ours', 'third', 'pending')], lessons=[],
-                places=sorted([dict(name=n, stop=v.get('name'), code=v.get('code'), lat=v['lat'], lon=v['lon'], src='fixed' if n in fixed else 'learned') for n, v in places.items()], key=lambda x: x['name']),
-                pending_google=km.pending_pairs([t for t in trips if t['kind'] == 'empty']))
+                gaps=[t for t in all_t if t.get('verdict') == 'third'], lessons=[],
+                places=sorted([dict(name=n, stop=v.get('name'), code=v.get('code'), lat=v['lat'], lon=v['lon'], src='fixed' if n in fixed else 'learned') for n, v in places.items()], key=lambda x: x['name']))
 
 
 def upsert_sql(operator_id, payload):
@@ -160,19 +159,25 @@ def main():
     ap.add_argument('--src', required=True); ap.add_argument('--day', action='append', required=True)
     ap.add_argument('--gtfs', required=True, help='GTFS zip of that day (R48); one day per run when days differ')
     ap.add_argument('--settings', required=True, help='json: {operator_id, depots, forced_legs, forced_out_km}')
-    ap.add_argument('--google', help='google_routes.json of tools/google_route_check.py (local cache)')
     ap.add_argument('--ours', help="folder of our plaintext day files (day_<D>.json) for the lessons tab")
+    ap.add_argument('--op', default='derech-egged', help='operator slug: data/<op>/ holds the blind reconstruction to seal')
     ap.add_argument('--out', default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cache'))
     a = ap.parse_args()
     st = json.load(open(a.settings, encoding='utf-8'))
-    g = km.google_from_cache(json.load(open(a.google, encoding='utf-8'))) if a.google else {}
     pc = json.load(open(os.path.join(km.HERE, 'config.json'), encoding='utf-8'))['pva']
     cfg = dict(km.load_cfg(), depot_alias=pc.get('depot_alias', {}), gtfs_agency=pc.get('gtfs_agency'))
     road, save, _ = bd.osrm_router(os.path.join(bd.CACHE_DIR, 'osrm_cache.json'))
+    # OP-DATA-7: seal the blind reconstruction of every day (commit + push) BEFORE any operator file is opened
+    seal.seal_days(a.day, a.op)
+    opened_at = dt.datetime.now(dt.timezone.utc)
     src = Source(a.src)
     for d in a.day:
         p = build_day(src, dt.date.fromisoformat(d), st['depots'], st.get('forced_legs', []), st.get('forced_out_km', 5),
-                      a.gtfs, road, g, cfg)
+                      a.gtfs, road, cfg)
+        v = seal.verify(d, a.op, opened_at)  # the extra check after opening
+        p.update(blind=v['blind'], blind_why=v['why'], seal=v['seal'])
+        if not v['blind']:
+            print(d, 'NOT BLIND:', v['why'])
         of = os.path.join(a.ours, f'day_{d}.json') if a.ours else None
         if of and os.path.exists(of):
             p['lessons'] = lessons_mod.lessons(json.load(open(of, encoding='utf-8')), p)
@@ -180,7 +185,7 @@ def main():
         json.dump(p, open(base + '.json', 'w', encoding='utf-8'), ensure_ascii=False)
         open(base + '.sql', 'w', encoding='utf-8').write(upsert_sql(st['operator_id'], p))
         n = collections.Counter((t['status'], t['empty_kind']) for s in p['sidurim'] for t in s['trips'])
-        print(d, dict(n), 'unresolved', len(p['unresolved']), 'gaps', len(p['gaps']), 'pending google', len(p['pending_google']))
+        print(d, dict(n), 'unresolved', len(p['unresolved']), 'gaps', len(p['gaps']))
     save()
 
 

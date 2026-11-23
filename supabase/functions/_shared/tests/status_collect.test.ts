@@ -70,6 +70,6 @@ test("red keeps its red_since", async () => {
   assert.equal(by(await collect(deps(), prev, NOW)).blockers.red_since, "2026-11-18T00:00:00Z");
 });
 
-test("days.js is read from the address that answers (the deadhead subdomain gives 525)", () => {
-  assert.equal(DAYS_URL("derech-egged"), "https://yalla-sa.app/deadhead-dashboard/data/derech-egged/days.js");
+test("the day list is read from the public hash list (operator files are in private Storage)", () => {
+  assert.equal(DAYS_URL("derech-egged"), "https://yalla-sa.app/deadhead-dashboard/data/derech-egged/hashes.json");
 });

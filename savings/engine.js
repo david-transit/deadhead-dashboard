@@ -207,6 +207,7 @@
           if (trips.length) {
             const g = pend || { km: 0, min: 0, n: 0 };
             if (g.noKm) { err = `נסיעה ריקה בלי ק"מ לפני ${fmt(it.start)}`; break; }
+            if (g.carEst) { err = `נסיעה ריקה לפני ${fmt(it.start)} חושבה רק כהערכת רכב, לא אוטובוס`; break; }
             gaps.push(g);
           }
           trips.push({ i: trips.length, start: it.start, end: it.end, sched: F.sched(it), line: String(it.line || ""), lineRef: it.line_ref,
@@ -217,6 +218,7 @@
           pend = pend || { km: 0, min: 0, n: 0 };
           pend.km += +it.km || 0; pend.min += +(it.drive_min != null ? it.drive_min : estMin(+it.km || 0)); pend.n++;
           if (it.km == null) pend.noKm = true;
+          if (it.fb) pend.carEst = true;  // public car-OSRM fallback: not bus km, never in a recommendation (ADR-0009 #10)
         }
       }
       if (!err) for (let k = 1; k < trips.length; k++) if (trips[k].start < trips[k - 1].end) { err = `נסיעות חופפות (${fmt(trips[k - 1].start)}, ${fmt(trips[k].start)})`; break; }

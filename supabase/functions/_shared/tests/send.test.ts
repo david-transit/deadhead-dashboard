@@ -121,3 +121,15 @@ test("sendAlert with channel 'email' but no address or no mail config sends noth
   assert.equal(r.ok, false);
   assert.equal(f.calls.length, 0);
 });
+
+test("sendAlert with channel 'push' (PRD-email M20, ה־13): push only, nothing sent to WhatsApp or mail", async () => {
+  const { db } = fakeDb({ settings: { ...(await fakeDb().db.settings()), alert_channel: "push" } as any });
+  let wa = 0; const texts: string[] = [];
+  const r = await sendAlert({ db, cfg, fetchFn: (async () => { wa++; return new Response("{}"); }) as any, now,
+    push: async (t) => { texts.push(t); return { ok: true }; } }, "פנייה חדשה");
+  assert.deepEqual(r, { ok: true });
+  assert.deepEqual(texts, ["פנייה חדשה"]);
+  assert.equal(wa, 0);
+  const r2 = await sendAlert({ db, cfg, now }, "x");
+  assert.deepEqual(r2, { ok: false, error: "push_not_configured" });
+});

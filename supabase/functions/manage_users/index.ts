@@ -401,11 +401,9 @@ Deno.serve(async (req) => {
         const withEmail = new Set<string>(isPlatform ? (((await admin.rpc("contact_email_users")).data || []) as unknown[])
           .map((x) => typeof x === "string" ? x : String((x as Record<string, unknown>).contact_email_users)) : []);
         const mfa = new Set<string>((((await admin.rpc("mfa_users")).data || []) as unknown[]).map((x) => typeof x === "string" ? x : String((x as Record<string, unknown>).mfa_users)));
-        for (let page = 1; page < 20; page++) {
-          const { data } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-          for (const u of data?.users || []) seen.set(u.id, u.last_sign_in_at || "");
-          if (!data || data.users.length < 1000) break;
-        }
+        // last activity, not last password sign-in: the session's token refresh counts (migration 20261122090000)
+        const { data: act } = await admin.rpc("last_activity").throwOnError();
+        for (const r of (act || []) as { user_id: string; last_active: string | null }[]) seen.set(r.user_id, r.last_active || "");
         const users = [];
         for (const p of profs || []) {
           const all = (ms || []).filter((m) => m.user_id === p.user_id);

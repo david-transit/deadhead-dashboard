@@ -33,7 +33,15 @@ const daysBetween = (a: string, b: string) => Math.round((Date.parse(b + "T00:00
 // "2026-11-17..." -> "17.11"
 export const dm = (iso: string) => { const [, m, d] = iso.slice(0, 10).split("-"); return `${Number(d)}.${Number(m)}` };
 
+// the last built day, from data/<slug>/hashes.json ({"YYYY-MM-DD": sha256}) or the older days.js
 export function lastDay(daysJs: string): string | null {
+  try {
+    const h = JSON.parse(daysJs || "");
+    if (h && typeof h === "object" && !Array.isArray(h)) {
+      const ds = Object.keys(h).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+      return ds.length ? ds[ds.length - 1] : null;
+    }
+  } catch { /* not JSON: days.js */ }
   const m = /"days"\s*:\s*\[([^\]]*)\]/.exec(daysJs || "");
   if (!m) return null;
   const days = [...m[1].matchAll(/"(\d{4}-\d{2}-\d{2})"/g)].map(x => x[1]).sort();

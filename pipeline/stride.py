@@ -115,6 +115,26 @@ def fetch_locations(rides, cache_file):
     return cache
 
 
+def fetch_ride_points(ride_ids, cache_file):
+    """Every SIRI vehicle location of the given rides, 100 rides per call, cached per day:
+    {ride_id: [[recorded_at_iso, lat, lon, distance_from_journey_start_m, bearing, velocity], ...] sorted by time}.
+    For the rides Stride left without first/last points (21.11.2026: 26 night trips after midnight)."""
+    cache = json.load(open(cache_file, encoding="utf-8")) if os.path.exists(cache_file) else {}
+    need = [i for i in ride_ids if i not in cache]
+    for k in range(0, len(need), 100):
+        part = need[k:k + 100]
+        for i in part: cache[i] = []
+        for x in get("/siri_vehicle_locations/list", {"limit": 15000, "siri_rides__ids": ",".join(part)}):
+            cache.setdefault(str(x["siri_ride__id"]), []).append(
+                [x["recorded_at_time"], x["lat"], x["lon"], x["distance_from_journey_start"], x.get("bearing"), x.get("velocity")])
+    for v in cache.values(): v.sort(key=lambda p: p[0])
+    print("rides without first/last points:", len(ride_ids), "fetched:", len(need), file=sys.stderr)
+    tmp = cache_file + ".tmp"
+    json.dump(cache, open(tmp, "w", encoding="utf-8"))
+    os.replace(tmp, cache_file)
+    return cache
+
+
 def fetch_traces(rides, cache_file):
     """Every SIRI vehicle location of every ride (about one a minute), 100 rides per call, cached per day:
     {ride_id: [[recorded_at_iso, lat, lon, distance_from_journey_start_m], ...] sorted by time}. Used to tell which road

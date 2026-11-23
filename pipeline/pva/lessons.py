@@ -3,7 +3,7 @@ An empty leg of ours and of the operator are the same leg when they belong to th
 next service trip (our empty ends at the next trip's start; the operator's next service trip starts within MATCH_MIN).
   other_destination: the same leg, but we send the bus elsewhere (ends more than FAR_KM apart)
   missing_in_ours:   an operator empty leg with no leg of ours (mostly dispatcher / depot legs)
-  km_gap:            operator vs our km on the operator's legs, by Google verdict"""
+  km_gap:            operator vs our km on the operator's legs (gaps for a manual check)"""
 import collections, math
 
 MATCH_MIN = 10
@@ -65,5 +65,5 @@ def lessons(ours, pva):
              why='רכב ריק לא משדר, ולכן נסיעות של סדרן, יציאות מהמוסך וחזרות אליו לא נראות ב־Open Bus'),
         dict(type='km_gap', count=len(gaps), by_verdict=dict(collections.Counter(t['verdict'] for t in gaps)),
              examples=[dict(desc=d, verdict=v, n=n) for (d, v), n in pairs.most_common(5)],
-             why='הפער בין הק״מ של המפעיל לניתוב שלנו, וההכרעה של גוגל'),
+             why='הפער בין הק״מ של המפעיל לניתוב שלנו (לבדיקה פרטנית)'),
     ]

@@ -25,6 +25,8 @@ test("Israel date and hour", () => {
 test("lastDay from days.js", () => {
   assert.equal(lastDay('(window.OPDAYS=window.OPDAYS||{})["derech-egged"]={"days": ["2026-11-16", "2026-11-17"], "ver": {}}'), "2026-11-17");
   assert.equal(lastDay("garbage"), null);
+  assert.equal(lastDay('{"2026-11-16": "ab", "2026-11-21": "cd"}'), "2026-11-21");   // hashes.json (files in Storage)
+  assert.equal(lastDay("{}"), null);
   assert.equal(lastDay('(window.OPDAYS=window.OPDAYS||{})["x"]={"days": []}'), null);
 });
 test("nightlyLevel: <=2 days ok, 3 warn, >=4 bad", () => {

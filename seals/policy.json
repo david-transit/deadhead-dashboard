@@ -1,0 +1,8 @@
+{
+  "_note": "Blind-seal procedure (OP-DATA-7, ADR-0010 interim procedure, David 22.11.2026). Before an operator file of a day is opened, the SHA-256 of that day's blind reconstruction is committed to the seals branch (<operator>/<day>.json; main is protected) and pushed: the GitHub commit is the external timestamp. Only hashes, no data.",
+  "procedure_from": "2026-11-22",
+  "not_blind_through": "2026-11-21",
+  "_not_blind_through": "Days up to here count as read before 22.11 (operator files from 18.11; pva.build opens the whole execution report): always 'not blind', never in gate A metrics.",
+  "locked": ["2026-11-01", "2026-11-16"],
+  "_locked": "The engine's locked test period: operator files are not opened for these days until its check ends."
+}

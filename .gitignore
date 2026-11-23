@@ -1,5 +1,10 @@
 # plaintext data and secrets are never committed
 data/**/*.json
+# operator data (encrypted) lives in private Supabase Storage, not in this public repo (David 22.11)
+data/**/*.js
+!data/*/hashes.json
+# dates of days not computed for lack of that day's GTFS (R48), dates only
+!data/*/nogtfs.json
 config/
 pipeline/cache/
 *.tmp

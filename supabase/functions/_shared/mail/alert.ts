@@ -1,11 +1,13 @@
 // Alert to David on the channel chosen in support_settings (WhatsApp PRD R3, PRD-email M9, M10), from the mail functions.
-// whatsapp -> wa_send template alert_v1 (server call, x-internal-key); email -> sendMail; off -> nothing.
+// push -> Web Push to the agents' devices (PRD-email M20: free, no quota); whatsapp -> wa_send template alert_v1
+// (server call, x-internal-key); email -> sendMail; off -> nothing.
 // Text carries no contact name and no content (M9, WhatsApp PRD R3א).
 // makeAlerter is pure (tested in Node); alerter wires it to Supabase, Resend and wa_send (Edge Functions only).
 // deno-lint-ignore-file no-explicit-any
 import { sendMail } from "./send.ts";
 import { supabaseMailDb } from "./db.ts";
 import { brandFor } from "./http.ts";
+import { pushAlert } from "../push_db.ts";
 
 export const ALERT_SUBJECT = "יאללה־סע: התראה";
 export const INBOX_LINK = "לכלי הפניות: https://yalla-sa.app/support/";
@@ -15,12 +17,14 @@ export interface AlerterDeps {
   settings(): Promise<AlertSettings | null>;
   mail(to: string, subject: string, body: string, warn: boolean): Promise<unknown>;
   wa(to: string, text: string): Promise<unknown>;
+  push?(text: string): Promise<unknown>;
 }
 
 export function makeAlerter(d: AlerterDeps, warn = true) {
   return async (text: string): Promise<unknown> => {
     const s = await d.settings();
     if (!s || s.alert_channel === "off") return { ok: false, error: "alert_channel_off" };
+    if (s.alert_channel === "push") return d.push ? d.push(text) : { ok: false, error: "push_not_configured" };
     if (s.alert_channel === "email") {
       if (!s.alert_email) return { ok: false, error: "alert_channel_email" };
       return d.mail(s.alert_email, ALERT_SUBJECT, `${text}\n\n${INBOX_LINK}`, warn);
@@ -51,5 +55,6 @@ export function alerter(admin: any, supabaseUrl: string, warn = true): (text: st
       });
       return r.json().catch(() => ({ ok: false, error: `wa_send_${r.status}` }));
     },
+    push: pushAlert(admin),
   }, warn);
 }
