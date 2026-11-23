@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-23.2";
+const APP_VER="2026-11-23.3";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -159,7 +159,7 @@ const linksFor=(a,b)=>ROUTE.relevantLinks(a,b,VIAOK);
 // computed km stays within 0.3 km and 10% of the km at marking time; otherwise the warning comes back as
 // "השתנה מאז שאושר". Marking and cancelling go through the drafts (DRAFT.rok: key -> row, null = cancel the saved row). ----
 let ROK=[],ROKM=null,ROKV=-1;
-async function loadRok(){try{ROK=await getRows("route_ok",`select=*&${opq()}&order=created_at`)||[]}catch(e){console.warn("route ok",e);ROK=[]}ROKM=null}
+async function loadRok(){try{ROK=await getRows("route_ok",`select=*&${opq()}&order=created_at`)||[]}catch(e){console.warn("route ok",e);ROK=[]}ROKM=null;await loadRkm()}
 const rokKey=(A,B)=>pk(A)+">"+pk(B), rokRowKey=r=>rokKey([r.a_lat,r.a_lon],[r.b_lat,r.b_lon]);
 function rokM(){if(ROKM&&ROKV===DV) return ROKM;const m=new Map();
   for(const r of ROK) m.set(rokRowKey(r),{...r,km:+r.km});
@@ -174,6 +174,51 @@ function rokOf(i){if(!i.a||!i.b) return null;const [A,B]=subPair(i.a,i.b),m=rokM
   for(const r of m.values()) if(hav(A,[+r.a_lat,+r.a_lon])<=ROK_NEAR_KM&&hav(B,[+r.b_lat,+r.b_lon])<=ROK_NEAR_KM) return r;
   return null}
 const rokChanged=(r,km)=>{const d=Math.abs(km-r.km);return d>0.3||d>0.1*r.km};
+// ---- "עדכון ק״מ ידני" (table route_km_manual, R51 live check, David 23.11.2026): after "בדיקה עכשיו" a user with the
+// capability types the km of a pair (never pre-filled from Google). While our computed km stays as it was when typed
+// (rokChanged), the leg uses the typed km ("הוזן ידנית"; ours kept as km_calc) and has no route warning; when ours changes
+// the warning comes back. Drafts like route_ok (DRAFT.rkm: key -> row, null = cancel the saved row). ----
+let RKM=[],RKMM=null,RKMV=-1,RKMN=0,RKMBY={};
+async function loadRkm(){try{RKM=await getRows("route_km_manual",`select=*&${opq()}&order=created_at`)||[]}catch(e){console.warn("manual km",e);RKM=[]}
+  try{RKMBY={};(await rpc("edit_authors",{p_operator:OP.id})||[]).forEach(a=>RKMBY[a.user_id]=a.name)}catch(e){console.warn("authors",e)}
+  RKMM=null;RKMN++}
+function rkmM(){if(RKMM&&RKMV===DV) return RKMM;const m=new Map();
+  for(const r of RKM) m.set(rokRowKey(r),{...r,km:+r.km,our_km:+r.our_km});
+  for(const [k,x] of Object.entries(DRAFT.rkm||{})) if(x==null) m.delete(k); else m.set(k,{...x,draft:true});
+  RKMM=m;RKMV=DV;return m}
+function rkmOf(i){if(!i.a||!i.b) return null;const [A,B]=subPair(i.a,i.b);return rkmM().get(rokKey(A,B))||null}
+const rkmWhen=r=>r.draft?"בטיוטה":`${esc(RKMBY[r.created_by]||"")}${RKMBY[r.created_by]?", ":""}${esc(String(r.created_at||"").slice(0,10).split("-").reverse().join("."))}`;
+// the typed km on the legs of a day (after the anchors and the block edits)
+function manualDay(J){if(!rkmM().size) return J;let ch=false;
+  const vs=J.vehicles.map(v=>{let vc=false;
+    const items=v.items.map(i=>{if(i.kind!=="empty"||i.overlap||i.wait||i.km==null) return i;const r=rkmOf(i);if(!r) return i;vc=true;
+      return rokChanged({km:r.our_km},i.km)?{...i,kmmanold:r}:{...i,km:r.km,km_calc:i.km,kmman:r}});
+    if(!vc) return v;ch=true;
+    return {...v,items,empty_day_km:Math.round(items.filter(i=>i.kind==="empty"&&!i.overlap).reduce((s,i)=>s+(+i.km||0),0)*10)/10}});
+  return ch?{...J,vehicles:vs}:J}
+function rkmSet(k,val){if(!canEdit()) return;const saved=RKM.some(r=>rokRowKey(r)===k);
+  if(val===undefined) delete DRAFT.rkm[k]; else if(val===null&&!saved) delete DRAFT.rkm[k]; else DRAFT.rkm[k]=val;
+  touched();render();drawRouteList()}
+// ---- "בדיקה עכשיו" (R51 live check, David 23.11.2026): one Google Routes call through the Edge Function route_check (key
+// on the server, quota google_take). Google's km lives only in GCHK, in memory, while the warnings list is open: it is
+// shown in that list only (no map there), with the credit "Google Maps", and dropped when the list closes. Never saved,
+// logged or cached; never used to fill or suggest the manual km. ----
+let GCHK=null; // {k: rpKey of the group, busy} | {k, km} | {k, err}
+const GCHKERR={quota:"המכסה של בדיקות Google לתקופה הזו נוצלה. אפשר לנסות שוב מחר",not_allowed:"אין לך הרשאה לבדיקה הזו",
+  not_configured:"הבדיקה עוד לא הופעלה בשרת",bad_input:"אי אפשר לבדוק את המקטע הזה",google_error:"Google לא ענה. אפשר לנסות שוב"};
+async function routeCheck(g){
+  return http(SB+"/functions/v1/route_check",{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json",Authorization:"Bearer "+await token()},
+    body:JSON.stringify({operator_id:OP.id,a:[+(+g.A[0]).toFixed(5),+(+g.A[1]).toFixed(5)],b:[+(+g.B[0]).toFixed(5),+(+g.B[1]).toFixed(5)]})},20000)}
+const gchkErr=e=>{const m=String(e&&e.message||"");for(const k in GCHKERR) if(m.includes(k)) return GCHKERR[k];return "הבדיקה נכשלה: "+errText(e)};
+// the result block under the warning: Google's km beside ours, then the two actions (capability only)
+function gchkHtml(g,n){const x=GCHK&&GCHK.k===rpKey(g)?GCHK:null;if(!x) return "";
+  if(x.busy) return `<div class="rwchk" role="status">בודק…</div>`;
+  if(x.err) return `<div class="rwchk" role="status" tabindex="-1"><span class="msg err">${esc(x.err)}</span></div>`;
+  const gm=`<span lang="en" dir="ltr">Google Maps</span>`;
+  return `<div class="rwchk" role="status" tabindex="-1">${x.km==null?`<span>${gm}: לא נמצא מסלול</span>`:`<span>${gm}: <b>${kmTxt(x.km)}</b> ק״מ</span><span>שלנו: <b>${kmTxt(g.km)}</b> ק״מ</span>`}
+    <span class="sub">לא נשמר. ההחלטה שלך: לאשר את המסלול שלנו או להזין ק״מ</span></div>
+    <div class="rwact"><button type="button" class="btn small primary" data-rgchkok="${n}">אישור מסלול</button><button type="button" class="btn small" data-rgman="${n}" aria-expanded="false">עדכון ק״מ ידני</button></div>
+    <div class="rwnote rwman" hidden><label>ק״מ בפועל <input type="number" inputmode="decimal" min="0.1" max="500" step="0.1" autocomplete="off" data-rgmanin="${n}"></label><button type="button" class="btn small primary" data-rgmanok="${n}">הוספה לטיוטה</button><span class="msg err" data-rgmanerr="${n}" role="alert"></span></div>`}
 // ---- "אומת מול נסיעות בפועל" (R51, David 22.11.2026): leg gv = [median km, passages] that buses in service drove that day
 // between the same two points (pipeline/gps_verify.py). Close to the leg's km now (max(15%, 0.5 km): pipeline/config.json
 // gps_verify tol_pct / tol_km, the same rule) = verified: not a problem, listed apart. Otherwise, or no passage: stays for a
@@ -580,8 +625,8 @@ function drawRouteBar(){RP=routeProblems();const b=$("#rwBar");if(!b) return;con
   const dl=$("#dlgRw");if(dl&&dl.open&&!(dl.contains(document.activeElement)&&/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName))) drawRouteList()}
 document.addEventListener("click",e=>{if(e.target.closest("[data-rwopen]")) openRouteList()});
 function rwDlg(){let d=$("#dlgRw");if(d) return d;d=document.createElement("dialog");d.id="dlgRw";d.className="rwdlg";d.setAttribute("aria-labelledby","rwT");
-  d.innerHTML=`<div class="maphd"><h3 id="rwT">בעיות מסלול</h3><button type="button" class="btn small" data-rwclose>✕ סגירה</button></div><p class="hint">נסיעות ריקות שלא נכנסות בזמן, עם עיקוף גדול (כביש פי 2.5 מקו אווירי ויותר מ־4 ק״מ) או מסלול חשוד. כל שורה היא זוג מוצא ← יעד. "שלח לבדיקה", "הערה" ו"מסלול תקין" נשמרים כטיוטה ונשלחים ב"שמירה". "מסלול תקין" מסתיר את העיקוף / המסלול החשוד של הזוג בכל הימים (לא את "לא נכנס בזמן").</p><div id="rwList"></div>`;
-  document.body.appendChild(d);d.addEventListener("click",rwClick);return d}
+  d.innerHTML=`<div class="maphd"><h3 id="rwT">בעיות מסלול</h3><button type="button" class="btn small" data-rwclose>✕ סגירה</button></div><p class="hint">נסיעות ריקות שלא נכנסות בזמן, עם עיקוף גדול (כביש פי 2.5 מקו אווירי ויותר מ־4 ק״מ) או מסלול חשוד. כל שורה היא זוג מוצא ← יעד. "שלח לבדיקה", "הערה" ו"מסלול תקין" נשמרים כטיוטה ונשלחים ב"שמירה". "מסלול תקין" מסתיר את העיקוף / המסלול החשוד של הזוג בכל הימים (לא את "לא נכנס בזמן"). ליד אזהרה "לבדיקה ידנית" יש "בדיקה עכשיו": הק״מ של Google Maps מוצג כאן בלבד ולא נשמר; אחריו אפשר לאשר את המסלול או להזין ק״מ ידנית.</p><div id="rwList"></div>`;
+  document.body.appendChild(d);d.addEventListener("click",rwClick);d.addEventListener("close",()=>{GCHK=null});return d}
 // back from the block opened by "הצג סידור": the same warning, scrolled into view, focus on the button it was opened from
 // (if the warning is gone, e.g. the leg was fixed: the warning now in its place, or the list's top)
 function backToWarning(gk,idx,veh,start){openRouteList();const L=$("#rwList");
@@ -606,14 +651,16 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-rpnav]");i
 function drawRouteList(){const box=$("#rwList");if(!box) return;
   box.innerHTML=RP.length?RP.map((g,n)=>{const k=rpKey(g),dr=DRAFT.reports[k],frees=g.legs.map(x=>x.end-x.start);
     return `<section class="rwg" data-rg="${n}" data-rgk="${esc(g.k)}" tabindex="-1" aria-label="${esc(g.frm)} ← ${esc(g.to)}"><h4>${esc(g.frm)} ← ${esc(g.to)}</h4>
-      <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span>${gvCell(g.legs[0].i,g.kinds)}<span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
+      <div class="mapkv"><span><b>${kmTxt(g.km)}</b> ק״מ בכביש</span><span><b>${kmTxt(g.air)}</b> אווירי</span>${gvCell(g.legs[0].i,g.kinds)}${canEdit()&&manual(g.legs[0].i,g.kinds)?`<button type="button" class="btn small" data-rgchk="${n}" ${GCHK&&GCHK.k===k&&GCHK.busy?"disabled":""} aria-label="בדיקה עכשיו מול Google Maps: ${esc(g.frm)} ← ${esc(g.to)}">בדיקה עכשיו</button>`:""}<span><b>${g.min==null?"–":nf(Math.round(g.min))}</b> דק׳ נסיעה</span><span>זמן פנוי <b>${nf(Math.min(...frees))}${Math.max(...frees)!==Math.min(...frees)?"–"+nf(Math.max(...frees)):""}</b> דק׳</span>${[...g.kinds].map(t=>`<span class="badge errb rp">${RPTXT[t]}</span>`).join("")}</div>
+      ${gchkHtml(g,n)}
+      ${g.legs[0].i.kmmanold?`<div class="sub edtm">ק״מ הוזן ידנית: ${kmTxt(g.legs[0].i.kmmanold.km)} (${rkmWhen(g.legs[0].i.kmmanold)}), כשאצלנו היו ${kmTxt(g.legs[0].i.kmmanold.our_km)} ק״מ; עכשיו ${kmTxt(g.km)}. אפשר לבדוק שוב</div>`:""}
       <div class="rwveh" role="group" aria-label="הצג סידור">${g.legs.map(x=>`<button type="button" class="btn small" data-rgv="${esc(x.veh)}" data-rgs="${x.start}" aria-label="הצג סידור של רכב ${esc(x.veh)}, הנסיעה הריקה של ${fmt(x.start)}">הצג סידור · ${esc(x.veh)} · ${fmt(x.start)}</button>`).join("")}</div>
       <div class="rwact"><button type="button" class="btn small" data-rgmap="${n}">הצג על מפה</button>${canEdit()?`<button type="button" class="btn small" data-rgvia="${n}">הצע נקודת מעבר</button><button type="button" class="btn small" data-rgnote="${n}">הערה</button><button type="button" class="btn small primary" data-rgsend="${n}" ${dr||RSENT[k]?"disabled":""}>${RSENT[k]?"נשלח לבדיקה":dr?"בטיוטה":"שלח לבדיקה"}</button>${g.kinds.has("detour")||g.kinds.has("route")||g.kinds.has("okchg")?`<button type="button" class="btn small" data-rgok="${n}">מסלול תקין</button>`:""}`:""}</div>
       ${g.ok&&g.kinds.has("okchg")?`<div class="sub edtm">סומן כמסלול תקין ב־${kmTxt(g.ok.km)} ק״מ; עכשיו ${kmTxt(g.km)} ק״מ. אפשר לסמן שוב</div>`:""}
       ${dr?`<div class="sub edtm">טיוטה: ${esc(dr.text||"לבדיקה")}${dr.proposed_via?" · הוצעה נקודת מעבר":""} · תישלח ב"שמירה"</div>`:""}
       <div class="rwnote" hidden><textarea rows="2" maxlength="2000" aria-label="הערה על המסלול" placeholder="בלי שמות של אנשים ובלי כתובות פרטיות"></textarea><button type="button" class="btn small" data-rgnoteok="${n}">הוספה לטיוטה</button></div>
       <div class="rwnote rwok" hidden><textarea rows="2" maxlength="300" aria-label="הערה למסלול התקין (לא חובה)" placeholder="הערה (לא חובה)"></textarea><button type="button" class="btn small primary" data-rgokok="${n}">סימון כתקין (טיוטה)</button></div></section>`}).join(""):`<p class="muted">אין בעיות מסלול ביום הזה.</p>`;
-  box.insertAdjacentHTML("beforeend",gvFoot()+rokFoot())}
+  box.insertAdjacentHTML("beforeend",gvFoot()+rokFoot()+rkmFoot())}
 let GVOPEN=false;
 function gvFoot(){const L=routeVerified();if(!L.length) return "";
   return `<div class="rokfoot"><span>${nf(L.reduce((s,x)=>s+x.legs.length,0))} נסיעות אומתו מול נסיעות בפועל (לא נספרות כבעיה)</span> · <button type="button" class="linkbtn" data-gvshow aria-expanded="${GVOPEN}">${GVOPEN?"הסתר":"הצג"}</button></div>
@@ -624,6 +671,12 @@ function rokFoot(){const m=rokM(),gone=ROK.filter(r=>DRAFT.rok[rokRowKey(r)]===n
   const row=(k,r,st)=>`<li><span>${esc(r.origin||"?")} ← ${esc(r.destination||"?")} · ${kmTxt(+r.km)} ק״מ${r.note?` · ${esc(r.note)}`:""}${st?` <span class="sub edtm">${st}</span>`:""}</span>${canEdit()?`<button type="button" class="btn small" data-rokdel="${esc(k)}">${st==="יבוטל בשמירה"?"החזרה":"בטל"}</button>`:""}</li>`;
   return `<div class="rokfoot"><span>${nf(m.size)} צמדים סומנו כתקינים</span> · <button type="button" class="linkbtn" data-rokshow aria-expanded="${ROKOPEN}">${ROKOPEN?"הסתר":"הצג"}</button></div>
     <ul class="roklist" ${ROKOPEN?"":"hidden"}>${[...m].map(([k,r])=>row(k,r,r.draft?"בטיוטה":"")).join("")}${gone.map(r=>row(rokRowKey(r),r,"יבוטל בשמירה")).join("")}</ul>`}
+// the pairs with a typed km (all days) + cancel, like rokFoot
+let RKMOPEN=false;
+function rkmFoot(){const m=rkmM(),gone=RKM.filter(r=>DRAFT.rkm[rokRowKey(r)]===null);if(!m.size&&!gone.length) return "";
+  const row=(k,r,st)=>`<li><span>${esc(r.origin||"?")} ← ${esc(r.destination||"?")} · הוזן ידנית ${kmTxt(+r.km)} ק״מ (שלנו ${kmTxt(+r.our_km)}) · ${st||rkmWhen(r)}</span>${canEdit()?`<button type="button" class="btn small" data-rkmdel="${esc(k)}">${st==="יבוטל בשמירה"?"החזרה":"בטל"}</button>`:""}</li>`;
+  return `<div class="rokfoot"><span>${nf(m.size)} צמדים עם ק״מ שהוזן ידנית</span> · <button type="button" class="linkbtn" data-rkmshow aria-expanded="${RKMOPEN}">${RKMOPEN?"הסתר":"הצג"}</button></div>
+    <ul class="roklist" ${RKMOPEN?"":"hidden"}>${[...m].map(([k,r])=>row(k,r,r.draft?"בטיוטה":"")).join("")}${gone.map(r=>row(rokRowKey(r),r,"יבוטל בשמירה")).join("")}</ul>`}
 function rokSet(k,val){if(!canEdit()) return;const saved=ROK.some(r=>rokRowKey(r)===k);
   if(val===undefined) delete DRAFT.rok[k]; else if(val===null&&!saved) delete DRAFT.rok[k]; else DRAFT.rok[k]=val;
   touched();render();drawRouteList()}
@@ -634,12 +687,24 @@ async function rwClick(e){const t=e.target,d=$("#dlgRw");
   if(t.closest("[data-rwclose]")||t===d){d.close();return}
   if(t.dataset.gvshow!=null){GVOPEN=!GVOPEN;drawRouteList();$("#rwList [data-gvshow]")?.focus();return}
   if(t.dataset.rokshow!=null){ROKOPEN=!ROKOPEN;drawRouteList();$("#rwList [data-rokshow]")?.focus();return}
+  if(t.dataset.rkmshow!=null){RKMOPEN=!RKMOPEN;drawRouteList();$("#rwList [data-rkmshow]")?.focus();return}
+  if(t.dataset.rkmdel!=null){const k=t.dataset.rkmdel;rkmSet(k,DRAFT.rkm[k]===null||(DRAFT.rkm[k]&&!RKM.some(r=>rokRowKey(r)===k))?undefined:null);$("#rwList [data-rkmshow]")?.focus();return}
   if(t.dataset.rokdel!=null){const k=t.dataset.rokdel;rokSet(k,DRAFT.rok[k]===null||(DRAFT.rok[k]&&!ROK.some(r=>rokRowKey(r)===k))?undefined:null);$("#rwList [data-rokshow]")?.focus();return}
-  const n=t.dataset.rgmap??t.dataset.rgvia??t.dataset.rgnote??t.dataset.rgsend??t.dataset.rgnoteok??t.dataset.rgok??t.dataset.rgokok;const g=n!=null?RP[+n]:null;
+  const n=t.dataset.rgmap??t.dataset.rgvia??t.dataset.rgnote??t.dataset.rgsend??t.dataset.rgnoteok??t.dataset.rgok??t.dataset.rgokok??t.dataset.rgchk??t.dataset.rgchkok??t.dataset.rgman??t.dataset.rgmanok;const g=n!=null?RP[+n]:null;
   if(t.dataset.rgv){d.close();if(!(await selectVehicle(t.dataset.rgv))){openRouteList();return}
     const gk=t.closest(".rwg")?.dataset.rgk,idx=+(t.closest(".rwg")?.dataset.rg||0),rv=t.dataset.rgv,rs=t.dataset.rgs;
     HLE={veh:rv,day:D.day,start:+rs};openVehDlg(null,{back:()=>backToWarning(gk,idx,rv,rs)});return}
   if(!g) return;
+  const okRow=()=>({a_lat:+(+g.A[0]).toFixed(5),a_lon:+(+g.A[1]).toFixed(5),b_lat:+(+g.B[0]).toFixed(5),b_lon:+(+g.B[1]).toFixed(5),origin:g.frm,destination:g.to});
+  if(t.dataset.rgchk!=null){if(!canEdit()) return;const k=rpKey(g);GCHK={k,busy:true};drawRouteList();
+    try{const r=await routeCheck(g);GCHK={k,km:r&&r.km!=null?+r.km:null}}catch(err){GCHK={k,err:gchkErr(err)}}
+    if(!d.open||!GCHK||GCHK.k!==k){GCHK=null;return} // closed meanwhile: nothing is kept
+    drawRouteList();$("#rwList .rwchk")?.focus();return}
+  if(t.dataset.rgchkok!=null){GCHK=null;rokSet(rokKey(g.A,g.B),{...okRow(),km:+(+g.km).toFixed(2),note:null});d.querySelector("[data-rwclose]").focus();return}
+  if(t.dataset.rgman!=null){const w=t.closest(".rwg").querySelector(".rwman");w.hidden=!w.hidden;t.setAttribute("aria-expanded",!w.hidden);if(!w.hidden) w.querySelector("input").focus();return}
+  if(t.dataset.rgmanok!=null){const sec=t.closest(".rwg"),inp=sec.querySelector("[data-rgmanin]"),er=sec.querySelector("[data-rgmanerr]"),v=+String(inp.value).replace(",",".");
+    if(!(v>0&&v<=500)){er.textContent="צריך מספר ק״מ בין 0.1 ל־500";inp.setAttribute("aria-invalid","true");inp.focus();return}
+    GCHK=null;rkmSet(rokKey(g.A,g.B),{...okRow(),km:+v.toFixed(2),our_km:+(+g.km).toFixed(2)});d.querySelector("[data-rwclose]").focus();return}
   if(t.dataset.rgmap!=null){d.close();rpShow(rpFlat().findIndex(z=>z.g===g))}
   else if(t.dataset.rgnote!=null){const w=t.closest(".rwg").querySelector(".rwnote");w.hidden=!w.hidden;if(!w.hidden) w.querySelector("textarea").focus()}
   else if(t.dataset.rgnoteok!=null){const tx=t.closest(".rwnote").querySelector("textarea").value.trim();if(tx) rpDraft(g,{text:tx})}
@@ -661,6 +726,7 @@ async function rwClick(e){const t=e.target,d=$("#dlgRw");
 // what the route check did on a leg (assets/route.js) / an anchor point used
 function routeNote(i){const r=i.rt,o=[];
   if(i.anch===true) o.push(`לפי נקודת עיגון לתחנה${i.km_file!=null&&Math.abs(i.km_file-i.km)>0.1?` (בנתוני היום: ${nf(i.km_file)} ק״מ)`:""}`);
+  if(i.kmman) o.push(`ק״מ הוזן ידנית: ${nf(i.km)} (לפי הכביש שלנו ${nf(i.km_calc)}) · ${rkmWhen(i.kmman)}`);
   if(i.wait) o.push("מחשב מסלול…");
   if(r&&r.via&&r.via.id) o.push(`דרך נקודת מעבר מאושרת: ${esc(r.via.name)} (בלי המעבר: ${nf(r.via.km0)} ק״מ)`);
   if(r&&r.fix) o.push(`מסלול תוקן אוטומטית: OSRM נצמד לכביש הלא נכון ונתן ${nf(r.km0)} ק״מ`);
@@ -697,7 +763,9 @@ function legProblems(i,raw){if(i.kind!=="empty"||i.overlap||i.km==null||i.wait) 
   if(i.tight) p.push("time");
   const ax=i.a&&i.b?hav(i.a,i.b):null; if(ax!=null&&i.km>4&&i.km>2.5*Math.max(ax,0.01)) p.push("detour");
   if(ROUTE.unresolved(i.rt)) p.push("route");
-  if(p.some(t=>t!=="time")){const ok=rokOf(i);if(ok){if(rokChanged(ok,i.km)) p.push("okchg"); else p=p.filter(t=>t==="time")}}
+  if(i.kmman) p=p.filter(t=>t==="time"); // km typed by a user for this pair, ours unchanged since
+  if(i.kmmanold&&p.some(t=>t!=="time")) p.push("okchg"); // typed when ours was different: the warning is back
+  if(p.some(t=>t!=="time")){const ok=rokOf(i);if(ok){if(rokChanged(ok,i.km_calc??i.km)) p.includes("okchg")||p.push("okchg"); else p=p.filter(t=>t==="time")}}
   if(!raw&&p.some(t=>t!=="time")&&gvOk(i)) p=p.filter(t=>t==="time");
   return p.length?p:null}
 // the legs whose road warning the GPS of buses in service confirmed, by pair: shown under the list, not counted
@@ -777,7 +845,7 @@ function chooseNight(N,veh,mode){
   setDraft("ovn",N+"|"+veh,{day:N,veh,mode:"depot",detail:{depot_in:li&&idOf(li.depot),depot_out:lo&&idOf(lo.depot)},note:null});render();ensureRoad()}
 // ---- drafts: every edit (settings, reinforcement, overnight, branch, automatic reinforcement) changes the view at once
 // but nothing is written until "שמירה". Drafts stay when the day changes. value null = remove the saved value. ----
-const DRAFT={settings:{},veh:{},ovn:{},rein:{},autor:{},blk:{},rules:{},notes:{},reports:{},rok:{}}; // rules: {set: savings rule set} (savings panel)
+const DRAFT={settings:{},veh:{},ovn:{},rein:{},autor:{},blk:{},rules:{},notes:{},reports:{},rok:{},rkm:{}}; // rules: {set: savings rule set} (savings panel)
 let DV=0,EFF=null,EFFV=-1;
 const same=(a,b)=>JSON.stringify(a??null)===JSON.stringify(b??null);
 const baseOf=t=>t==="ovn"?OVN:t==="rein"?REIN:t==="autor"?AUTOR:t==="blk"?BLK:t==="notes"?NOTES:null;
@@ -828,6 +896,12 @@ async function saveAll(){
       const ins=rk.filter(([,x])=>x).map(([,x])=>({operator_id:OP.id,a_lat:x.a_lat,a_lon:x.a_lon,b_lat:x.b_lat,b_lon:x.b_lon,km:x.km,origin:x.origin,destination:x.destination,note:x.note}));
       if(ins.length) await sb("/rest/v1/route_ok",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(ins)});
       DRAFT.rok={};await loadRok()}
+    const mk=Object.entries(DRAFT.rkm);
+    if(mk.length){const sv=new Map(RKM.map(r=>[rokRowKey(r),r])),del=mk.map(([k])=>sv.get(k)).filter(Boolean).map(r=>r.id);
+      if(del.length) await delRows("route_km_manual",`${opq()}&id=in.(${del.join(",")})`);
+      const ins=mk.filter(([,x])=>x).map(([,x])=>({operator_id:OP.id,a_lat:x.a_lat,a_lon:x.a_lon,b_lat:x.b_lat,b_lon:x.b_lon,km:x.km,our_km:x.our_km,origin:x.origin,destination:x.destination}));
+      if(ins.length) await sb("/rest/v1/route_km_manual",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(ins)});
+      DRAFT.rkm={};await loadRkm()}
     if(DRAFT.rules.set) await rpc("save_rule_set",{p_operator:OP.id,p_operator_rules:DRAFT.rules.set.operator||{},p_lines:DRAFT.rules.set.lines||{}});
     const res=await rpc("save_changes",{p_operator:OP.id,p_changes:ch});
     for(const x of ch.settings) S[x.key]=clone(x.value);
@@ -953,10 +1027,10 @@ function openLegEdit(sc){const v=D.vehicles.find(x=>x.veh===sel);if(!v||!canEdit
 // totals, start/end) and everything else (nights, cards, branch, savings engine) is computed from them. ----
 let BLKMODE=false, SHOWORIG=false, TR=null, EDC={k:"",m:new Map(),ends:null};
 const editsOf=day=>Object.values(eff().BLK).filter(e=>e.day===day);
-function edCache(){const k=DV+"|"+ROAD.size+"|"+anchors().size+"|"+VIAOK.map(x=>x.id).join();if(EDC.k!==k) EDC={k,m:new Map(),ends:null};return EDC}
+function edCache(){const k=DV+"|"+ROAD.size+"|"+anchors().size+"|"+VIAOK.map(x=>x.id).join()+"|"+RKMN;if(EDC.k!==k) EDC={k,m:new Map(),ends:null};return EDC}
 // the day as shown: the raw day file with the block edits of that day applied (raw when there are none)
-function effDay(day){const raw=window.DAY_DATA&&window.DAY_DATA[day];if(!raw) return null;const es=editsOf(day);if(!es.length&&!anchors().size) return raw;
-  const c=edCache();if(!c.m.has(day)){const J=anchorDay(raw);c.m.set(day,es.length?DH.applyBlockEdits(J,es,{road:roadOf}):J)}return c.m.get(day)}
+function effDay(day){const raw=window.DAY_DATA&&window.DAY_DATA[day];if(!raw) return null;const es=editsOf(day);if(!es.length&&!anchors().size&&!rkmM().size) return raw;
+  const c=edCache();if(!c.m.has(day)){const J=anchorDay(raw);c.m.set(day,manualDay(es.length?DH.applyBlockEdits(J,es,{road:roadOf}):J))}return c.m.get(day)}
 // the cross-day index with the edited days laid over it (only days whose file is loaded can be re-read)
 function endsEff(){const c=edCache();if(c.ends) return c.ends;const ed={};
   for(const d of new Set(Object.values(eff().BLK).map(e=>e.day))) ed[d]=effDay(d);
