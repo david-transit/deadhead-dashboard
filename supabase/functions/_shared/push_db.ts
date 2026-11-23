@@ -18,7 +18,12 @@ export const vapidKeys = () => ({ publicKey: Deno.env.get("VAPID_PUBLIC_KEY") ||
 
 export function pushAlert(admin: any): (text: string) => Promise<{ ok: boolean; error?: string }> {
   return async (text) => {
-    try { return await pushToAgents(supabasePushStore(admin), text, vapidKeys()); }
+    try {
+      // one log line per alert (no text: M9), so a missed alert can be traced
+      const r = await pushToAgents(supabasePushStore(admin), text, vapidKeys());
+      console.log("push alert", JSON.stringify(r));
+      return r;
+    }
     catch (e) { console.error("push alert", String(e).slice(0, 200)); return { ok: false, error: "push_failed" }; }
   };
 }
