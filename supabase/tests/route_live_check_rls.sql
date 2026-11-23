@@ -1,4 +1,4 @@
--- Checks for 20261123120000_route_live_check.sql. One transaction that always ROLLS BACK (ends with 'PASS: ...' as an exception).
+-- Checks for 20261123130000_route_live_check.sql. One transaction that always ROLLS BACK (ends with 'PASS: ...' as an exception).
 -- A viewer and an editor of one operator are made at run time (fake auth sessions); nothing stays.
 do $$
 declare
