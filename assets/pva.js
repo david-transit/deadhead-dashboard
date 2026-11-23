@@ -1,5 +1,5 @@
 /* R53 "תכנון מול ביצוע" (David 18.11). Data: RPC get_pva (editor and above, checked in the database), one payload per
- * service day built by pipeline/pva/build.py. Drivers by code only. Session: the dashboard's (localStorage ys_session). */
+ * service day built by pipeline/pva/build.py. No driver data: trips are known by sidur and vehicle only (David 23.11). Session: the dashboard's (localStorage ys_session). */
 (function () {
   "use strict";
   const SB = "https://xghfcdgettrcdciwwzbl.supabase.co", KEY = "sb_publishable_hCBsqYekz61JY6SFfT_sjw_-wj0QGXT", SKEY = "ys_session";
@@ -255,7 +255,7 @@
 
   // ---- other tabs (Task 7) ----
   function tab(id) {
-    ["Excess", "Sid", "Gap", "Les", "Drv"].forEach(k => { const on = "t" + k === id; $("#t" + k).setAttribute("aria-selected", on); $("#p" + k).hidden = !on; });
+    ["Excess", "Sid", "Gap", "Les", "Unx"].forEach(k => { const on = "t" + k === id; $("#t" + k).setAttribute("aria-selected", on); $("#p" + k).hidden = !on; });
     if (window.PVA_TABS && window.PVA_TABS[id]) window.PVA_TABS[id](DAYS, { esc, nf, hm, dlabel, TAG, place, kmOf });
   }
   document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => tab(b.id));

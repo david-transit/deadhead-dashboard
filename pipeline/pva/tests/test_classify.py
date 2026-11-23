@@ -8,9 +8,9 @@ def P(sidur, m, kind, mkt8):
     return dict(sidur=sidur, dep_min=m, kind=kind, mkt8=mkt8, line=None, desc='', km=1.0, real_min=None, vtype=None)
 
 
-def E(i, sidur, h, mi, kind, mkt8, veh=1, driver='99001', nextday=False):
+def E(i, sidur, h, mi, kind, mkt8, veh=1, nextday=False):
     s = dt.datetime(2026, 11, 11 if nextday else 10, h, mi)
-    return dict(id=i, kind=kind, start=s, end=s + dt.timedelta(minutes=10), sidur=sidur, mkt8=mkt8, line=0, veh=veh, driver=driver)
+    return dict(id=i, kind=kind, start=s, end=s + dt.timedelta(minutes=10), sidur=sidur, mkt8=mkt8, line=0, veh=veh)
 
 
 def trips(res, sidur):

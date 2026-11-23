@@ -1,6 +1,7 @@
 """Read the operator's base map (plan) and execution report. Columns are found by header name.
-Driver names (פרטי, משפחה) are never copied out of the sheet row; only the driver code is kept (R53 privacy)."""
-import datetime as dt
+No driver data is read: not the code (קוד נהג), not the names (פרטי, משפחה). A trip is known by its sidur and vehicle
+only (R53, David 23.11). The sidur column is required: without it the file is rejected."""
+import datetime as dt, os
 import openpyxl
 
 PLAN_KIND = {'שרות': 'service', 'ריקה': 'empty', 'אלמנט': 'element', 'ניהול תנועה': 'mgmt'}
@@ -50,11 +51,16 @@ def read_plan(path):
 def read_exec(path):
     out = []
     for c, r in _rows(path, 2):
+        if 'סידור' not in c:
+            raise SystemExit(f'{os.path.basename(path)}: אין עמודת "סידור" בדוח הביצוע. בלי מספר סידור אי אפשר לחשב תכנון מול ביצוע')
         g = lambda k: r[c[k]]
-        drv = g('קוד נהג')
-        out.append(dict(id=int(g('זיהוי')), kind=EXEC_KIND[g('סוג')], start=g('תחילה'), end=g('סיום'), sidur=str(g('סידור')),
-                        mkt8=str(g('מסלול')), line=int(g('קו') or 0), veh=int(g('רישוי')),
-                        driver=str(drv) if drv not in (None, '') else None))
+        sidur = g('סידור')
+        if sidur in (None, '') or not str(sidur).strip():
+            raise SystemExit(f'{os.path.basename(path)}: בשורה {g("זיהוי")} של דוח הביצוע אין מספר סידור. בלי מספר סידור אי אפשר לחשב תכנון מול ביצוע')
+        out.append(dict(id=int(g('זיהוי')), kind=EXEC_KIND[g('סוג')], start=g('תחילה'), end=g('סיום'), sidur=str(sidur).strip(),
+                        mkt8=str(g('מסלול')), line=int(g('קו') or 0), veh=int(g('רישוי'))))
+    if not out:
+        raise SystemExit(f'{os.path.basename(path)}: דוח הביצוע ריק')
     return out
 
 

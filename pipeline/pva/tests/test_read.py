@@ -25,18 +25,36 @@ class TestRead(unittest.TestCase):
                                     km=4.4, real_min=10, vtype=None))
         self.assertEqual(r[1]['kind'], 'service'); self.assertEqual(r[1]['line'], 404)
 
-    def test_names_not_kept(self):
+    def test_no_driver_data_kept(self):
+        """The file still carries the driver code and names (an old file): none of it is read (David 23.11)."""
         p = exec_xlsx([dict(id=1, kind='ריקה', start=D(2026, 11, 10, 6), end=D(2026, 11, 10, 6, 10), sidur=85,
                             mkt8=66708144, veh=90000001, driver=99001, first='יוסי', last='כהן')])
         r = read.read_exec(p)
-        self.assertEqual(set(r[0]), {'id', 'kind', 'start', 'end', 'sidur', 'mkt8', 'line', 'veh', 'driver'})
-        self.assertNotIn('יוסי', repr(r)); self.assertNotIn('כהן', repr(r))
-        self.assertEqual(r[0]['kind'], 'empty'); self.assertEqual(r[0]['driver'], '99001'); self.assertEqual(r[0]['sidur'], '85')
+        self.assertEqual(set(r[0]), {'id', 'kind', 'start', 'end', 'sidur', 'mkt8', 'line', 'veh'})
+        for x in ('יוסי', 'כהן', '99001'):
+            self.assertNotIn(x, repr(r))
+        self.assertEqual((r[0]['kind'], r[0]['sidur'], r[0]['veh']), ('empty', '85', 90000001))
 
-    def test_missing_driver_code(self):
+    def test_clean_file_without_driver_columns(self):
+        """The cleaned file (no קוד נהג / פרטי / משפחה columns) is read the same way."""
         p = exec_xlsx([dict(id=2, kind='שירות', start=D(2026, 11, 10, 7), end=D(2026, 11, 10, 8), sidur=52001,
-                            mkt8=15404240, line=404, veh=1, driver=None)])
-        self.assertIsNone(read.read_exec(p)[0]['driver'])
+                            mkt8=15404240, line=404, veh=1)], driver_cols=False)
+        r = read.read_exec(p)
+        self.assertEqual((r[0]['sidur'], r[0]['veh'], r[0]['line']), ('52001', 1, 404))
+
+    def test_missing_sidur_column_fails(self):
+        p = exec_xlsx([dict(id=2, kind='שירות', start=D(2026, 11, 10, 7), end=D(2026, 11, 10, 8), sidur=52001,
+                            mkt8=15404240, line=404, veh=1)], drop=('סידור',))
+        with self.assertRaises(SystemExit) as e:
+            read.read_exec(p)
+        self.assertIn('אין עמודת "סידור"', str(e.exception.code))
+
+    def test_empty_sidur_fails(self):
+        p = exec_xlsx([dict(id=7, kind='שירות', start=D(2026, 11, 10, 7), end=D(2026, 11, 10, 8), sidur='',
+                            mkt8=15404240, line=404, veh=1)])
+        with self.assertRaises(SystemExit) as e:
+            read.read_exec(p)
+        self.assertIn('אין מספר סידור', str(e.exception.code))
 
     def test_urban_filter(self):
         rows = [dict(sidur='1', kind='service', vtype='בין-עירוני'), dict(sidur='1', kind='empty', vtype=None),
