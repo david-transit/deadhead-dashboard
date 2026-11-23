@@ -15,12 +15,16 @@ def plan_xlsx(rows):
     p = os.path.join(tempfile.mkdtemp(), 'plan.xlsx'); wb.save(p); return p
 
 
-def exec_xlsx(rows):
-    """rows: dicts with keys id, kind (שירות/ריקה), start, end (datetime), sidur, mkt8, line, veh, driver, first, last"""
-    wb = openpyxl.Workbook(); ws = wb.active; ws.append(['Schedule'] + [None] * 11); ws.append(EXEC_HDR)
+def exec_xlsx(rows, driver_cols=True, drop=()):
+    """rows: dicts with keys id, kind (שירות/ריקה), start, end (datetime), sidur, mkt8, line, veh, driver, first, last.
+    driver_cols=False writes the cleaned file (no driver code or names); drop removes other columns by header."""
+    hdr = EXEC_HDR if driver_cols else EXEC_HDR[:9]
+    keep = [i for i, h in enumerate(hdr) if h not in drop]
+    wb = openpyxl.Workbook(); ws = wb.active; ws.append(['Schedule'] + [None] * (len(keep) - 1)); ws.append([hdr[i] for i in keep])
     for r in rows:
-        ws.append([r['id'], None, r['kind'], r['start'], r['end'], str(r['sidur']), str(r['mkt8']), r.get('line', 0),
-                   r['veh'], r.get('driver'), r.get('first', 'שםפרטי'), r.get('last', 'שםמשפחה')])
+        v = [r['id'], None, r['kind'], r['start'], r['end'], str(r['sidur']), str(r['mkt8']), r.get('line', 0),
+             r['veh'], r.get('driver'), r.get('first', 'שםפרטי'), r.get('last', 'שםמשפחה')]
+        ws.append([v[i] for i in keep])
     p = os.path.join(tempfile.mkdtemp(), 'exec.xlsx'); wb.save(p); return p
 
 

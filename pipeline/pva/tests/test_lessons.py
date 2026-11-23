@@ -12,7 +12,7 @@ def pva(trips):
 
 def T(kind, t0, a=None, b=None, ek=None, status='planned', veh=5, verdict=None, desc=''):
     return dict(kind=kind, t0=t0, a=a, b=b, empty_kind=ek, status=status, veh=veh, verdict=verdict, desc=desc, sidur='1',
-                op_km=1.2, our_km=1.7, driver='99001')
+                op_km=1.2, our_km=1.7)
 
 
 def ours(items):

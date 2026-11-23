@@ -10,10 +10,10 @@
   function sid(days, h) {
     const box = $("#pSid"), rows = days.flatMap(d => d.sidurim.map(s => ({ d: d.day, s })));
     const cnt = (s, k) => s.trips.filter(t => t.status === k).length;
-    box.innerHTML = `<div class="col"><table class="tbl"><thead><tr><th>יום</th><th>סידור</th><th>נהג</th><th>רכבים</th><th>כמתוכנן</th><th>השתנו</th><th>נוספו</th><th>לא בוצעו</th></tr></thead><tbody>` +
-      rows.map((r, i) => { const T = r.s.trips, drv = [...new Set(T.map(t => t.driver).filter(Boolean))], veh = [...new Set(T.map(t => t.veh).filter(Boolean))];
-        return `<tr><td>${h.dlabel(r.d)}</td><td><button class="btn" data-i="${i}" aria-expanded="false">${h.esc(r.s.sidur)}${r.s.in_plan ? "" : " (לא במפה)"}</button></td><td>${h.esc(drv.join(", "))}</td><td>${h.esc(veh.join(", "))}</td>
-          <td>${cnt(r.s, "planned")}</td><td>${cnt(r.s, "changed")}</td><td>${cnt(r.s, "added")}</td><td>${cnt(r.s, "not_done")}</td></tr><tr hidden id="sd${i}"><td colspan="8"></td></tr>`; }).join("") + `</tbody></table></div>`;
+    box.innerHTML = `<div class="col"><table class="tbl"><thead><tr><th>יום</th><th>סידור</th><th>רכבים</th><th>כמתוכנן</th><th>השתנו</th><th>נוספו</th><th>לא בוצעו</th></tr></thead><tbody>` +
+      rows.map((r, i) => { const T = r.s.trips, veh = [...new Set(T.map(t => t.veh).filter(Boolean))];
+        return `<tr><td>${h.dlabel(r.d)}</td><td><button class="btn" data-i="${i}" aria-expanded="false">${h.esc(r.s.sidur)}${r.s.in_plan ? "" : " (לא במפה)"}</button></td><td>${h.esc(veh.join(", "))}</td>
+          <td>${cnt(r.s, "planned")}</td><td>${cnt(r.s, "changed")}</td><td>${cnt(r.s, "added")}</td><td>${cnt(r.s, "not_done")}</td></tr><tr hidden id="sd${i}"><td colspan="7"></td></tr>`; }).join("") + `</tbody></table></div>`;
     box.querySelectorAll("button[data-i]").forEach(b => b.onclick = () => {
       const i = +b.dataset.i, tr = $("#sd" + i), open = tr.hidden; tr.hidden = !open; b.setAttribute("aria-expanded", open);
       if (open) tr.firstElementChild.innerHTML = rows[i].s.trips.map(t => `<div class="trip${t.status === "not_done" ? " nd" : ""}" style="cursor:default"><span>${h.hm(t.t0)}</span>
