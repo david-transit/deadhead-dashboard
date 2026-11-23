@@ -1,6 +1,6 @@
 // ---- app version: bump with tools/bump_version.py (writes APP_VER here and version.json). A browser holding an older
 // index.html sees a different version.json and reloads once with ?v=<new>, which bypasses the cached copy. ----
-const APP_VER="2026-11-23.4";
+const APP_VER="2026-11-23.5";
 (async()=>{try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
   if(j.v&&j.v!==APP_VER){const k="ys_reload_"+j.v;if(sessionStorage.getItem(k)) return;sessionStorage.setItem(k,"1");
     const q=new URLSearchParams(location.search);q.set("v",j.v);location.replace(location.pathname+"?"+q+location.hash)}}catch{}})();
@@ -1194,7 +1194,7 @@ $("#nrSave").onclick=()=>{const det=nrDetail();if(!det) return;
 const PORTAL=location.hostname==="yalla-sa.app"?location.origin+"/":"https://yalla-sa.app/";
 const toPortal=()=>location.replace(PORTAL+"?next="+encodeURIComponent(location.pathname+location.search));
 // signed out in another tab (the portal's "יציאה" or its idle timeout): leave too
-addEventListener("storage",e=>{if(e.key===SKEY&&!e.newValue&&!["recoverpw","code"].includes(GMODE)) toPortal()});
+addEventListener("storage",e=>{if(e.key===SKEY&&!e.newValue) toPortal()});
 
 // ---- settings ----
 async function loadSettings(){try{const rows=await getRows("settings",`select=key,value&${opq()}`)||[];for(const {key:k,value:v} of rows) S[k]=k==="defaults"?{...clone(DEF),...v}:v}catch(e){console.warn("settings",e)}}
@@ -1559,10 +1559,12 @@ async function mfaEnroll(){ // a fresh factor (unfinished ones are removed first
 const qrSrc=q=>String(q).startsWith("data:")?q:"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q); // GoTrue returns raw SVG
 const mfaBox=e=>`<div class="mfaqr"><img src="${esc(qrSrc(e.totp.qr_code))}" alt="קוד QR לאפליקציית האימות" width="180" height="180"></div>
   <p class="hint">אין אפשרות לסרוק? הקלד באפליקציה את המפתח: <b dir="ltr" class="mono">${esc(e.totp.secret)}</b></p>`;
-let MFAF=null, ENR=null;
+let MFAF=null;
 const isAdminAny=()=>PLATFORM||(MS||[]).some(m=>m.role==="admin"); // any admin must use two-step verification (privacy procedure §3)
 
-// ---- entry: first platform admin (once), login, two-step code, forced password change, no access ----
+// ---- entry: the tool has no sign-in screen (David 23.11.2026, platform map §7.3). Sign-in, reset mail and recovery code
+// are in the portal (assets/portal-entry.js forwards them). The gate shows only a step this account still owes here:
+// forced password change (with its two-step code), no access, or a load error. ----
 async function unlock(){
   await loadAccess();
   const fs=await myFactors(), ver=fs.filter(f=>f.status==="verified");
@@ -1584,7 +1586,7 @@ async function unlock(){
 // entry screen intro: the header logo moves into the gate, plays large, then the form fades in
 const LOGO=$("#logoBtn"), LOGO_HOME=[LOGO.parentNode,LOGO.nextSibling];
 function logoHome(){if(LOGO.parentNode!==LOGO_HOME[0]){LOGO_HOME[0].insertBefore(LOGO,LOGO_HOME[1]);LOGO.removeAttribute("aria-hidden");LOGO.tabIndex=0}}
-let introEnd=Promise.resolve(), introOver=false, AUTO=false, GMODE="login", LASTPW=null;
+let introEnd=Promise.resolve(), introOver=false, AUTO=false, GMODE="", LASTPW=null;
 // the logo takes only the height left over by the form, so the form is always fully visible (laptop windows, zoom)
 function fitGate(){const g=$("#gate");if(!g||!g.classList.contains("ready")) return;const f=$("#gateForm");
   const left=innerHeight-f.offsetHeight-18-32-8;g.style.setProperty("--logoH",Math.max(48,Math.min(220,left))+"px")}
@@ -1596,26 +1598,12 @@ function gateIntro(){const g=$("#gate");let done=false,res;introEnd=new Promise(
   window.playLogo(); const tm=setTimeout(show,window.LOGO_MS);
   addEventListener("keydown",show,true); g.addEventListener("pointerdown",show);}
 const fld=(id,label,type,ac,extra="")=>`<div class="field" style="text-align:right;margin-top:14px"><label for="${id}">${label}</label><input id="${id}" type="${type}" autocomplete="${ac}" ${type!=="password"&&id!=="gName"?'dir="ltr"':""} required ${extra}></div>`;
-const userFld=v=>fld("gUser","שם משתמש","text","username",`value="${esc(v)}" autocapitalize="off" spellcheck="false"`);
 // short notice under section 11 of the Privacy Protection Law, shown at the first sign-in (draft until a lawyer approves it)
 const PRIVNOTE=`<div class="gpnote"><b>פרטיות (טיוטה):</b> לצורך כניסה מאובטחת והרשאות לפי מפעיל נשמרים עליך שם משתמש, שם לתצוגה, ההרשאה, פרטי אבטחה ותיעוד כניסות ועריכות. אין חובה חוקית למסור, אבל בלי זה אין חשבון. המנהלים אצל המפעיל שלך רואים את פרטי החשבון והעריכות. האחסון אצל Supabase (גרמניה). אפשר לבקש לעיין במידע ולתקן אותו. <a href="privacy.html" target="_blank" rel="noopener">מדיניות הפרטיות</a></div>`;
 function gateMode(m,{msg="",err=""}={}){
   GMODE=m; const uname=(PROFILE&&PROFILE.username)||lsGet("ys_user")||"";
   const F=$("#gateFields"),A=$("#gateAlt"),B=$("#gateBtn"),S=$("#gateSub"); B.disabled=false;
-  if(m==="login"){S.textContent="כניסה עם שם משתמש וסיסמה";F.innerHTML=userFld(uname)+fld("gpw","סיסמה","password","current-password");
-    B.textContent="כניסה";A.innerHTML=`<span class="muted" id="forgotBox">שכחת סיסמה? פנה למנהל המערכת.</span><button type="button" class="linkbtn dim" data-gm="code">אין לי גישה (קוד שחזור)</button>`;
-    checkForgot()}
-  else if(m==="code"){S.textContent="כניסה עם קוד שחזור חד־פעמי (למנהלי מערכת)";
-    F.innerHTML=userFld(uname)+fld("gCode","קוד שחזור (למשל ABCDE-23456)","text","one-time-code",'autocapitalize="characters" spellcheck="false"')+
-      fld("gpw","סיסמה חדשה (לפחות 8 תווים, עם אותיות ומספרים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
-    B.textContent="קביעת סיסמה חדשה וכניסה";A.innerHTML=`<button type="button" class="linkbtn dim" data-gm="login">חזרה לכניסה רגילה</button>`}
-  else if(m==="recoverpw"){S.textContent="בחירת סיסמה חדשה (מהקישור שנשלח למייל)";
-    F.innerHTML=fld("gpw","סיסמה חדשה (לפחות 8 תווים, עם אותיות ומספרים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
-    B.textContent="שמירת הסיסמה וכניסה";A.innerHTML=`<button type="button" class="linkbtn dim" data-gm="logout">ביטול</button>`}
-  else if(m==="bootstrap"){S.textContent="יצירת חשבון מנהל ראשי (פעם אחת בלבד)";
-    F.innerHTML=userFld("")+fld("gName","שם לתצוגה","text","name",'maxlength="80"')+fld("gpw","סיסמה (לפחות 8 תווים, עם אותיות ומספרים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
-    B.textContent="יצירת החשבון וכניסה";A.innerHTML=`<span class="muted">שם משתמש: אותיות באנגלית, ספרות, נקודה, מקף או קו תחתון.</span>`}
-  else if(m==="changepw"){S.textContent=`צריך לבחור סיסמה חדשה${uname?" לחשבון "+uname:""}`;
+  if(m==="changepw"){S.textContent=`צריך לבחור סיסמה חדשה${uname?" לחשבון "+uname:""}`;
     F.innerHTML=`<input type="text" autocomplete="username" value="${esc(uname)}" hidden>`+(LASTPW?"":fld("gpw0","הסיסמה הנוכחית (הזמנית)","password","current-password"))+
       fld("gpw","סיסמה חדשה (לפחות 8 תווים, עם אותיות ומספרים)","password","new-password",'minlength="8"')+fld("gpw2","אימות סיסמה","password","new-password",'minlength="8"');
     F.insertAdjacentHTML("afterbegin",PRIVNOTE);
@@ -1625,11 +1613,7 @@ function gateMode(m,{msg="",err=""}={}){
   else if(m==="noaccess"){S.textContent=`החשבון ${uname} עוד לא שויך לאף מפעיל. פנה למנהל המערכת.`;F.innerHTML="";B.textContent="יציאה";A.innerHTML=""}
   else if(m==="mfa"){S.textContent="אימות דו־שלבי: הקלד את הקוד שמוצג עכשיו באפליקציית האימות בטלפון";
     F.innerHTML=fld("gOtp","קוד בן 6 ספרות","text","one-time-code",'inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7"');
-    B.textContent="אישור";A.innerHTML=`<span class="muted">הטלפון לא איתך? מנהל מערכת יכול לאפס לך את האימות, או כניסה עם קוד שחזור.</span><button type="button" class="linkbtn dim" data-gm="code">קוד שחזור</button><button type="button" class="linkbtn dim" data-gm="logout">יציאה</button>`}
-  else if(m==="mfa_enroll"){S.textContent="מנהל חייב אימות דו־שלבי. סרוק את הקוד באפליקציית אימות (Google Authenticator, Microsoft Authenticator וכדומה) והקלד את הקוד שהיא מציגה.";
-    F.innerHTML=`<div id="gQr" class="empty-state">מכין קוד…</div>`+fld("gOtp","קוד בן 6 ספרות מהאפליקציה","text","one-time-code",'inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7"');
-    B.textContent="הפעלה וכניסה";A.innerHTML=`<button type="button" class="linkbtn dim" data-gm="logout">יציאה</button>`;
-    ENR=null;mfaEnroll().then(e=>{ENR=e;const q=$("#gQr");if(q){q.className="";q.innerHTML=mfaBox(e);fitGate()}}).catch(e=>{const q=$("#gQr");if(q) q.textContent=errText(e)})}
+    B.textContent="אישור";A.innerHTML=`<span class="muted">הטלפון לא איתך? מנהל מערכת יכול לאפס לך את האימות, או כניסה עם קוד שחזור בדף הכניסה של yalla-sa.</span><button type="button" class="linkbtn dim" data-gm="logout">יציאה</button>`}
   const gm=$("#gateMsg"); gm.className="msg"+(err?" err":msg?" ok":""); gm.textContent=err||msg; $("#gateWarn").textContent=""; fitGate();
   if(introOver) {showForm();(F.querySelector("input:not([hidden])")||B).focus()}
 }
@@ -1641,12 +1625,6 @@ const signIn=async(user,pw)=>{user=String(user||"").trim().toLowerCase();
     let r=null;try{r=await fnCall({action:"sign_in",username:user,password:pw},false)}catch(e2){if(/rate limit/i.test(e2.message)) throw e2}
     if(!r||!r.session) throw e; setSes(r.session)}
   lsSet("ys_user",user);touchAct();PROFILE=null};
-// "שכחתי סיסמה" only for an account that has a recovery email (asked when the username is typed)
-let forgotFor="";
-async function checkForgot(){const u=($("#gUser")?.value||"").trim().toLowerCase(),box=$("#forgotBox");if(!box||!/^[a-z0-9._-]{3,32}$/.test(u)||u===forgotFor) return;forgotFor=u;
-  try{const r=await fnCall({action:"recovery_options",username:u},false);if($("#gUser")?.value.trim().toLowerCase()!==u) return;
-    box.innerHTML=r.email?`<button type="button" class="linkbtn" data-gm="forgot">שכחתי סיסמה</button>`:"שכחת סיסמה? פנה למנהל המערכת."}catch{}}
-$("#gateForm").addEventListener("focusout",e=>{if(e.target.id==="gUser"){e.target.value=e.target.value.trim().toLowerCase();if(GMODE==="login") checkForgot()}});
 // keyboard warnings: Hebrew layout (the password is typed in Hebrew letters) or Caps Lock
 let CAPS=false;
 const kbWarn=()=>{const heb=[...document.querySelectorAll("#gateFields input")].some(i=>i.id!=="gName"&&/[\u0590-\u05FF]/.test(i.value));
@@ -1657,22 +1635,11 @@ $("#gateForm").addEventListener("keydown",e=>{if(!(e.target instanceof HTMLInput
   kbWarn()});
 $("#gateForm").addEventListener("input",kbWarn);
 $("#gateAlt").addEventListener("click",async e=>{const m=e.target.dataset.gm;
-  if(m==="logout"){await signOut();toPortal()}
-  else if(m==="login") toPortal();
-  else if(m==="code") gateMode(m);
-  else if(m==="forgot"){const u=$("#gUser").value.trim().toLowerCase(),g=$("#gateMsg");g.className="msg";g.textContent="שולח…";
-    try{await fnCall({action:"forgot",username:u},false);g.className="msg ok";g.textContent="אם לחשבון מוגדר מייל לשחזור, נשלח אליו עכשיו קישור לבחירת סיסמה חדשה. בדוק גם בדואר זבל."}
-    catch(err){g.className="msg err";g.textContent=errText(err)}}});
+  if(m==="logout"){await signOut();toPortal()}});
 $("#gateForm").addEventListener("submit",async e=>{
   e.preventDefault(); const m=$("#gateMsg"); m.className="msg"; m.textContent="רגע…"; $("#gateBtn").disabled=true;
   try{
-    if(GMODE==="login"){const user=$("#gUser").value.trim().toLowerCase(),pw=$("#gpw").value; $("#gUser").value=user; await signIn(user,pw); LASTPW=pw;
-      if(!(await unlock())) return; LASTPW=null}
-    else if(GMODE==="bootstrap"){const user=$("#gUser").value.trim().toLowerCase(),pw=$("#gpw").value;
-      if(!USERRE.test(user)) throw new Error("bad_username"); if(weakPw(pw)) throw new Error("Password should be"); if(pw!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
-      await fnCall({action:"bootstrap",username:user,display_name:$("#gName").value.trim(),password:pw},false);
-      await signIn(user,pw); if(!(await unlock())) return}
-    else if(GMODE==="changepw"){const cur=LASTPW||$("#gpw0").value,pw=$("#gpw").value;
+    if(GMODE==="changepw"){const cur=LASTPW||$("#gpw0").value,pw=$("#gpw").value;
       if(weakPw(pw)) throw new Error("Password should be"); if(pw!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
       await fnCall({action:"change_password",current_password:cur,new_password:pw});
       await signIn(lsGet("ys_user")||PROFILE?.username||"",pw); LASTPW=null; // a password change ends the old sessions
@@ -1682,30 +1649,15 @@ $("#gateForm").addEventListener("submit",async e=>{
     else if(GMODE==="noaccess"){await signOut();toPortal()}
     else if(GMODE==="error"){location.reload()}
     else if(GMODE==="mfa"){await mfaVerify(MFAF,$("#gOtp").value);if(!(await unlock())) return}
-    else if(GMODE==="mfa_enroll"){if(!ENR) throw new Error("רגע, הקוד עוד נטען");await mfaVerify(ENR.id,$("#gOtp").value);ENR=null;if(!(await unlock())) return}
-    else if(GMODE==="code"){const user=$("#gUser").value.trim().toLowerCase(),pw=$("#gpw").value;
-      if(weakPw(pw)) throw new Error("Password should be"); if(pw!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
-      const r=await fnCall({action:"recover_code",username:user,code:$("#gCode").value,new_password:pw},false);
-      await signIn(user,pw); if(r&&r.left!=null&&r.left<3) alert(`נותרו ${r.left} קודי שחזור. מומלץ ליצור קודים חדשים בתפריט החשבון.`);
-      if(!(await unlock())) return}
-    else if(GMODE==="recoverpw"){const pw=$("#gpw").value;
-      if(weakPw(pw)) throw new Error("Password should be"); if(pw!==$("#gpw2").value) throw new Error("הסיסמאות לא זהות");
-      const r=await fnCall({action:"recovery_set_password",new_password:pw}); // server-side, only from the mail's session
-      await signIn(r.username,pw); if(!(await unlock())) return}
-  }catch(err){m.className="msg err";m.textContent=errText(err);$("#gateBtn").disabled=false;if(GMODE==="login") $("#gpw")?.select()}
+  }catch(err){m.className="msg err";m.textContent=errText(err);$("#gateBtn").disabled=false}
 });
 (async()=>{
-  // a reset-password mail lands here with #access_token=…&type=recovery: choose a new password first
-  const HP=new URLSearchParams(location.hash.slice(1));
-  if(location.hash) history.replaceState(null,"",location.pathname+location.search);
-  if(HP.get("type")==="recovery"&&HP.get("access_token")){setSes({access_token:HP.get("access_token"),refresh_token:HP.get("refresh_token"),expires_in:HP.get("expires_in"),expires_at:HP.get("expires_at")});
-    gateIntro();gateMode("recoverpw");return}
-  if(HP.get("error_description")){gateIntro();gateMode("login",{err:"הקישור מהמייל לא תקף או שפג תוקפו. בקש קישור חדש."});return}
-  // recovery code (the portal's "אין לי גישה" link): the one sign-in step still done here
-  if(new URLSearchParams(location.search).get("recover")==="1"){gateIntro();gateMode("code");return}
+  // sign-in steps that belong to the portal (reset mail, an invalid mail link, recovery code): go there (assets/portal-entry.js)
+  const go=window.portalEntry(location.hash,location.search,PORTAL,location.pathname); if(go){location.replace(go);return}
+  if(location.hash) history.replaceState(null,"",location.pathname+location.search); // nothing else is read from the hash
   if(!SES){toPortal();return}
   // signed in through the portal: straight to the tool, no intro; the gate shows only for a step this account still owes
   try{if(await unlock()) return}catch(e){console.warn(e); if(e.status===401||e.status===403||e.message==="not_signed_in"){setSes(null);toPortal();return}}
-  if(["changepw","noaccess","mfa","mfa_enroll"].includes(GMODE)){gateIntro();return}
+  if(["changepw","noaccess","mfa"].includes(GMODE)){gateIntro();return}
   gateIntro(); gateMode("error");
 })();

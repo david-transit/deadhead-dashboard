@@ -35,7 +35,9 @@ const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY") || "sb_publishable_hCBsqYekz61JY6SFfT_sjw_-wj0QGXT"; // public key
 const DOMAIN = "users.yalla-sa.app";
 const ORIGINS = ["https://david-transit.github.io", "https://yalla-sa.app"]; // portal (yalla-sa.app) signs in here too
-const SITE = "https://david-transit.github.io/deadhead-dashboard/"; // where the reset-password mail lands
+// where the reset-password mail lands: the portal, which has the new-password step (David 23.11.2026, platform map §7.3).
+// Supabase Auth must list it under Redirect URLs, otherwise it falls back to the Site URL; the tool forwards from there.
+const SITE = "https://yalla-sa.app/";
 const CODE_ABC = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 const ROLES = ["viewer", "editor", "admin"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
