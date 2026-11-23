@@ -40,12 +40,26 @@ class TestBuild(unittest.TestCase):
         s = json.dumps(self.p, ensure_ascii=False)
         self.assertNotIn('יוסי', s); self.assertNotIn('כהן', s)
 
-    def test_driver_excess_sum(self):
-        d = self.p['drivers']['99001']
-        self.assertEqual((d['excess_km'], d['dispatcher_km']), (5.0, 5.0))  # sidur 85 is not in the plan; op km unknown -> ours
+    def test_no_driver_anywhere(self):
+        """No key named driver/drivers at any depth, and no driver code as a value (David 23.11)."""
+        self.assertEqual(build.driver_keys(self.p), [])
+        s = json.dumps(self.p, ensure_ascii=False)
+        self.assertNotIn('driver', s.lower()); self.assertNotIn('99001', s)
 
-    def test_missing_driver_code_kept(self):
-        self.assertIn('?', self.p['drivers'])
+    def test_driver_keys_finds_nested(self):
+        self.assertEqual(build.driver_keys({'a': [{'b': {'driver': 1}}], 'drivers': {}}), ['$.a[0].b.driver', '$.drivers'])
+        with self.assertRaises(SystemExit):
+            build.upsert_sql('op', {'day': '2026-11-10', 'sidurim': [{'trips': [{'driver': '1'}]}]})
+
+    def test_excess_by_sidur_and_vehicle(self):
+        s85 = self.p['by_sidur']['85']  # sidur 85 is not in the plan; op km unknown -> ours
+        self.assertEqual((s85['excess_km'], s85['dispatcher_km'], s85['n_excess'], s85['vehicles']), (5.0, 5.0, 1, [5]))
+        self.assertEqual(self.p['by_sidur']['1']['excess_km'], 0.0)
+        v = self.p['by_vehicle']['5']
+        self.assertEqual((v['excess_km'], v['dispatcher_km'], v['sidurim']), (5.0, 5.0, ['1', '85']))
+
+    def test_every_sidur_kept(self):
+        self.assertEqual(set(self.p['by_sidur']), {s['sidur'] for s in self.p['sidurim']})
 
     def test_intercity_sidur_excluded(self):
         self.assertNotIn('9', [s['sidur'] for s in self.p['sidurim']])
@@ -56,7 +70,7 @@ class TestBuild(unittest.TestCase):
 
     def test_trip_fields(self):
         t = next(t for s in self.p['sidurim'] for t in s['trips'] if t.get('empty_kind') == 'dispatcher')
-        for k in ('veh', 'sidur', 'status', 'kind', 'empty_kind', 't0', 't1', 'a', 'b', 'op_km', 'our_km', 'verdict', 'km_src', 'end_src', 'driver'):
+        for k in ('veh', 'sidur', 'status', 'kind', 'empty_kind', 't0', 't1', 'a', 'b', 'op_km', 'our_km', 'verdict', 'km_src', 'end_src'):
             self.assertIn(k, t)
         self.assertEqual(t['a']['code'], '4156')  # previous service of the same vehicle (other sidur) ended at 4156
 

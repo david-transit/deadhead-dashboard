@@ -7,7 +7,7 @@ consecutive empty legs (no service trip between) that holds the leg:
   end_of_day         no later service trip, the chain ends at a depot
   end_of_day_review  no later service trip, the chain ends elsewhere
   round_trip         the chain returns to where it started, with no depot on the way
-  via_depot          returns to where it started through a depot (maybe a bus or driver change): for David
+  via_depot          returns to where it started through a depot (maybe a bus change): for David
   inconsistent       the next service trip starts elsewhere
   unknown            an end of the chain is not known"""
 import math
@@ -56,7 +56,7 @@ def label_vehicle(trips):
             lab, why = 'unknown', 'לא ידוע מאיפה או לאן נסעה אחת הנסיעות הריקות ברצף הזה, ואין נסיעה צמודה שממנה אפשר להסיק'
         elif len(chain) > 1 and _near(start, end):
             lab = 'via_depot' if any('depot' in m for m in mids) else 'round_trip'
-            why = f"הרכב יצא מ{_nm(start)} וחזר אליו" + (f" דרך {' ← '.join(_nm(m) for m in mids)}" if mids else '') + '. אולי הוחלף רכב או נהג; צריך לברר'
+            why = f"הרכב יצא מ{_nm(start)} וחזר אליו" + (f" דרך {' ← '.join(_nm(m) for m in mids)}" if mids else '') + '. אולי הוחלף רכב; צריך לברר'
         elif nxt is None:
             lab = 'end_of_day' if 'depot' in end else 'end_of_day_review'
             why = f"זו הנסיעה האחרונה של הרכב ביום, והוא נשאר ב{_nm(end)}" + ('' if 'depot' in end else ', שאינו מוסך')
