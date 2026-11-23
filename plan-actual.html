@@ -11,7 +11,7 @@
 <title>יאללה־סע · תכנון מול ביצוע</title>
 <link rel="icon" href="mobile/icon.svg">
 <link rel="stylesheet" href="assets/fonts/fonts.css">
-<link rel="stylesheet" href="assets/pva.css?v=2026-11-23.2">
+<link rel="stylesheet" href="assets/pva.css?v=2026-11-23.3">
 </head>
 <body>
 <header>
@@ -31,7 +31,7 @@
   <button role="tab" id="tSid" aria-selected="false" aria-controls="pSid">סידורים</button>
   <button role="tab" id="tGap" aria-selected="false" aria-controls="pGap">פערי ק״מ מול המפעיל</button>
   <button role="tab" id="tLes" aria-selected="false" aria-controls="pLes">לקחים</button>
-  <button role="tab" id="tDrv" aria-selected="false" aria-controls="pDrv">ק״מ בלי הסבר</button>
+  <button role="tab" id="tUnx" aria-selected="false" aria-controls="pUnx">ק״מ בלי הסבר</button>
 </nav>
 <div id="msg" class="msg" role="status" aria-live="polite"></div>
 <section class="cards" id="cards" aria-label="סיכום התקופה">
@@ -58,7 +58,7 @@
   <section id="pSid" role="tabpanel" aria-labelledby="tSid" hidden></section>
   <section id="pGap" role="tabpanel" aria-labelledby="tGap" hidden></section>
   <section id="pLes" role="tabpanel" aria-labelledby="tLes" hidden></section>
-  <section id="pDrv" role="tabpanel" aria-labelledby="tDrv" hidden><div class="col empty"><h2>ק״מ בלי הסבר, לפי נהג</h2><p>הלשונית תתמלא כשיגיע דוח המיקומים מהמפעיל: הק״מ שהרכב נסע בפועל לפי ה־GPS, פחות כל מה שרשום בדוח הביצוע (כולל התוספות של הסדרן). רק מה שנשאר בלי הסבר ייספר כאן.</p><p>נסיעה ריקה ארוכה יותר בק״מ אבל מהירה יותר (למשל לפי עומסים) לא תיחשב חריגה, ותסומן בנפרד.</p></div></section>
+  <section id="pUnx" role="tabpanel" aria-labelledby="tUnx" hidden><div class="col empty"><h2>ק״מ בלי הסבר, לפי סידור ורכב</h2><p>הלשונית תתמלא כשיגיע דוח המיקומים מהמפעיל: הק״מ שהרכב נסע בפועל לפי ה־GPS, פחות כל מה שרשום בדוח הביצוע (כולל התוספות של הסדרן). רק מה שנשאר בלי הסבר ייספר כאן.</p><p>נסיעה ריקה ארוכה יותר בק״מ אבל מהירה יותר (למשל לפי עומסים) לא תיחשב חריגה, ותסומן בנפרד.</p></div></section>
 </main>
 <aside id="side" class="side" hidden aria-labelledby="sdTitle">
   <div class="sdh"><button class="btn" id="sdPrev" aria-label="הנסיעה הקודמת לבדיקה">› הקודמת</button><h3 id="sdTitle"></h3><button class="btn" id="sdNext" aria-label="הנסיעה הבאה לבדיקה">הבאה ‹</button><button class="btn" id="sdClose" aria-label="סגירת הסידור">✕</button></div>
@@ -71,7 +71,7 @@
   <p class="sub" id="nHead"></p>
   <label class="fl">על מה ההערה<select id="nTopic"><option value="place">המקום (מוצא או יעד)</option><option value="km">הק״מ</option><option value="mark">הסימון (מוסבר, לא מסתדר וכו׳)</option><option value="other">אחר</option></select></label>
   <label class="fl">הערך הנכון (לא חובה)<input id="nFix" maxlength="200" placeholder="למשל: מוסך עטרות, או 9.5"></label>
-  <label class="fl">ההסבר<textarea id="nBody" rows="4" maxlength="2000" placeholder="בלי שמות של נהגים או נוסעים"></textarea></label>
+  <label class="fl">ההסבר<textarea id="nBody" rows="4" maxlength="2000" placeholder="בלי שמות של אנשים"></textarea></label>
   <div class="df"><button class="btn pri" id="nSave">שמירה</button><span class="msg" id="nMsg"></span></div>
 </dialog>
 <footer class="legend" aria-label="מקרא">
@@ -81,8 +81,8 @@
   <span><span class="tag ok">מוסבר</span> / <span class="tag mid">דרך מוסך</span> / <span class="tag bad">לא מסתדר</span> / <span class="tag mid">קצה משוער</span> = האם יום הרכב מסביר את התוספת</span>
   <span><i class="ln ours"></i> = הניתוב שלנו</span>
 </footer>
-<script src="assets/map.js?v=2026-11-23.2"></script>
-<script src="assets/pva-tabs.js?v=2026-11-23.2"></script>
-<script src="assets/pva.js?v=2026-11-23.2"></script>
+<script src="assets/map.js?v=2026-11-23.3"></script>
+<script src="assets/pva-tabs.js?v=2026-11-23.3"></script>
+<script src="assets/pva.js?v=2026-11-23.3"></script>
 </body>
 </html>

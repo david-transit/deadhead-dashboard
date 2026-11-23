@@ -1,7 +1,7 @@
 """Build the plan-vs-actual payload of one service day (R53) and the SQL that stores it in private.pva_day.
   python -m pva.build --src <operator files folder> --day YYYY-MM-DD [--day ...] --gtfs <zip of that day> --out <dir>
 The operator files stay outside the repo; the payload and SQL are written to --out (default pipeline/cache, git-ignored).
-Driver names are never read (pva.read); drivers appear by code only."""
+No driver data at all (David 23.11): pva.read does not read the driver code or names; totals are by sidur and vehicle."""
 import argparse, collections, glob, json, os
 from pva import read, ends, km, lessons as lessons_mod, plausibility, seal
 from pva.classify import classify
@@ -47,7 +47,7 @@ def _stop(s):
 
 def _trip(t, sidur, day):
     e, p = t.get('exec'), t.get('plan')
-    return dict(sidur=sidur, veh=e['veh'] if e else None, driver=(e['driver'] or '?') if e else None, status=t['status'],
+    return dict(sidur=sidur, veh=e['veh'] if e else None, status=t['status'],
                 kind=t['kind'], empty_kind=t.get('empty_kind'), forced=t.get('forced', False),
                 t0=t['t'], t1=(t['t'] + int((e['end'] - e['start']).total_seconds() // 60)) if e else None,
                 mkt8=(e or p)['mkt8'], line=(e['line'] if e else p.get('line')) or None, desc=t.get('desc', ''),
@@ -71,6 +71,28 @@ def excess_km(t):
     if t['kind'] != 'empty' or t['status'] != 'added' or (t.get('forced') and t.get('empty_kind') != 'dispatcher'):
         return 0.0
     return (t['op_km'] if t['op_km'] is not None else t['our_km']) or 0.0
+
+
+def totals(out_sid):
+    """Excess empty km of the day by sidur and by vehicle (R53 "ק״מ בלי הסבר"). Keys are strings (JSON object keys)."""
+    new = lambda: dict(excess_km=0.0, dispatcher_km=0.0, n_excess=0, other=set())
+    sid, veh = collections.defaultdict(new), collections.defaultdict(new)
+    for s in out_sid:
+        for t in s['trips']:
+            rows = [(sid[str(s['sidur'])], t['veh'])]
+            if t['veh'] is not None:
+                rows.append((veh[str(t['veh'])], s['sidur']))
+            x = excess_km(t)
+            for d, o in rows:
+                if o is not None:
+                    d['other'].add(o)
+                if x:
+                    d['excess_km'] += x; d['n_excess'] += 1
+                    if t['empty_kind'] == 'dispatcher':
+                        d['dispatcher_km'] += x
+    fin = lambda m, name: {k: dict(excess_km=round(v['excess_km'], 1), dispatcher_km=round(v['dispatcher_km'], 1), n_excess=v['n_excess'],
+                                   **{name: sorted(v['other'], key=str)}) for k, v in m.items()}
+    return fin(sid, 'vehicles'), fin(veh, 'sidurim')
 
 
 def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, cfg):
@@ -125,27 +147,26 @@ def build_day(src, day, depots, forced_legs, forced_out_km, gtfs_zip, road, cfg)
         plausibility.label_vehicle(seq)
     out_sid = [dict(sidur=s['sidur'], in_plan=s['in_plan'], trips=[_trip(t, s['sidur'], day) for t in s['trips']])
                for s in res['sidurim']]
-    drivers = collections.defaultdict(lambda: dict(excess_km=0.0, dispatcher_km=0.0, n_excess=0, sidurim=set(), vehicles=set()))
-    for s in out_sid:
-        for t in s['trips']:
-            if t['driver'] is None:
-                continue
-            d = drivers[t['driver']]; d['sidurim'].add(s['sidur']); d['vehicles'].add(t['veh'])
-            x = excess_km(t)
-            if x:
-                d['excess_km'] += x; d['n_excess'] += 1
-                if t['empty_kind'] == 'dispatcher':
-                    d['dispatcher_km'] += x
-    drivers = {k: dict(v, excess_km=round(v['excess_km'], 1), dispatcher_km=round(v['dispatcher_km'], 1),
-                       sidurim=sorted(v['sidurim']), vehicles=sorted(v['vehicles'])) for k, v in drivers.items()}
+    by_sidur, by_veh_km = totals(out_sid)
     all_t = [t for s in out_sid for t in s['trips']]
-    return dict(day=day.isoformat(), day_type=dtype, drivers=drivers, sidurim=out_sid,
+    return dict(day=day.isoformat(), day_type=dtype, by_sidur=by_sidur, by_vehicle=by_veh_km, sidurim=out_sid,
                 unresolved=[t for t in all_t if t['kind'] == 'empty' and t['end_src'] == 'unresolved' and t['status'] != 'not_done'],
                 gaps=[t for t in all_t if t.get('verdict') == 'third'], lessons=[],
                 places=sorted([dict(name=n, stop=v.get('name'), code=v.get('code'), lat=v['lat'], lon=v['lon'], src='fixed' if n in fixed else 'learned') for n, v in places.items()], key=lambda x: x['name']))
 
 
+def driver_keys(o, path='$'):
+    """Every path in the payload whose key names a driver (driver, drivers, driver_code...). Must be empty (David 23.11)."""
+    if isinstance(o, dict):
+        return [x for k, v in o.items() for x in ([f'{path}.{k}'] if 'driver' in str(k).lower() else []) + driver_keys(v, f'{path}.{k}')]
+    if isinstance(o, list):
+        return [x for i, v in enumerate(o) for x in driver_keys(v, f'{path}[{i}]')]
+    return []
+
+
 def upsert_sql(operator_id, payload):
+    if driver_keys(payload):
+        raise SystemExit(f'driver data in the payload: {driver_keys(payload)[:5]}')
     body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).replace("'", "''")
     return (f"insert into private.pva_day (operator_id, day, payload, built) values ('{operator_id}', '{payload['day']}', "
             f"'{body}'::jsonb, now()) on conflict (operator_id, day) do update set payload = excluded.payload, built = now();\n")
@@ -181,6 +202,8 @@ def main():
         of = os.path.join(a.ours, f'day_{d}.json') if a.ours else None
         if of and os.path.exists(of):
             p['lessons'] = lessons_mod.lessons(json.load(open(of, encoding='utf-8')), p)
+        if driver_keys(p):
+            raise SystemExit(f'{d}: driver data in the payload: {driver_keys(p)[:5]}')
         base = os.path.join(a.out, f'pva_{d}')
         json.dump(p, open(base + '.json', 'w', encoding='utf-8'), ensure_ascii=False)
         open(base + '.sql', 'w', encoding='utf-8').write(upsert_sql(st['operator_id'], p))
