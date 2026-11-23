@@ -41,7 +41,7 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: python -m pytest -q -p no:cacheprovider pva/tests tests
 
-      - name: JS tests (Edge Function modules, access, mail worker, savings engine)
+      - name: JS tests (Edge Function modules, access, mail worker, savings engine, dashboard)
         run: |
           node --test supabase/functions/_shared/tests/*.test.ts supabase/tests/*.test.mjs \
-            cloudflare/mail-worker/worker.test.mjs savings/tests/*.test.js
+            cloudflare/mail-worker/worker.test.mjs savings/tests/*.test.js assets/tests/*.test.mjs
